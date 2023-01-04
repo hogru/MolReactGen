@@ -45,7 +45,7 @@ rdchiral = "^1.1.0"
 
 [tool.poetry.dev-dependencies]
 black = "^22.10.0"
-flake8 = "^5.0"
+flake8 = "^6.0"
 isort = "^5.10.1"
 mypy = "^0.991"
 psutil = "^5.9.4"
