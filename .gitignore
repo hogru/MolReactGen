@@ -21,5 +21,4 @@
 *.pyc
 .coverage
 .DS_Store
-.python-version
 .secrets.yaml
