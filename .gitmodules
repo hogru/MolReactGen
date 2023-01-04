@@ -1,0 +1,3 @@
+[submodule "src/fcd_torch"]
+	path = src/fcd_torch
+	url = https://hogru@github.com/hogru/fcd_torch
