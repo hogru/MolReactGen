@@ -25,14 +25,15 @@ import datasets
 import evaluate  # type: ignore
 import torch
 import transformers  # type: ignore
-from datasets import Dataset, DatasetDict, Features, Value, load_dataset  # type: ignore
-from tokenizers import (  # type: ignore
-    Regex,
-    Tokenizer,
-    decoders,
+from datasets import (  # type: ignore
+    Dataset,
+    DatasetDict,
+    Features,
+    Value,
+    load_dataset,
 )
+from tokenizers import Regex, Tokenizer, decoders  # type: ignore
 from tokenizers.models import BPE, Unigram, WordLevel, WordPiece  # type: ignore
-
 from tokenizers.pre_tokenizers import Split  # type: ignore
 from tokenizers.processors import TemplateProcessing  # type: ignore
 from tokenizers.trainers import (  # type: ignore
@@ -62,7 +63,6 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint  # type: ignore
 from transformers.utils import check_min_version  # type: ignore
 from transformers.utils.versions import require_version  # type: ignore
-
 
 ###############################################################################
 # Initial checks and setup                                                    #
@@ -916,8 +916,10 @@ def main() -> None:
             )
             eval_dataset = eval_dataset.select(range(max_eval_samples))
 
-    def preprocess_logits_for_metrics(logits: Union[tuple[torch.Tensor, ...], torch.Tensor],
-                                      labels: torch.Tensor) -> torch.Tensor:
+    def preprocess_logits_for_metrics(
+        logits: Union[tuple[torch.Tensor, ...], torch.Tensor],
+        labels: torch.Tensor,
+    ) -> torch.Tensor:
         if isinstance(logits, tuple):
             # Depending on the model and config, logits may contain extra tensors,
             # like past_key_values, but logits always come first
@@ -926,7 +928,9 @@ def main() -> None:
 
     metric = evaluate.load("accuracy")
 
-    def compute_metrics(eval_preds: tuple[torch.Tensor, torch.Tensor]) -> Optional[dict[str, float]]:
+    def compute_metrics(
+        eval_preds: tuple[torch.Tensor, torch.Tensor]
+    ) -> Optional[dict[str, float]]:
         preds, labels = eval_preds
         # preds have the same shape as the labels, after the argmax(-1) has been calculated
         # by preprocess_logits_for_metrics, but we need to shift the labels

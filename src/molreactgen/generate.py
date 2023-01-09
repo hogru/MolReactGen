@@ -38,7 +38,9 @@ from molreactgen.molecule import Reaction
 # Global variables, defaults
 VALID_GENERATION_MODES = ["smiles", "smarts"]
 # TODO make dependant on generation mode
-DEFAULT_OUTPUT_FILE_PATH = "../../data/generated/generated_reaction_templates.csv"
+DEFAULT_OUTPUT_FILE_PATH = (
+    "../../data/generated/generated_reaction_templates.csv"
+)
 DEFAULT_NUM_TO_GENERATE: int = 1000
 MIN_NUM_TO_GENERATE: int = 20
 # TODO make dependant on generation mode

@@ -7,10 +7,7 @@ import pandas as pd  # type: ignore
 from tdc.generation import MolGen  # type: ignore
 
 # This creates a huge list of mypy issues (without it, no issues)
-# TODO re-check once molgen.molecule is properly type checked
-from molreactgen.config import PathLike
 from molreactgen.molecule import remove_atom_mapping  # type: ignore
-
 
 VALID_DATASETS: tuple[str, ...] = (
     "all",

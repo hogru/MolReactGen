@@ -65,7 +65,9 @@ class Counter:
     def get_count(self, counter: str) -> int:
         ...
 
-    def get_count(self, counter: Optional[str] = None) -> Union[dict[str, int], int]:
+    def get_count(
+        self, counter: Optional[str] = None
+    ) -> Union[dict[str, int], int]:
         counts: Union[dict[str, int], int]
         if counter is None:
             counts = self._counters
