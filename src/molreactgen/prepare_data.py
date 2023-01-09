@@ -8,9 +8,8 @@ from tdc.generation import MolGen  # type: ignore
 
 # This creates a huge list of mypy issues (without it, no issues)
 # TODO re-check once molgen.molecule is properly type checked
-from molgen.molecule import remove_atom_mapping  # type: ignore
-
-# from shutil import copy2
+from molreactgen.config import PathLike
+from molreactgen.molecule import remove_atom_mapping  # type: ignore
 
 
 VALID_DATASETS: tuple[str, ...] = (
@@ -20,33 +19,6 @@ VALID_DATASETS: tuple[str, ...] = (
     "uspto50k",
     "zinc",
 )
-
-'''
-class DatasetAction(argparse.Action):
-    """An option to handle multiple datasets without "all" being a valid option"""
-    def __init__(self, option_strings, dest, **kwargs):
-        super().__init__(option_strings, dest, **kwargs)
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        print(values)
-        print(option_string)
-        if values is None or len(values) == 0:
-            values = VALID_DATASETS
-        elif isinstance(values, str):
-            values = [values]
-        elif isinstance(values, Iterable):
-            pass
-        else:
-            raise TypeError(f"Invalid type for argument {option_string}: {type(values)}")
-
-        # values = [v.lower() for v in values]
-
-        for v in values:
-            if v not in VALID_DATASETS:
-                raise ValueError(f"Invalid value for argument {option_string}: {v}")
-
-        setattr(namespace, self.dest, values)
-'''
 
 
 def _cleanse_and_copy_data(
@@ -279,9 +251,7 @@ def main() -> None:
     parser.add_argument(
         "dataset",
         type=str.lower,
-        # action=DatasetAction,
         nargs="?",
-        # const="all",
         default="all",
         choices=VALID_DATASETS,
         help="the dataset to prepare, default: '%(default)s' for all datasets",
@@ -290,7 +260,7 @@ def main() -> None:
         "-d",
         "--data_dir",
         type=Path,
-        default="../../../data",
+        default="../../data",
         help="root of the data directory, default: '%(default)s'",
     )
     parser.add_argument(

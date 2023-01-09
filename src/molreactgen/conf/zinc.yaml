@@ -1,7 +1,9 @@
+# zinc.yaml
+
 # data_args
 # dataset_name:
 # dataset_config_name:
-dataset_dir: ../../../data/prep/zinc/csv/
+dataset_dir: ../../data/prep/zinc/csv/
 # The split percentages are only relevant if there is no file for each split
 validation_split_percentage: 10
 test_split_percentage: 10
@@ -19,7 +21,6 @@ vocab_size: 0
 # model_args
 # model_name_or_path: name | path
 model_type: gpt2
-
 # see https://huggingface.co/docs/transformers/v4.24.0/en/model_doc/gpt2#transformers.GPT2Config
 # n_embd must be divisible by n_head
 config_overrides: "
@@ -32,7 +33,7 @@ use_auth_token: true
 
 
 # training_args
-output_dir: "./checkpoints/"
+output_dir: "../../checkpoints/"
 overwrite_output_dir: false
 do_train: true
 do_eval: true
@@ -47,7 +48,7 @@ adam_beta1: 0.9
 adam_beta2: 0.95
 max_grad_norm: 1.0  # = default
 num_train_epochs: 50
-lr_scheduler_type: cosine_with_restarts
+lr_scheduler_type: cosine
 warmup_ratio: 0.1  # what's a "good" value here?
 log_level: warning
 logging_strategy: steps
@@ -58,13 +59,13 @@ seed: 42
 fp16: false  # TODO might change to true
 dataloader_num_workers: 4
 # past_index: 2  # might use for TransformerXL or XLNet
-run_name: MolGen  # TODO might determine during runtime
+run_name: MolReactGen  # TODO might determine during runtime
 disable_tqdm: false
 load_best_model_at_end: true
 # label_smoothing_factor: 0.1  # TODO might play with, not implemented yet
 group_by_length: true
 report_to: wandb
-push_to_hub: true
+push_to_hub: false
 hub_model_id: MolGen
 hub_strategy: end
 hub_private_repo: true

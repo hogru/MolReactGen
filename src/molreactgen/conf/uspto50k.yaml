@@ -1,3 +1,5 @@
+# uspto50k.yaml
+
 # data_args
 # dataset_name:
 # dataset_config_name:
@@ -23,22 +25,18 @@ model_type: gpt2
 
 # see https://huggingface.co/docs/transformers/v4.24.0/en/model_doc/gpt2#transformers.GPT2Config
 # n_embd must be divisible by n_head
+# use multiples of 8 for GPU
 config_overrides: "
 n_positions=896,
 n_embd=132,
 n_layer=12,
 n_head=12
 "
-# TODO set n_layer and n_head to 12
-# activation_function=gelu_new,
-# scale_attn_by_inverse_layer_idx=true,
-# reorder_and_upcast_attn=true
-
 use_auth_token: true
 
 
 # training_args
-output_dir: "./checkpoints/"
+output_dir: "../../checkpoints/"
 overwrite_output_dir: false
 do_train: true
 do_eval: true
@@ -53,8 +51,8 @@ adam_beta1: 0.9
 adam_beta2: 0.95
 max_grad_norm: 1.0  # = default
 num_train_epochs: 100
-lr_scheduler_type: cosine_with_restarts
-warmup_ratio: 0.1  # what's a "good" value here?
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
 log_level: warning
 logging_strategy: steps
 logging_steps: 100
@@ -64,14 +62,14 @@ seed: 42
 fp16: false  # TODO might change to true
 dataloader_num_workers: 4
 # past_index: 2  # might use for TransformerXL or XLNet
-run_name: MolGen  # TODO might determine during runtime
+run_name: MolReactGen  # TODO might determine during runtime
 disable_tqdm: false
 load_best_model_at_end: true
 # label_smoothing_factor: 0.1  # TODO might play with, not implemented yet
 group_by_length: true
 report_to: wandb
 push_to_hub: false
-hub_model_id: MolGen
+hub_model_id: MolReactGen
 hub_strategy: end
 hub_private_repo: true
 # resume_from_checkpoint: true | directory_path

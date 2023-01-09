@@ -1,14 +1,14 @@
 # coding=utf-8
 """
-Auto-Regressive Reaction Generator
+Auto-Regressive Molecule and Reaction Template Generator
+Causal language modeling (CLM) with a transformer decoder model
 Author: Stephan Holzgruber
 Student ID: K08608294
 """
 
 import argparse
-from functools import cached_property
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import pandas as pd  # type: ignore
 from loguru import logger
@@ -32,124 +32,20 @@ from transformers import (  # type: ignore
     pipeline,
 )
 
-from molgen.helpers import Counter, configure_logging
-from molgen.molecule import canonicalize_template, remove_atom_mapping
+from molreactgen.helpers import Counter, configure_logging
+from molreactgen.molecule import Reaction
 
 # Global variables, defaults
 VALID_GENERATION_MODES = ["smiles", "smarts"]
-DEFAULT_OUTPUT_FILE_PATH = "./generated/generated_reaction_templates.csv"
+# TODO make dependant on generation mode
+DEFAULT_OUTPUT_FILE_PATH = "../../data/generated/generated_reaction_templates.csv"
 DEFAULT_NUM_TO_GENERATE: int = 1000
 MIN_NUM_TO_GENERATE: int = 20
+# TODO make dependant on generation mode
 DEFAULT_MAX_LENGTH: int = 896
 DEFAULT_TOP_P: float = 0.95  # not used yet
 DEFAULT_NUM_BEAMS: int = 5  # not used yet
 DEFAULT_EARLY_STOPPING: bool = True  # not used yet
-
-
-# TODO might move to molgen.molecule
-class Reaction:
-    def __init__(
-        self,
-        reaction_smarts: str,
-        id_: Optional[str] = None,
-        feasible: bool = False,
-        product: Optional[str] = None,
-    ) -> None:
-
-        self.reaction_smarts = str(reaction_smarts)
-        # noinspection PyPropertyAccess
-        # self.reaction_smarts_without_atom_mapping: str
-        self.id = id_
-        # noinspection PyPropertyAccess
-        # self.valid: bool
-        self.feasible = bool(feasible)
-        self.product = product
-        self.works_with: Optional[str] = None
-        # self.reactants: Optional[
-        #     str
-        # ] = None  # TODO improve type hints once I know what this looks like
-
-    @property
-    def reaction_smarts(self) -> str:
-        return self._reaction_smarts
-
-    @reaction_smarts.setter
-    def reaction_smarts(self, value: str) -> None:
-        if hasattr(self, "_reaction_smarts"):
-            raise AttributeError(
-                "reaction_smarts is already set, can not be changed"
-            )
-
-        # noinspection PyAttributeOutsideInit
-        self._reaction_smarts = str(value)
-
-    @cached_property
-    def reaction_smarts_without_atom_mapping(
-        self,
-    ) -> str:
-        return remove_atom_mapping(self.reaction_smarts)
-
-    @cached_property
-    def reaction_smarts_canonicalized(self) -> Optional[str]:
-        return canonicalize_template(
-            self.reaction_smarts, strict=False, double_check=True
-        )
-
-    @property
-    def valid(self) -> bool:
-        return self.reaction_smarts_canonicalized is not None
-
-    @property
-    def invalid(self) -> bool:
-        return not self.valid
-
-    def is_similar_to(
-        self, other: "Reaction", criterion: str = "atom_mapping"
-    ) -> bool:
-        criterion = str(criterion).lower()
-        if isinstance(other, Reaction):
-            if criterion == "atom_mapping":
-                return (
-                    self.reaction_smarts_without_atom_mapping
-                    == other.reaction_smarts_without_atom_mapping
-                )
-            elif criterion == "canonical":
-                return (
-                    self.reaction_smarts_canonicalized
-                    == other.reaction_smarts_canonicalized
-                )
-            else:
-                raise ValueError(f"Unknown criterion: {criterion}")
-        else:
-            return False
-
-    # TODO Think about what equality means for Reaction
-    def __eq__(self, other: Any) -> bool:
-        if isinstance(other, Reaction):
-            return self.reaction_smarts == other.reaction_smarts
-            # return (
-            #     self.reaction_smarts_without_atom_mapping
-            #     == other.reaction_smarts_without_atom_mapping
-            # )
-        else:
-            return NotImplemented
-
-    def __hash__(self) -> int:
-        return hash(self.reaction_smarts)
-
-    def __len__(self) -> int:
-        return len(str(self))
-
-    def __str__(self) -> str:
-        return str(self.reaction_smarts)
-
-    def __repr__(self) -> str:
-        class_name = type(self).__name__
-        return (
-            f"{class_name}"
-            f"(reaction_smarts={self.reaction_smarts.__repr__()}, "
-            f"id={self.id})"
-        )
 
 
 def load_existing_reaction_templates(

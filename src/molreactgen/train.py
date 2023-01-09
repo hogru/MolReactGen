@@ -18,29 +18,30 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
+# Most of Hugging Face has poor type hints, trying to avoid mypy errors
 import datasets
-import evaluate
-import transformers
-from datasets import Dataset, DatasetDict, Features, Value, load_dataset
-from tokenizers import (  # SentencePieceBPETokenizer,; SentencePieceUnigramTokenizer,
+import evaluate  # type: ignore
+import torch
+import transformers  # type: ignore
+from datasets import Dataset, DatasetDict, Features, Value, load_dataset  # type: ignore
+from tokenizers import (  # type: ignore
     Regex,
     Tokenizer,
     decoders,
 )
-from tokenizers.models import BPE, Unigram, WordLevel, WordPiece
+from tokenizers.models import BPE, Unigram, WordLevel, WordPiece  # type: ignore
 
-# from tokenizers.normalizers import NFKC
-from tokenizers.pre_tokenizers import Split
-from tokenizers.processors import TemplateProcessing
-from tokenizers.trainers import (
+from tokenizers.pre_tokenizers import Split  # type: ignore
+from tokenizers.processors import TemplateProcessing  # type: ignore
+from tokenizers.trainers import (  # type: ignore
     BpeTrainer,
     UnigramTrainer,
     WordLevelTrainer,
     WordPieceTrainer,
 )
-from transformers import (  # default_data_collator,
+from transformers import (
     CONFIG_MAPPING,
     MODEL_FOR_CAUSAL_LM_MAPPING,
     AutoConfig,
@@ -58,11 +59,10 @@ from transformers import (  # default_data_collator,
 )
 
 # from transformers.testing_utils import CaptureLogger
-from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version
-from transformers.utils.versions import require_version
+from transformers.trainer_utils import get_last_checkpoint  # type: ignore
+from transformers.utils import check_min_version  # type: ignore
+from transformers.utils.versions import require_version  # type: ignore
 
-# import wandb
 
 ###############################################################################
 # Initial checks and setup                                                    #
@@ -109,10 +109,6 @@ PAD_TOKEN: str = " "
 UNK_TOKEN: str = "§"
 ADD_TOKEN: str = "°"  # Not sure if needed at all; might be used to map special model tokens to like CLS, SEP etc.
 
-# SMILES_REGEX_PATTERN = r"""(\[[^\]]+]|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\|\/|:|~|@|\?|>>?|\*|\$|\%[0-9]{2}|[0-9])"""
-# SMARTS_REGEX_PATTERN = r"""(\[[^\]]+]|Br?|Cl?|Au?|Fe?|Zn?|Mg?|Li?|Ga?|As?|Ru?|Eu?|Ta?|Ga?|Yb?|Dy?|N|O|S|P|F|I|H|K|U|W|V|Y|b|c|n|o|s|i|p|D\d+|[a-z]|\(|\)|\.|=|\#|-|\+|\;|\%|\\|\/|:|~|@|\?|>>?|\*|\$|\d+)"""
-# REGEX_PATTERN = SMILES_REGEX_PATTERN
-
 REGEX_INPUT = {
     # everything within brackets becomes a single token; might play with that, alternative below
     "bracket": r"\[[^\]]+]",
@@ -158,7 +154,7 @@ REGEX_INPUT = {
     # "recursive": r"\$\(",  # redundant
 }
 
-# the replace() is just a safety net against double "|" in the RegEx
+# replace() is just a safety net against double "|" in the RegEx
 REGEX_PATTERN_SMARTS = "|".join(REGEX_INPUT.values()).replace("||", "|")
 REGEX_PATTERN_ATOM = REGEX_PATTERN_SMARTS.replace(r"\[[^\]]+]", r"\[|\]")
 MIN_VOCAB_SIZE_UNIGRAM = 100
@@ -239,7 +235,7 @@ class ModelArguments:
         },
     )
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.config_overrides is not None and (
             self.config_name is not None or self.model_name_or_path is not None
         ):
@@ -356,12 +352,12 @@ class DataTrainingArguments:
         },
     )
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.dataset_name is None and self.dataset_dir is None:
             raise ValueError(
                 "Need either a dataset name or a dataset directory with training (and validation) file(s)."
             )
-        else:
+        elif self.dataset_dir is not None:
             for file in Path(self.dataset_dir).glob("*"):
                 if (
                     file.suffix.lower() not in (".csv", ".json", ".txt")
@@ -381,7 +377,7 @@ class DataTrainingArguments:
 # TODO implement and type check
 def load_raw_dataset_from_hub(
     dataset_name, dataset_config_name, cache_dir, use_auth_token
-):
+) -> DatasetDict:
     ...
 
 
@@ -393,7 +389,11 @@ def load_raw_dataset_from_dir(
     cache_dir: Optional[str] = None,
     seed: int = 42,
 ) -> DatasetDict:
-    features = Features({"0": Value(dtype="string")})
+    features = Features({"0": Value(dtype="string")})  # type: ignore
+    # mypy complains about the type of dataset, but it's correct
+    # see also https://discuss.huggingface.co/t/...
+    # ...mypy-and-datasetdict-error-incompatible-return-value-type-got-union-datasetdict-dataset-...
+    # ...iterabledatasetdict-iterabledataset-expected-datasetdict/17177
     dataset: DatasetDict = load_dataset(
         data_dir, features=features, cache_dir=cache_dir, header=None
     )
@@ -438,7 +438,7 @@ def load_raw_dataset_from_dir(
 ###############################################################################
 
 
-def token_in_regex(token: str, regex: str):
+def token_in_regex(token: str, regex: str) -> bool:
     token = str(token)
     regex = str(regex)
     regex_pattern = re.compile(regex)
@@ -480,7 +480,7 @@ def get_tokenizer(
         add_token = "°"
 
     special_tokens = [bos_token, eos_token, pad_token, unk_token, add_token]
-    vocab_size = vocab_size + len(special_tokens)
+    vocab_size += len(special_tokens)
 
     # if pre_tokenizer in ("ATOM", "SMARTS") and algorithm in (
     #     "BPE",
@@ -662,7 +662,7 @@ def get_tokenizer(
 
 
 def tokenize_function(
-    batch: dict[str, list],
+    batch: dict[str, list[Union[str, Sequence[str]]]],
     tokenizer: transformers.PreTrainedTokenizerFast,
 ) -> BatchEncoding:
     # since this will be pickled to avoid _LazyModule error in Hasher force logger loading before tokenize_function
@@ -680,7 +680,7 @@ def tokenize_function(
         # But not recognized by GPT2LMHeadModel.forward
         return_special_tokens_mask=True,
     )
-    # clm input could be much much longer than block_size
+    # clm input could be much longer than block_size
     # if "Token indices sequence length is longer than the" in cl.out:
     #     tok_logger.warning(
     #             "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits"
@@ -695,7 +695,7 @@ def tokenize_function(
 ###############################################################################
 
 
-def main():
+def main() -> None:
     # Parse arguments from command line or yaml configuration file
     parser = HfArgumentParser(
         (ModelArguments, DataTrainingArguments, TrainingArguments)
@@ -739,6 +739,7 @@ def main():
     # Load datasets
     # -----------------------------------------------------------------------------
 
+    raw_datasets: DatasetDict
     if data_args.dataset_name is not None:
         raw_datasets = load_raw_dataset_from_hub(
             data_args.dataset_name,
@@ -915,7 +916,8 @@ def main():
             )
             eval_dataset = eval_dataset.select(range(max_eval_samples))
 
-    def preprocess_logits_for_metrics(logits, labels):
+    def preprocess_logits_for_metrics(logits: Union[tuple[torch.Tensor, ...], torch.Tensor],
+                                      labels: torch.Tensor) -> torch.Tensor:
         if isinstance(logits, tuple):
             # Depending on the model and config, logits may contain extra tensors,
             # like past_key_values, but logits always come first
@@ -924,15 +926,16 @@ def main():
 
     metric = evaluate.load("accuracy")
 
-    def compute_metrics(eval_preds):
+    def compute_metrics(eval_preds: tuple[torch.Tensor, torch.Tensor]) -> Optional[dict[str, float]]:
         preds, labels = eval_preds
         # preds have the same shape as the labels, after the argmax(-1) has been calculated
-        # by preprocess_logits_for_metrics but we need to shift the labels
+        # by preprocess_logits_for_metrics, but we need to shift the labels
         labels = labels[:, 1:].reshape(-1)
         preds = preds[:, :-1].reshape(-1)
         # labels = labels[:, :].reshape(-1)
         # preds = preds[:, :].reshape(-1)
-        return metric.compute(predictions=preds, references=labels)
+        # metric.compute() returns Optional[dict[str, float]] but is not annotated as such
+        return metric.compute(predictions=preds, references=labels)  # type: ignore
 
     # Configure early stopping
     early_stopping_callback = EarlyStoppingCallback(early_stopping_patience=5)
