@@ -4,7 +4,9 @@ version = "0.1a1"
 description = "Auto-regressive transformer decoder based on Hugging Face GPT-2 to generate molecules (SMILES) and reaction templates (SMARTS)"
 authors = ["Stephan Holzgruber <stephan.holzgruber@gmail.com>"]
 readme = "README.md"
-
+license = "Apache-2.0"
+repository = "https://github.com/hogru/MolReactGen"
+keywords = ["transformer", "auto-regressive model", "molecules", "reactions", "SMILES", "SMARTS", "GPT-2"]
 
 [tool.poetry.dependencies]
 codetiming = "^1.4.0"
@@ -50,7 +52,7 @@ pytest-mock = "^3.10.0"
 # install-pytorch = "pip install torch==1.13 -f https://download.pytorch.org/whl/torch_stable.html"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core>=1.0.8"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.black]
