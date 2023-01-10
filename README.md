@@ -23,6 +23,7 @@ python -m pip install -e .
 
 - `prepare_data.py` downloads and massages the datasets (download not implemented yet)
 - `train.py` trains the model on a given dataset, configured via `yaml` files in the `conf` directory
-- `generate.py` generates SMILES or SMARTS (currently SMARTS only, SMILES has to be ported from a previous `pytorch` only repository)
+- `generate.py` generates SMILES or SMARTS
+- `evaluate_fcd.py` calculates the Frèchet ChemNet Distance (FCD) between the generated molecules and a reference set of molecules (e.g. the GuacaMol dataset)
 - `molecule.py` covers helpers for the chemical space of the task
 - `helpers.py` is a set of misc helpers/utils

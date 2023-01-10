@@ -225,23 +225,20 @@ class Reaction:
     def __init__(
         self,
         reaction_smarts: str,
+        *,
         id_: Optional[str] = None,
         feasible: bool = False,
         product: Optional[str] = None,
     ) -> None:
 
         self.reaction_smarts = str(reaction_smarts)
-        # noinspection PyPropertyAccess
-        # self.reaction_smarts_without_atom_mapping: str
         self.id = id_
-        # noinspection PyPropertyAccess
-        # self.valid: bool
         self.feasible = bool(feasible)
         self.product = product
         self.works_with: Optional[str] = None
-        # self.reactants: Optional[
+        # self.reactants: Optional[  # TODO improve type hints once I know what this looks like
         #     str
-        # ] = None  # TODO improve type hints once I know what this looks like
+        # ] = None
 
     @property
     def reaction_smarts(self) -> str:
@@ -315,7 +312,7 @@ class Reaction:
         return len(str(self))
 
     def __str__(self) -> str:
-        return str(self.reaction_smarts)
+        return self.reaction_smarts
 
     def __repr__(self) -> str:
         class_name = type(self).__name__
@@ -326,127 +323,84 @@ class Reaction:
         )
 
 
-# Classes with __slots__ can not be pickled (easily)
-# This might help; in the meantime, avoid __slots__
-# __slots__ = ("_smiles", "_canonical_smiles", "_id", "strict", "source_id", "_encoding")
-# class Molecule:
-#     def __init__(
-#         self,
-#         smiles: str,
-#         *,
-#         strict: bool = True,
-#         source_id: str = "",
-#         notation: str = "SMILES",
-#     ) -> None:
-#
-#         self.strict: bool = bool(
-#             strict
-#         )  # need to set this first for the smiles setter
-#         self.smiles: str = str(smiles)
-#         self.source_id: str = str(source_id)
-#         # Currently only SMILES notation is supported
-#         # For other notations, e.g. SELFIES, the code needs to be amended
-#         if str(notation).upper() == "SMILES":
-#             self.notation: str = "SMILES"
-#         else:
-#             raise ValueError(f"{notation} is not a valid molecule notation")
-#         self._encoding: dict[str, Any] = {}
-#
-#     @property
-#     def smiles(self) -> str:
-#         return self._smiles
-#
-#     @smiles.setter
-#     def smiles(self, value: str) -> None:
-#         if hasattr(self, "_smiles"):
-#             raise AttributeError("smiles is already set, can not be changed")
-#
-#         self._smiles = str(value)
-#         self.canonical_smiles = canonicalize_smiles(value, strict=self.strict)
-#
-#     @property
-#     def canonical_smiles(
-#         self,
-#     ) -> Optional[str]:
-#         if hasattr(self, "_canonical_smiles"):
-#             return self._canonical_smiles
-#         else:
-#             return None
-#
-#     @canonical_smiles.setter
-#     def canonical_smiles(self, value: Optional[str]) -> None:
-#         if hasattr(self, "_canonical_smiles"):
-#             raise AttributeError(
-#                 "canonical_smiles is already set, can not be changed"
-#             )
-#
-#         # noinspection PyAttributeOutsideInit
-#         self._canonical_smiles = value
-#
-#     @property
-#     def id(self) -> Optional[str]:
-#         if hasattr(self, "_id"):
-#             return self._id
-#         else:
-#             return None
-#
-#     @id.setter
-#     def id(self, value: str) -> None:
-#         if hasattr(self, "_id"):
-#             raise AttributeError("id is already set, can not be changed")
-#
-#         # noinspection PyAttributeOutsideInit
-#         self._id = str(value)
-#
-#     @property
-#     def valid(self) -> bool:
-#         return self.canonical_smiles is not None
-#
-#     @property
-#     def invalid(self) -> bool:
-#         return not self.valid
-#
-#     def __eq__(self, other) -> bool:
-#         if isinstance(other, Molecule):
-#             self_smiles = self.canonical_smiles if self.valid else self.smiles
-#             other_smiles = (
-#                 other.canonical_smiles if other.valid else other.smiles
-#             )
-#             return self_smiles == other_smiles
-#         else:
-#             return NotImplemented
-#
-#     def __len__(self) -> int:
-#         return len(str(self))
-#
-#     def __str__(self) -> str:
-#         return (
-#             self.canonical_smiles
-#             if self.canonical_smiles is not None
-#             else self.smiles
-#         )
-#
-#     def __repr__(self) -> str:
-#         # smiles = (
-#         #     self.smiles.__repr__()
-#         #     if isinstance(self.smiles, str)
-#         #     else self.smiles
-#         # )
-#         # source_id = (
-#         #     self.source_id.__repr__()
-#         #     if isinstance(self.source_id, str)
-#         #     else self.source_id
-#         # )
-#         class_name = type(self).__name__
-#         return (
-#             f"{class_name}"
-#             f"(smiles={self.smiles.__repr__()}, "
-#             f"strict={self.strict}, "
-#             f"source_id={self.source_id.__repr__()}, "
-#             f"notation={self.notation.__repr__()})"
-#         )
-#
-#
+class Molecule:
+    def __init__(
+        self,
+        smiles: str,
+        *,
+        id_: Optional[str] = None,
+        notation: str = "SMILES",
+    ) -> None:
+
+        self.smiles: str = str(smiles)
+        self.id = id_
+        # Currently only SMILES notation is supported
+        # For other notations, e.g. SELFIES, the code needs to be amended
+        if str(notation).upper() == "SMILES":
+            self.notation: str = "SMILES"
+        else:
+            raise ValueError(f"{notation} is not a valid molecule notation")
+
+    @property
+    def smiles(self) -> str:
+        return self._smiles
+
+    @smiles.setter
+    def smiles(self, value: str) -> None:
+        if hasattr(self, "_smiles"):
+            raise AttributeError("smiles is already set, can not be changed")
+
+        # noinspection PyAttributeOutsideInit
+        self._smiles = str(value)
+
+    @cached_property
+    def canonical_smiles(
+        self,
+    ) -> Optional[str]:
+        return canonicalize_smiles(self.smiles, strict=False)
+
+    @property
+    def valid(self) -> bool:
+        return self.canonical_smiles is not None
+
+    @property
+    def invalid(self) -> bool:
+        return not self.valid
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, Molecule):
+            self_smiles = self.canonical_smiles if self.valid else self.smiles
+            other_smiles = (
+                other.canonical_smiles if other.valid else other.smiles
+            )
+            return self_smiles == other_smiles
+        else:
+            return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash(self.canonical_smiles if self.valid else self.smiles)
+
+    def __len__(self) -> int:
+        return len(str(self))
+
+    def __str__(self) -> str:
+        return (
+            self.canonical_smiles
+            if self.canonical_smiles
+            is not None  # same as self.valid but mypy complains about return type
+            else self.smiles
+        )
+
+    def __repr__(self) -> str:
+        class_name = type(self).__name__
+        return (
+            f"{class_name}"
+            f"(smiles={self.smiles.__repr__()}, "
+            f"id={self.id.__repr__()}, "
+            f"notation={self.notation.__repr__()})"
+        )
+
+
 # class MoleculeStore:
 #     def __init__(
 #         self,

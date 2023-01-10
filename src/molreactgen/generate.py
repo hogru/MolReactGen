@@ -7,6 +7,7 @@ Student ID: K08608294
 """
 
 import argparse
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -33,21 +34,35 @@ from transformers import (  # type: ignore
 )
 
 from molreactgen.helpers import Counter, configure_logging
-from molreactgen.molecule import Reaction
+from molreactgen.molecule import Molecule, Reaction
 
 # Global variables, defaults
-VALID_GENERATION_MODES = ["smiles", "smarts"]
+VALID_GENERATION_MODES = [
+    "smiles",
+    "smarts",
+]  # TODO Type hinting with Literal?!
 # TODO make dependant on generation mode
 DEFAULT_OUTPUT_FILE_PATH = (
-    "../../data/generated/generated_reaction_templates.csv"
+    f"../../data/generated/{datetime.now():%Y-%m-%d_%H-%M}_generated.csv"
 )
 DEFAULT_NUM_TO_GENERATE: int = 1000
 MIN_NUM_TO_GENERATE: int = 20
 # TODO make dependant on generation mode
-DEFAULT_MAX_LENGTH: int = 896
+# DEFAULT_SMILES_MAX_LENGTH: int = 128
+# DEFAULT_SMARTS_MAX_LENGTH: int = 896
 DEFAULT_TOP_P: float = 0.95  # not used yet
 DEFAULT_NUM_BEAMS: int = 5  # not used yet
 DEFAULT_EARLY_STOPPING: bool = True  # not used yet
+
+
+def load_existing_molecules(
+    file_path: Path,
+) -> list[Molecule]:
+
+    df: pd.DataFrame = pd.read_csv(file_path, header=None)
+    molecules: list[Molecule] = [Molecule(row) for row in df[0]]
+
+    return molecules
 
 
 def load_existing_reaction_templates(
@@ -76,6 +91,166 @@ def load_existing_reaction_templates(
         for (_, row) in df.iterrows()
     ]
     return reactions
+
+
+def generate_smiles(
+    model_file_path: Path,
+    existing_file_path: Path,
+    num_to_generate: int,
+    max_length: Optional[int] = None,
+) -> tuple[Counter, pd.DataFrame]:
+
+    # Validate arguments
+    model_file_path = Path(model_file_path).resolve()
+    existing_file_path = Path(existing_file_path).resolve()
+    assert int(num_to_generate) > 0
+    if max_length is not None:
+        assert int(max_length) > 0
+
+    # TODO add those arguments to the function definition
+    # assert 0.0 <= float(top_p) <= 1.0
+    # assert int(num_beams) > 0
+    # early_stopping = bool(early_stopping)
+
+    # Setup variables
+    smiles: dict[str, set[Molecule]] = {
+        "all_existing": set(),
+        "all_valid": set(),
+        "all_novel": set(),
+        "pl_generated": set(),
+        "pl_valid": set(),
+        "pl_unique": set(),
+        "pl_novel": set(),
+    }
+    counter = Counter(["generated", "valid", "unique", "novel"])
+
+    # Load existing molecules
+    logger.info("Loading known molecules...")
+    existing_molecules: list[Molecule] = load_existing_molecules(
+        existing_file_path
+    )
+    smiles["all_existing"] = set(existing_molecules)
+    assert all(bool(s.canonical_smiles) for s in smiles["all_existing"])
+
+    # Load model including tokenizer
+    logger.info("Loading model...")
+    model = AutoModelForCausalLM.from_pretrained(model_file_path)
+    logger.info("Loading tokenizer...")
+    tokenizer = PreTrainedTokenizerFast.from_pretrained(model_file_path)
+
+    # Create generation pipeline
+    logger.info("Preparing generation...")
+    if max_length is None:
+        max_length = model.config.n_positions
+        logger.info(f"Using max_length={max_length} from model config")
+    else:
+        logger.info(f"Using max_length={max_length} from command line")
+        if max_length > model.config.n_positions:
+            max_length = model.config.n_positions
+            logger.warning(
+                f"max_length={max_length} is larger than model config allows, setting it to {model.config.n_positions}"
+            )
+
+    num_tries: int = 0
+    max_num_tries: int = max(num_to_generate // 100, 10)
+    num_to_generate_in_pipeline: int = min(
+        max(MIN_NUM_TO_GENERATE, num_to_generate // 100),
+        MIN_NUM_TO_GENERATE * 10,
+    )
+    logger.info(f"Generating {num_to_generate_in_pipeline} molecules at a time")
+    prompt = tokenizer.bos_token
+    pipe = pipeline(
+        "text-generation", model=model, tokenizer=tokenizer  # , device=device
+    )
+
+    # Generate molecules
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TaskProgressColumn(),
+        "valid: {task.fields[valid]:>4.0%}",
+        "unique: {task.fields[unique]:>4.0%}",
+        "novel: {task.fields[novel]:>4.0%}",
+        TimeRemainingColumn(elapsed_when_finished=True),
+        refresh_per_second=2,
+    ) as progress:
+
+        task = progress.add_task(
+            "Generating molecules...",
+            total=num_to_generate,
+            valid=0.0,
+            unique=0.0,
+            novel=0.0,
+        )
+
+        while len(smiles["all_novel"]) < num_to_generate:
+            generated = pipe(
+                prompt,
+                num_return_sequences=num_to_generate_in_pipeline,
+                max_new_tokens=max_length,
+                return_full_text=True,
+                pad_token_id=tokenizer.pad_token_id,
+                do_sample=True,
+                # top_p=top_p,
+                # num_beams=num_beams,
+                # early_stopping=early_stopping,
+                # skip_special_tokens=True
+            )
+
+            generated = {
+                s["generated_text"].replace(prompt, "").replace(" ", "")
+                for s in generated
+            }
+            smiles["pl_generated"] = {Molecule(s) for s in generated}
+            smiles["pl_valid"] = {s for s in smiles["pl_generated"] if s.valid}
+
+            smiles["pl_unique"] = smiles["pl_valid"] - smiles["all_valid"]
+            smiles["all_valid"] |= smiles["pl_unique"]
+
+            smiles["pl_novel"] = smiles["pl_unique"] - smiles["all_existing"]
+            smiles["all_novel"] |= smiles["pl_novel"]
+
+            if len(smiles["pl_novel"]) == 0:
+                num_tries += 1
+                if num_tries >= max_num_tries:
+                    raise RuntimeError(
+                        f"Aborting... no novel molecules generated for {num_tries} times"
+                    )
+
+            generated_counter = len(smiles["pl_generated"])
+            valid_counter = len(smiles["pl_valid"])
+            unique_counter = len(smiles["pl_unique"])
+            novel_counter = len(smiles["pl_novel"])
+            counter.increment("generated", generated_counter)
+            counter.increment("valid", valid_counter)
+            counter.increment("unique", unique_counter)
+            counter.increment("novel", novel_counter)
+
+            progress.update(
+                task,
+                advance=novel_counter,
+                valid=valid_counter / num_to_generate_in_pipeline,
+                unique=unique_counter / valid_counter,
+                novel=novel_counter / unique_counter,
+            )
+
+    # Some final checks
+    logger.info("Perform final plausibility checks...")
+    assert len(smiles["all_valid"]) >= len(smiles["all_novel"])
+    assert len(smiles["all_novel"]) >= num_to_generate
+
+    # Generate output
+    logger.info("Generating output...")
+    column_smiles = [s.canonical_smiles for s in smiles["all_novel"]]
+    df = pd.DataFrame(
+        {
+            "smiles": column_smiles,
+        }
+    )
+
+    return counter, df
 
 
 def generate_smarts(
@@ -157,11 +332,6 @@ def generate_smarts(
     )
     smarts["all_existing"] = set(existing_reactions)
     assert all(bool(s.reaction_smarts) for s in smarts["all_existing"])
-    # if not ATOM_MAPPING:  # TODO do this even WITH atom mapping?
-    #     existing_smarts = {
-    #         canonicalize_template(s, strict=False, double_check=True)
-    #         for s in existing_smarts
-    #     }
 
     # Load model including tokenizer
     logger.info("Loading model...")
@@ -172,14 +342,16 @@ def generate_smarts(
     # Create generation pipeline
     logger.info("Preparing generation...")
     if max_length is None:
-        try:
+        max_length = model.config.n_positions
+        logger.info(f"Using max_length={max_length} from model config")
+    else:
+        logger.info(f"Using max_length={max_length} from command line")
+        if max_length > model.config.n_positions:
             max_length = model.config.n_positions
-            logger.info(f"Using max_length={max_length} from model config")
-        except AttributeError:
-            max_length = DEFAULT_MAX_LENGTH
             logger.warning(
-                f"Could not determine max_length from model config, setting to {DEFAULT_MAX_LENGTH}"
+                f"max_length={max_length} is larger than model config allows, setting it to {model.config.n_positions}"
             )
+
     num_tries: int = 0
     max_num_tries: int = max(num_to_generate // 100, 10)
     num_to_generate_in_pipeline: int = min(
@@ -320,6 +492,7 @@ def generate_smarts(
     counter.increment("known", len(smarts["all_known"]))
 
     # Some final checks
+    logger.info("Perform final plausibility checks...")
     assert len(smarts["all_valid"]) == len(smarts["all_known"]) + len(
         smarts["all_new"]
     )
@@ -358,7 +531,6 @@ def generate_smarts(
 
 @logger.catch
 def main() -> None:
-    # TODO SMILES not implemented yet
     parser = argparse.ArgumentParser(
         description="Generate SMILES molecules or SMARTS reaction templates."
     )
@@ -413,12 +585,8 @@ def main() -> None:
 
     # Prepare and check (global) variables
     if args.mode == "smiles":
-        # TODO enable code, remove exception once implemented
-        # logger.log("HEADING", "Generating SMARTS reaction templates...")
-        # items_name = "molecules"
-        raise NotImplementedError(
-            "SMILES molecule generation not implemented yet"
-        )
+        items_name = "molecules"
+        logger.log("HEADING", "Generating SMILES molecules...")
     elif args.mode == "smarts":
         items_name = "reaction templates"
         logger.log("HEADING", "Generating SMARTS reaction templates...")
@@ -448,16 +616,19 @@ def main() -> None:
     max_length = args.length
     logger.debug(f"Maximum length of generated {items_name}: {max_length}")
 
-    if args.mode == "smarts":
-        counter, df = generate_smarts(
+    if args.mode == "smiles":
+        counter, df = generate_smiles(
             model_file_path,
             known_file_path,
             num_to_generate,
             max_length,
         )
-    elif args.mode == "smiles":
-        raise NotImplementedError(
-            "SMILES molecule generation not implemented yet"
+    elif args.mode == "smarts":
+        counter, df = generate_smarts(
+            model_file_path,
+            known_file_path,
+            num_to_generate,
+            max_length,
         )
     else:
         raise ValueError(f"Invalid generation mode: {args.mode}")
