@@ -2,7 +2,7 @@
 
 An auto-regressive causal language model for molecule (SMILES) and reaction template (SMARTS) generation. Based on the [Hugging Face implementation](https://huggingface.co/docs/transformers/main/en/model_doc/gpt2#openai-gpt2) of [OpenAI’s GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) [transformer decoder](https://arxiv.org/abs/1706.03762v5) model.
 
-## Main research question:
+## Research questions:
 
 - How well does this model perform for molecule generation, using the [GuacaMol paper](https://pubs.acs.org/doi/10.1021/acs.jcim.8b00839) as a benchmark?
 - What is the effect of different SMILES tokenization approaches (different RegEx expressions as pre-tokenizers, tokenization algorithms such as BPE, WordPiece)?
@@ -24,6 +24,6 @@ python -m pip install -e .
 - `prepare_data.py` downloads and massages the datasets (download not implemented yet)
 - `train.py` trains the model on a given dataset, configured via `yaml` files in the `conf` directory
 - `generate.py` generates SMILES or SMARTS
-- `evaluate_fcd.py` calculates the Frèchet ChemNet Distance (FCD) between the generated molecules and a reference set of molecules (e.g. the GuacaMol dataset)
+- `evaluate_fcd.py` calculates the Fréchet ChemNet Distance (FCD) between the generated molecules and a reference set of molecules (e.g. the GuacaMol dataset)
 - `molecule.py` covers helpers for the chemical space of the task
 - `helpers.py` is a set of misc helpers/utils
