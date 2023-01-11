@@ -41,7 +41,6 @@ VALID_GENERATION_MODES = [
     "smiles",
     "smarts",
 ]  # TODO Type hinting with Literal?!
-# TODO make dependant on generation mode
 DEFAULT_OUTPUT_FILE_PATH = (
     f"../../data/generated/{datetime.now():%Y-%m-%d_%H-%M}_generated.csv"
 )
@@ -531,6 +530,7 @@ def generate_smarts(
 
 @logger.catch
 def main() -> None:
+    # Prepare argument parser
     parser = argparse.ArgumentParser(
         description="Generate SMILES molecules or SMARTS reaction templates."
     )
