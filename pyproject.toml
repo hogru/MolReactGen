@@ -10,7 +10,6 @@ keywords = ["transformer", "auto-regressive model", "molecules", "reactions", "S
 
 [tool.poetry.dependencies]
 codetiming = "^1.4.0"
-fcd-torch = "^1.0.7"
 humanfriendly = "^10.0"
 jupyter = "^1.0.0"
 loguru = "^0.6.0"
