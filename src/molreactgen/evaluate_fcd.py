@@ -29,7 +29,7 @@ reload(molreactgen.config)
 reload(molreactgen.helpers)
 reload(molreactgen.molecule)
 
-from molreactgen.fcd_torch.fcd_torch import FCD  # type: ignore
+from fcd_torch.fcd_torch.fcd import FCD  # type: ignore
 from molreactgen.helpers import configure_logging, get_device, get_num_workers
 from molreactgen.molecule import canonicalize_molecules
 
