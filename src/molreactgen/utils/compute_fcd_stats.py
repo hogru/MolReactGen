@@ -1,38 +1,44 @@
+# coding=utf-8
+"""
+Auto-Regressive Molecule and Reaction Template Generator
+Causal language modeling (CLM) with a transformer decoder model
+Author: Stephan Holzgruber
+Student ID: K08608294
+"""
+
 import argparse
 import warnings
 from pathlib import Path
+from typing import Any
 
-from codetiming import Timer  # type: ignore
+from codetiming import Timer
 from humanfriendly import format_timespan  # type: ignore
 
-from molgen.evaluate import (
+from molreactgen.evaluate_fcd import (
     get_stats_from_molecules,
     read_molecules_from_file,
     save_stats_to_file,
 )
-from molgen.molecule import canonicalize_molecules
+from molreactgen.molecule import canonicalize_molecules
 
-DEFAULT_FCD_STATS_FILE = "./fcd_stats.pkl"
+DEFAULT_FCD_STATS_FILE: str = "./fcd_stats.pkl"
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Pre-compute FCD metrics (activations' mean, sigma) for a dataset",
-        allow_abbrev=True,
+        description="pre-compute FCD metrics (activations' mean, sigma) for a dataset",
     )
     parser.add_argument(
-        "-d",
-        "--dataset",
-        required=True,
-        type=str,
-        help="Dataset (csv with SMILES strings) to pre-compute FCD metrics for",
+        "dataset",
+        type=Path,
+        help="dataset (csv with SMILES strings) to pre-compute FCD metrics for",
     )
     parser.add_argument(
         "-o",
         "--output",
         default=DEFAULT_FCD_STATS_FILE,
-        type=str,
-        help=f"Output file to write the FCD metrics to, default '{DEFAULT_FCD_STATS_FILE}'",
+        type=Path,
+        help="output file to write the FCD metrics to, default '%(default)s'",
     )
 
     args = parser.parse_args()
@@ -66,11 +72,12 @@ def main() -> None:
 
         print(f"Canonicalizing {len(molecules):,} molecules...")
         canon_molecules = canonicalize_molecules(molecules, double_check=True)
+        assert all(canon_molecules), "Not all molecules could be canonicalized"
 
         print(
             f"Computing FCD metrics for {len(canon_molecules):,} canonicalized molecules..."
         )
-        stats = get_stats_from_molecules(canon_molecules, canonicalize=False)
+        stats: dict[str, Any] = get_stats_from_molecules(canon_molecules, canonicalize=False)  # type: ignore
 
         print(f"Saving FCD metrics to {output_file_path.name}...")
         save_stats_to_file(output_file_path, stats)
