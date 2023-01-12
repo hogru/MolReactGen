@@ -1,21 +1,56 @@
 # coding=utf-8
+"""
+Auto-Regressive Molecule and Reaction Template Generator
+Causal language modeling (CLM) with a transformer decoder model
+Author: Stephan Holzgruber
+Student ID: K08608294
+"""
 import argparse
 from importlib import reload
 from pathlib import Path
 
 import transformers  # type: ignore
 
-import molgen.huggingface.train_hf
+import molreactgen.train
 
-reload(molgen.huggingface.train_hf)
+reload(molreactgen.train)
 import pandas as pd  # type: ignore
 
-from molgen.huggingface.train_hf import get_tokenizer
+from molreactgen.train import get_tokenizer
+
+VALID_PRE_TOKENIZERS: tuple[str, ...] = (
+    "char",
+    "atom",
+    "smarts",
+)
+
+VALID_ALGORITHMS: tuple[str, ...] = (
+    "wordlevel",
+    "bpe",
+    "wordpiece",
+    "unigram",
+)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Check basic (pre-) tokenizer against dataset file",
+        description="Check a tokenizer against a dataset",
+    )
+    parser.add_argument(
+        "-p",
+        "--pretokenizer",
+        type=str.lower,
+        required=True,
+        choices=VALID_PRE_TOKENIZERS,
+        help="the pre-tokenizer",
+    )
+    parser.add_argument(
+        "-a",
+        "--algorithm",
+        type=str.lower,
+        required=True,
+        choices=VALID_ALGORITHMS,
+        help="the tokenization algorithm",
     )
     parser.add_argument(
         "-f",
@@ -33,7 +68,9 @@ def main() -> None:
     original: list[str] = df[0].tolist()
     print("Getting tokenizer...")
     tokenizer: transformers.PreTrainedTokenizerFast = get_tokenizer(
-        algorithm="WORDLEVEL", train_source=original
+        pre_tokenizer=args.pretokenizer,
+        algorithm=args.algorithm,
+        train_source=original,
     )
     print("Encoding...")
     encoded: transformers.BatchEncoding = tokenizer(original)
@@ -50,7 +87,7 @@ def main() -> None:
             print(f"Encoded: {enc}")
             print(f"Decoded: {dec}")
             break
-    print("Done!")
+    print("Success!")
 
 
 if __name__ == "__main__":
