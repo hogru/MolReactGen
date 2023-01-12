@@ -305,6 +305,7 @@ def main() -> None:
     parser.add_argument(
         "mode",
         type=str.lower,
+        required=True,
         choices=VALID_EVALUATION_MODES,
         help="the evaluation mode.",
     )
