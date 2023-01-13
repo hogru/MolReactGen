@@ -4487,14 +4487,14 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 
 [[package]]
 name = "wandb"
-version = "0.13.8"
+version = "0.13.9"
 description = "A CLI and library for interacting with the Weights and Biases API."
 category = "main"
 optional = false
 python-versions = ">=3.6"
 files = [
-    {file = "wandb-0.13.8-py2.py3-none-any.whl", hash = "sha256:5c06ec3c0e31e766d83114a65dd6569c6b3e5cc207a382c33aadd2de832aed3d"},
-    {file = "wandb-0.13.8.tar.gz", hash = "sha256:1b2497397744ef8539fb63397634f877d391e6a215e514a39983c8ad0630c2fd"},
+    {file = "wandb-0.13.9-py2.py3-none-any.whl", hash = "sha256:b8752e5287aca9f8192eca7be352882975973cd3cd0c88815930498fd357569d"},
+    {file = "wandb-0.13.9.tar.gz", hash = "sha256:0a17365ce1f18306ce7a7f16b943094fac7284bb85f4e52c0685705602f9e307"},
 ]
 
 [package.dependencies]
@@ -4854,4 +4854,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.10"
-content-hash = "4169c3ae0a7732c84e54a891fabfd9e652cc66b18eac88824afe16d70e4a47b0"
+content-hash = "eff6618e6580e0108c85700626924a38c2fc87859f55c32680b1f45209abeb15"
