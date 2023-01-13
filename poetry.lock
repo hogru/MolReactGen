@@ -4085,13 +4085,13 @@ colorama = "*"
 
 [[package]]
 name = "tensorboard"
-version = "2.11.0"
+version = "2.11.1"
 description = "TensorBoard lets you watch Tensors Flow"
 category = "main"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "tensorboard-2.11.0-py3-none-any.whl", hash = "sha256:a0e592ee87962e17af3f0dce7faae3fbbd239030159e9e625cce810b7e35c53d"},
+    {file = "tensorboard-2.11.1-py3-none-any.whl", hash = "sha256:0c7529f3f43691e8cc2ece8e564c2e103c51ade317c6af626d415239b5088018"},
 ]
 
 [package.dependencies]
@@ -4854,4 +4854,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.10"
-content-hash = "4169c3ae0a7732c84e54a891fabfd9e652cc66b18eac88824afe16d70e4a47b0"
+content-hash = "1aa412336dfc10679dac6ba5a4e00424a11995d7edc21409529a484249c80f6f"
