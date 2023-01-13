@@ -41,6 +41,12 @@ from molreactgen.helpers import get_num_workers
 
 # from molgen.tokenizer import Tokenizer, __tokenizer_version__
 
+# TODO This could/should be refactored in the following ways:
+# - allow canonicalize_template() to take a list of templates and call canonicalize_molecules() internally
+# But, worth it? only used in one place, the Reaction class, which is a single template by definition
+# - make canonicalize_molecules() aware of the smarts parameter
+# - replace calls to canonicalize_smiles with canonicalize_molecule()
+
 
 def _canonicalize_molecule(
     molecule: str, is_smarts: bool, remove_atom_mapping: bool, strict: bool
@@ -70,12 +76,13 @@ def _canonicalize_molecule(
                 canonical_molecule = None
             else:
                 raise RuntimeError(e) from e
+
     return canonical_molecule
 
 
-def canonicalize_smiles(  # TODO refactor into canonicalize_molecule()
+def canonicalize_smiles(
     molecule: str,
-    strict: bool = True,
+    strict: bool = False,
     double_check: bool = False,
 ) -> Optional[str]:
 
@@ -93,7 +100,7 @@ def canonicalize_molecule(
     *,
     is_smarts: bool = False,
     remove_atom_mapping: bool = False,
-    strict: bool = True,
+    strict: bool = False,
     double_check: bool = False,
 ) -> Optional[str]:
 
@@ -123,7 +130,7 @@ def canonicalize_molecule(
 
 
 def canonicalize_molecules(
-    molecules: Union[str, Sequence[str]],
+    molecules: Sequence[str],
     num_workers: Optional[int] = None,
     strict: bool = False,
     double_check: bool = False,
@@ -132,11 +139,12 @@ def canonicalize_molecules(
     # double_check parameter is required due to a bug in RDKit
     # see https://github.com/rdkit/rdkit/issues/5455
 
-    if not isinstance(molecules, Iterable):
-        molecules = [molecules]
-
-    if not all([isinstance(molecule, str) for molecule in molecules]):
-        raise TypeError("All molecules must be of type str")
+    if (
+        isinstance(molecules, str)
+        or not isinstance(molecules, Iterable)
+        or not all([isinstance(molecule, str) for molecule in molecules])
+    ):
+        raise TypeError("molecules must be an iterable of strings")
 
     if num_workers is None:
         num_workers = get_num_workers()
@@ -164,7 +172,6 @@ def canonicalize_molecules(
 # Taken from https://github.com/ml-jku/mhn-react/blob/main/mhnreact/molutils.py
 # Modified to work within this project
 
-
 # This let's mypy complain about
 # "Overloaded function signatures 1 and 2 overlap with incompatible return types"
 # see also https://github.com/python/mypy/issues/11001
@@ -185,6 +192,9 @@ def remove_atom_mapping(
     if isinstance(smarts, str) or not isinstance(smarts, Iterable):
         smarts = [smarts]
 
+    if not all([isinstance(s, str) for s in smarts]):
+        raise TypeError("All smarts must be of type str")
+
     smarts = [re.sub(r":\d+", "", str(s)) for s in smarts]
 
     if len(smarts) == 1:
@@ -194,9 +204,10 @@ def remove_atom_mapping(
 
 
 def canonicalize_template(
-    smarts: str, strict: bool = True, double_check: bool = False
+    smarts: str, strict: bool = False, double_check: bool = False
 ) -> Optional[str]:
-    smarts = str(smarts)
+    # this is faster than remove_atom_mapping via rdkit, so don't use it below
+    smarts = remove_atom_mapping(str(smarts))
     # order the list of smiles + canonicalize it
     results = []
     for reaction_parts in smarts.split(">>"):
@@ -205,7 +216,7 @@ def canonicalize_template(
             canonicalize_molecule(
                 part,
                 is_smarts=True,
-                remove_atom_mapping=True,
+                remove_atom_mapping=False,
                 strict=strict,
                 double_check=double_check,
             )
@@ -357,7 +368,7 @@ class Molecule:
     def canonical_smiles(
         self,
     ) -> Optional[str]:
-        return canonicalize_smiles(self.smiles, strict=False)
+        return canonicalize_smiles(self.smiles, strict=False, double_check=True)
 
     @property
     def valid(self) -> bool:
@@ -399,362 +410,3 @@ class Molecule:
             f"id={self.id.__repr__()}, "
             f"notation={self.notation.__repr__()})"
         )
-
-
-# class MoleculeStore:
-#     def __init__(
-#         self,
-#         *,
-#         name: str,
-#         split: str = "",
-#         description: str = "",
-#         source: str = "",
-#         id_format: str = "07d",
-#         molecules: Optional[Sequence[Molecule]] = None,
-#         csv_file_path: Optional[PathLike] = None,
-#     ) -> None:
-#
-#         logger.debug(f"Initialize MoleculeStore '{name}', split '{split}'")
-#         self.name = str(name)
-#         self.split = str(split)
-#         self.description = str(description)
-#         self.source = str(source)
-#         self.id_format = str(id_format)
-#         self.molecules: list[Molecule] = []
-#
-#         if (molecules is not None) and (csv_file_path is not None):
-#             raise ValueError(
-#                 "Either molecules or csv_file_path can be given, but not both"
-#             )
-#         if molecules is not None:
-#             self.molecules = list(molecules)
-#         elif csv_file_path is not None:
-#             self.molecules = self._load_molecules_from_csv(csv_file_path)
-#         else:
-#             pass
-#
-#         self._molecules_added: int = 0
-#         self.molecule_version: str = __molecule_version__
-#         self.tokenizer_version: str = __tokenizer_version__
-#         self._columns: list[str] = [
-#             "id",
-#             "source_id",
-#             "smiles",
-#             "canonical_smiles",
-#         ]
-#         self._tokenizer: Optional[Tokenizer] = None
-#
-#     @staticmethod
-#     def _load_molecules_from_csv(csv_file_path: PathLike) -> list[Molecule]:
-#         logger.debug(f"Loading molecules from '{csv_file_path}'")
-#         df = pd.read_csv(csv_file_path, names=["smiles"], header=None)
-#         first_row = df["smiles"][0]
-#         if (
-#             first_row.upper() == "SMILES"
-#             or canonicalize_smiles(first_row, strict=False, double_check=False)
-#             is None
-#         ):
-#             df = df.iloc[1:].reset_index()
-#         molecules: list[Molecule] = [Molecule(smiles=s) for s in df["smiles"]]
-#
-#         return molecules
-#
-#     def add_molecules(
-#         self,
-#         molecules: Union[Molecule, Sequence[Molecule]],
-#         *,
-#         check_duplicate: bool = False,
-#         raise_exception: bool = False,
-#     ) -> int:
-#
-#         if not isinstance(molecules, Iterable):
-#             molecules = [molecules]
-#
-#         # TODO This instance checks fails, probably due to the reloading of molecule.py
-#         # Once the code is stable, remove the reloads and de-comment the check
-#         # Without this check, a unit test fails
-#         # if not all([isinstance(molecule, Molecule) for molecule in molecules]):
-#         #     raise TypeError("All molecules must be of type Molecule")
-#
-#         if len(molecules) > 1:
-#             logger.debug(
-#                 f"Add {len(molecules):,d} molecules to MoleculeStore '{self.name}', split '{self.split}'"
-#             )
-#
-#         num_current_molecules = len(self.molecules)
-#         self._molecules_added += len(molecules)
-#         mol_id = num_current_molecules
-#
-#         # TODO The duplicate check is very slow, do it differently? in parallel? at least with a progress bar?
-#         # OR DO a quick check first, i.e. len(list) == len(set(list))
-#
-#         if check_duplicate:
-#             logger.debug(
-#                 "Checking for duplicate molecules (this might take a while)"
-#             )
-#
-#         for mol in molecules:
-#             if check_duplicate:
-#                 if mol in self.molecules:
-#                     if raise_exception:
-#                         raise ValueError(f"{mol} is a duplicate molecule")
-#                     continue
-#
-#             mol.id = self._id_formatter(mol_id)
-#             mol_id += 1
-#             self.molecules.append(mol)
-#
-#         return len(self.molecules) - num_current_molecules
-#
-#     @property
-#     def all_smiles(self) -> list[str]:
-#         return [
-#             m.canonical_smiles if m.canonical_smiles is not None else m.smiles
-#             for m in self.molecules
-#         ]
-#
-#     @property
-#     def all_smiles_encoded(self) -> Optional[list[Any]]:
-#         self._check_tokenizer()
-#         assert self._tokenizer is not None  # make mypy happy
-#         # noinspection PyProtectedMember
-#         return [m._encoding[self._tokenizer.name] for m in self.molecules]
-#
-#     @property
-#     def tokenizer(self) -> Optional[Tokenizer]:
-#         return self._tokenizer
-#
-#     @tokenizer.setter
-#     def tokenizer(self, value: Tokenizer) -> None:
-#         if not isinstance(value, molgen.tokenizer.Tokenizer):
-#             raise TypeError("tokenizer must be of type Tokenizer")
-#         if not (hasattr(value, "name") and isinstance(value.name, str)):
-#             raise TypeError(
-#                 "tokenizer must have a 'name' property of type 'str'"
-#             )
-#         # The mypy checks against Callable fail, see mypy issues #6680 and #6864
-#         if not (hasattr(value, "encode") and isinstance(value.encode, Callable)):  # type: ignore
-#             raise TypeError("tokenizer must have an 'encode()' Callable")
-#         if not (hasattr(value, "decode") and isinstance(value.decode, Callable)):  # type: ignore
-#             raise TypeError("tokenizer must have a 'decode()' Callable")
-#         if not (
-#             hasattr(value, "encoder_vocabulary")
-#             and isinstance(value.encoder_vocabulary, MutableMapping)
-#         ):
-#             raise TypeError(
-#                 "tokenizer must have an 'encoder_vocabulary' property of type 'MutableMapping'"
-#             )
-#         if not (
-#             hasattr(value, "decoder_vocabulary")
-#             and isinstance(value.decoder_vocabulary, MutableMapping)
-#         ):
-#             raise TypeError(
-#                 "tokenizer must have a 'decoder_vocabulary' property of type 'MutableMapping'"
-#             )
-#
-#         self._tokenizer = value
-#
-#     def _check_tokenizer(self) -> None:
-#         if self._tokenizer is None:
-#             raise RuntimeError("No tokenizer set")
-#
-#     def encode_molecules(self) -> None:
-#         self._check_tokenizer()
-#         assert self._tokenizer is not None  # make mypy happy
-#         smiles = self.all_smiles
-#         smiles_encoded = self._tokenizer.encode(smiles)
-#         for mol, smi_enc in zip(self.molecules, smiles_encoded):
-#             # noinspection PyProtectedMember
-#             mol._encoding[self._tokenizer.name] = smi_enc
-#
-#         # This is meant as a safety check, but it's not really necessary
-#         # TODO delete this after debugging
-#         smiles_decoded = self._tokenizer.decode(smiles_encoded)
-#         if smiles != smiles_decoded:
-#             raise RuntimeError(
-#                 "Encoding and decoding of smiles failed (are different)"
-#             )
-#         # for i in range(len(smiles)):
-#         #     if smiles[i] != smiles_decoded[i]:
-#         #         print(f"i: {i}, {smiles[i]} != {smiles_decoded[i]}")
-#
-#     @property
-#     def vocabulary(self) -> dict[str, int]:
-#         return self.encoder_vocabulary
-#
-#     @property
-#     def encoder_vocabulary(self) -> dict[str, int]:
-#         self._check_tokenizer()
-#         assert self._tokenizer is not None  # make mypy happy
-#         return self._tokenizer.encoder_vocabulary
-#
-#     @property
-#     def decoder_vocabulary(self) -> dict[int, str]:
-#         self._check_tokenizer()
-#         assert self._tokenizer is not None  # make mypy happy
-#         return self._tokenizer.decoder_vocabulary
-#
-#     @property
-#     def vocab_size(self) -> int:
-#         self._check_tokenizer()
-#         assert self._tokenizer is not None  # make mypy happy
-#         return self._tokenizer.vocab_size
-#
-#     def _id_formatter(self, n: int) -> str:
-#         n = int(n)
-#         return f"{self.name}{n:{self.id_format}}"
-#
-#     def save(
-#         self,
-#         *,
-#         pickle_file_path: Optional[PathLike] = None,
-#         csv_file_path: Optional[PathLike] = None,
-#         # vocab_file_path_template: Optional[PathLike] = None,
-#     ) -> None:
-#
-#         if pickle_file_path is not None:
-#             # Save the encoded MoleculeStore to a pickle file
-#             pickle_file_path = Path(pickle_file_path).resolve()
-#             pickle_file_path.parent.mkdir(parents=True, exist_ok=True)
-#             logger.debug(
-#                 f"Save MoleculeStore (encoded) '{self.name}' with {len(self.molecules):,d} entries "
-#                 f"to '{pickle_file_path}'"
-#             )
-#             with open(pickle_file_path, "wb") as f:
-#                 pickle.dump(self, f, protocol=5)
-#
-#         if csv_file_path is not None:
-#             # Save the list of molecules to a csv file
-#             csv_file_path = Path(csv_file_path).resolve()
-#             csv_file_path.parent.mkdir(parents=True, exist_ok=True)
-#             logger.debug(
-#                 f"Save MoleculeStore (molecule list) '{self.name}' with {len(self.molecules):,d} entries "
-#                 f"to '{csv_file_path}'"
-#             )
-#
-#             mols = [
-#                 [
-#                     m.id,
-#                     m.source_id,
-#                     m.smiles,
-#                     m.canonical_smiles,
-#                 ]
-#                 for m in self
-#             ]
-#             df = pd.DataFrame(mols, columns=self._columns)
-#             df.to_csv(csv_file_path, index=False)
-#
-#     @classmethod
-#     def from_file(cls, pickle_file_path: PathLike):
-#         pickle_file_path = Path(pickle_file_path).resolve()
-#         logger.debug(f"Load MoleculeStore from file '{pickle_file_path}'")
-#         if not pickle_file_path.is_file():
-#             raise FileNotFoundError(f"File {pickle_file_path} does not exist")
-#
-#         with open(pickle_file_path, "rb") as f:
-#             molstore = pickle.load(f)
-#
-#         logger.debug(
-#             f"Loaded MoleculeStore '{molstore.name}', split '{molstore.split}' "
-#             f"with {len(molstore.molecules):,d} molecules"
-#         )
-#
-#         return molstore
-#
-#     @property
-#     def unique_rate(self) -> float:
-#         if self._molecules_added == 0.0:
-#             return 0.0
-#         else:
-#             return len(self.molecules) / self._molecules_added
-#
-#     @property
-#     def min_len(self) -> int:
-#         return int(min(len(m) for m in self.molecules))
-#
-#     @property
-#     def mean_len(self) -> float:
-#         return float(mean(len(m) for m in self.molecules))
-#
-#     @property
-#     def max_len(self) -> int:
-#         return int(max(len(m) for m in self.molecules))
-#
-#     @property
-#     def median_len(self) -> float:
-#         return float(median(len(m) for m in self.molecules))
-#
-#     def __contains__(self, item: Any) -> bool:
-#         if isinstance(item, Molecule):
-#             return item in self.molecules
-#         else:
-#             return False
-#
-#     @overload
-#     def __getitem__(self, key: int) -> Molecule:
-#         ...
-#
-#     @overload
-#     def __getitem__(self, key: slice) -> "MoleculeStore":
-#         ...
-#
-#     def __getitem__(
-#         self, key: Union[int, slice]
-#     ) -> Union[Molecule, "MoleculeStore"]:
-#         if isinstance(key, slice):
-#             cls = type(self)
-#             new_molstore = cls(
-#                 name=self.name,
-#                 split=self.split,
-#                 description=self.description,
-#                 source=self.source,
-#                 id_format=self.id_format,
-#                 molecules=self.molecules[key],
-#             )
-#             if self._tokenizer is not None:
-#                 new_molstore.tokenizer = self._tokenizer
-#                 new_molstore.encode_molecules()
-#             return new_molstore
-#         else:
-#             index = operator.index(key)
-#             return self.molecules[index]
-#
-#     def __iter__(self) -> Iterator[Molecule]:
-#         return iter(self.molecules)
-#
-#     def __len__(self) -> int:
-#         return len(self.molecules)
-#
-#     def __repr__(self) -> str:
-#         # name = self.name.__repr__() if isinstance(self.name, str) else self.name
-#         # description = (
-#         #     self.description.__repr__()
-#         #     if isinstance(self.description, str)
-#         #     else self.description
-#         # )
-#         # source = (
-#         #     self.source.__repr__()
-#         #     if isinstance(self.source, str)
-#         #     else self.source
-#         # )
-#         # id_format = (
-#         #     self.id_format.__repr__()
-#         #     if isinstance(self.id_format, str)
-#         #     else self.id_format
-#         # )
-#         # version = (
-#         #     self.version.__repr__()
-#         #     if isinstance(self.version, str)
-#         #     else self.version
-#         # )
-#         class_name = type(self).__name__
-#         molecules = reprlib.repr(self.molecules)
-#         return (
-#             f"{class_name}"
-#             f"(name={self.name.__repr__()}, "
-#             f"split={self.split.__repr__()}, "
-#             f"description={self.description.__repr__()}, "
-#             f"source={self.source.__repr__()}, "
-#             f"id_format={self.id_format.__repr__()}, "
-#             f"molecules={molecules!r})"
-#         )

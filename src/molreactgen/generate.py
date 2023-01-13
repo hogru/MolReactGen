@@ -284,14 +284,9 @@ def generate_smarts(
                         combine_enantiomers=True,
                     )
                     if len(_outcomes) > 0:
-                        # print(f"\nFeasible: {_reaction}")
-                        # print(f"Product: {_similar_reaction.product}")
                         _feasible_reactions.append(_similar_reaction)
                 except:  # noqa: E722
                     pass
-
-            # _feasible: bool = len(_feasible_reactions) > 0
-            # exact_match: bool = any([reaction == r for r in similar_reactions])
 
             return _feasible_reactions
 
@@ -404,19 +399,7 @@ def generate_smarts(
                 for s in generated
             }
             smarts["pl_generated"] = {Reaction(s) for s in generated}
-            # canonical_smarts = {
-            #     canonicalize_template(s, strict=False, double_check=True)
-            #     for s in generated_smarts
-            # }
             smarts["pl_valid"] = {s for s in smarts["pl_generated"] if s.valid}
-            # if ATOM_MAPPING:
-            #     valid_smarts = {
-            #         gen
-            #         for gen, can in zip(generated_smarts, canonical_smarts)
-            #         if can is not None
-            #     }
-            # else:
-            #     valid_smarts = {s for s in canonical_smarts if s is not None}
 
             if len(smarts["pl_valid"]) == 0:
                 num_tries += 1
@@ -435,15 +418,6 @@ def generate_smarts(
             counter.increment("valid", valid_counter)
             counter.increment("unique", unique_counter)
 
-            # This results in an empty set, since after canonicalization, all invalid SMARTS are None
-            # smarts["generated_invalid"] |= canonical_smarts - {None} - valid_smarts
-            # This is non-empty, but not comparable since not those are not canonicalized
-            # smarts["generated_invalid"] |= generated_smarts - {""} - valid_smarts
-
-            # progress.console.print(
-            #     f"valid: {valid_counter/num_to_generate_in_pipeline:.0%}, "
-            #     f"unique: {unique_counter/valid_counter:.0%}"
-            # )
             progress.update(
                 task,
                 advance=unique_counter,
@@ -466,20 +440,20 @@ def generate_smarts(
             "Checking chemical feasibility...", total=len(smarts["all_valid"])
         )
 
+        # Check valid reactions for chemical feasibility
+        # Feasible reactions are those for which we can find a product that produces reactants with the reaction
+        # Finding a product is done by looking for products of reactions that are similar to the reaction
+        # Similarity is defined by the canonical templates of the reactions being the same
         for reaction in smarts["all_valid"]:
             feasible_reactions = is_feasible(reaction)
             if len(feasible_reactions) > 0:
-                # progress.console.print(f"Feasible reaction: {reaction.reaction_smarts}")
                 reaction.feasible = True
+                smarts["all_feasible"].add(reaction)
                 feasible_ids = [
                     s.id for s in feasible_reactions if s.id is not None
                 ]
                 reaction.works_with = " | ".join(feasible_ids)
-                smarts["all_feasible"].add(reaction)
 
-            # progress.console.print(
-            #     f"feasible: {len(smarts['all_feasible'])}",
-            # )
             progress.update(task, advance=1)
 
     counter.increment("feasible", len(smarts["all_feasible"]))
