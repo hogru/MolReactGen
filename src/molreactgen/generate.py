@@ -52,6 +52,7 @@ MIN_NUM_TO_GENERATE: int = 20
 DEFAULT_TOP_P: float = 0.95  # not used yet
 DEFAULT_NUM_BEAMS: int = 5  # not used yet
 DEFAULT_EARLY_STOPPING: bool = True  # not used yet
+CSV_ID_SPLITTER = " | "
 
 
 def load_existing_molecules(
@@ -84,6 +85,7 @@ def load_existing_reaction_templates(
     reactions: list[Reaction] = [
         Reaction(
             reaction_smarts=row["reaction_smarts_with_atom_mapping"],
+            split=row["split"],
             id_=row["USPTO-50k_id"],
             product=row["product_smiles"],
         )
@@ -316,7 +318,17 @@ def generate_smarts(
         "pl_valid": set(),
         "pl_unique": set(),
     }
-    counter = Counter(["generated", "valid", "unique", "feasible", "known"])
+    counter = Counter(
+        [
+            "generated",
+            "valid",
+            "unique",
+            "feasible",
+            "known",
+            "known_from_valid_split",
+            "known_from_test_split",
+        ]
+    )
 
     # Load existing reaction templates
     logger.info("Loading known reaction templates...")
@@ -452,7 +464,8 @@ def generate_smarts(
                 feasible_ids = [
                     s.id for s in feasible_reactions if s.id is not None
                 ]
-                reaction.works_with = " | ".join(feasible_ids)
+                reaction.works_with = CSV_ID_SPLITTER.join(feasible_ids)
+                reaction.num_works_with = len(feasible_ids)
 
             progress.update(task, advance=1)
 
@@ -462,7 +475,19 @@ def generate_smarts(
     logger.info("Checking for exact match with existing reaction templates...")
     smarts["all_known"] = smarts["all_feasible"] & smarts["all_existing"]
     smarts["all_new"] = smarts["all_valid"] - smarts["all_existing"]
+    smarts["all_known_from_valid_split"] = {
+        s for s in smarts["all_known"] if s.split == "valid"
+    }
+    smarts["all_known_from_test_split"] = {
+        s for s in smarts["all_known"] if s.split == "test"
+    }
     counter.increment("known", len(smarts["all_known"]))
+    counter.increment(
+        "known_from_valid_split", len(smarts["all_known_from_valid_split"])
+    )
+    counter.increment(
+        "known_from_test_split", len(smarts["all_known_from_test_split"])
+    )
 
     # Some final checks
     logger.info("Perform final plausibility checks...")
@@ -481,11 +506,27 @@ def generate_smarts(
     assert len(smarts["all_known"]) <= len(smarts["all_feasible"])
 
     # Generate output
-    # TODO Amend output to include ... TBD
     logger.info("Generating output...")
+    # all_known_split_valid = [s for s in smarts["all_known"] if s.split == "valid"]
+    # all_known_split_test = [s for s in smarts["all_known"] if s.split == "test"]
+
     column_smarts = [s.reaction_smarts for s in smarts["all_feasible"]]
     column_known = [s in smarts["all_known"] for s in smarts["all_feasible"]]
-    column_works_with = [s.works_with for s in smarts["all_feasible"]]
+    column_valid_split = [
+        s in smarts["all_known_from_valid_split"]
+        for s in smarts["all_feasible"]
+    ]
+    column_test_split = [
+        s in smarts["all_known_from_test_split"] for s in smarts["all_feasible"]
+    ]
+    column_num_works_with = [s.num_works_with for s in smarts["all_feasible"]]
+    column_example = [
+        s.works_with.split(CSV_ID_SPLITTER, maxsplit=1)[0]
+        if s.works_with is not None
+        else "ERROR!"
+        for s in smarts["all_feasible"]
+    ]
+    # column_works_with = [s.works_with for s in smarts["all_feasible"]]
     # output = [s.reaction_smarts for s in smarts["all_known"]]
     # output.extend([s.reaction_smarts for s in smarts["all_new"]])
     # existing_flag = [True] * len(smarts["all_known"]) + [False] * len(
@@ -494,8 +535,12 @@ def generate_smarts(
     df = pd.DataFrame(
         {
             "feasible_reaction_smarts": column_smarts,
-            "exact_match": column_known,
-            "works_with": column_works_with,
+            "not_trained_on_but_known": column_known,
+            "known_from_valid_split": column_valid_split,
+            "known_from_test_split": column_test_split,
+            "num_works_with": column_num_works_with,
+            "example_works_with_reaction_id": column_example,
+            # "works_with": column_works_with,
         }
     )
 

@@ -23,7 +23,7 @@ from multiprocessing import Pool
 
 # from pathlib import Path
 # from statistics import mean, median
-from typing import Any, Optional, Union, overload
+from typing import Any, Literal, Optional, Union, overload
 
 # from loguru import logger
 from rdkit import Chem, rdBase  # type: ignore
@@ -237,19 +237,20 @@ class Reaction:
         self,
         reaction_smarts: str,
         *,
+        split: Optional[Literal["valid", "test"]] = None,
         id_: Optional[str] = None,
-        feasible: bool = False,
         product: Optional[str] = None,
+        feasible: bool = False,
     ) -> None:
 
         self.reaction_smarts = str(reaction_smarts)
-        self.id = id_
+        self.split = str(split).lower() if split is not None else None
+        self.id = str(id_)
+        self.product = str(product)
         self.feasible = bool(feasible)
-        self.product = product
         self.works_with: Optional[str] = None
-        # self.reactants: Optional[  # TODO improve type hints once I know what this looks like
-        #     str
-        # ] = None
+        self.num_works_with: int = 0
+        # self.reactants: Optional[str] = None
 
     @property
     def reaction_smarts(self) -> str:
@@ -330,6 +331,7 @@ class Reaction:
         return (
             f"{class_name}"
             f"(reaction_smarts={self.reaction_smarts.__repr__()}, "
+            f"split={self.split.__repr__()}, "
             f"id={self.id})"
         )
 
