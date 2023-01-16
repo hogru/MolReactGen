@@ -250,6 +250,8 @@ class Reaction:
         self.feasible = bool(feasible)
         self.works_with: Optional[str] = None
         self.num_works_with: int = 0
+        self.in_val_set: bool = False
+        self.in_test_set: bool = False
         # self.reactants: Optional[str] = None
 
     @property

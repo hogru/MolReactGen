@@ -7,6 +7,8 @@ Student ID: K08608294
 """
 
 import argparse
+
+# from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -260,21 +262,29 @@ def generate_smarts(
     num_to_generate: int,
     max_length: Optional[int] = None,
 ) -> tuple[Counter, pd.DataFrame]:
-    def is_feasible(_reaction: Reaction) -> list[Reaction]:
+    def get_reactions_with_feasible_products(
+        _reaction: Reaction,
+    ) -> list[Reaction]:
+        # Determine similar reactions; similar means that the reaction smarts have the same canonical form
         _similar_reactions = [
             r
             for r in existing_reactions
             if _reaction.is_similar_to(r, "canonical")
         ]
+        # If there are similar reactions, see if the reaction smarts itself is syntactically valid
         if len(_similar_reactions) > 0:
             try:
                 _rxn = rdchiralReaction(_reaction.reaction_smarts)
             except (TypeError, ValueError):
                 return []
-
-            _feasible_reactions: list[Reaction] = []
+            # If the reaction smarts is valid, iterate over all similar reactions and determine their products
+            _feasible_reactions: list[
+                Reaction
+            ] = []  # technically it's a reaction, but we only need the products
             for _similar_reaction in _similar_reactions:
                 _product = rdchiralReactants(_similar_reaction.product)
+                # See if we can run the reaction smarts with each product
+                # If we can, add the similar reaction to the list of feasible reactions
                 # broad exception clause due to RDKit raising non-Python exceptions
                 # noinspection PyBroadException
                 try:
@@ -294,6 +304,9 @@ def generate_smarts(
 
         else:
             return []
+
+    # def save_reaction_info(_reaction: Reaction, _feasible_reactions: Sequence[Reaction]) -> None:
+    #     pass
 
     # Validate arguments
     model_file_path = Path(model_file_path).resolve()
@@ -457,29 +470,47 @@ def generate_smarts(
         # Finding a product is done by looking for products of reactions that are similar to the reaction
         # Similarity is defined by the canonical templates of the reactions being the same
         for reaction in smarts["all_valid"]:
-            feasible_reactions = is_feasible(reaction)
+            feasible_reactions = get_reactions_with_feasible_products(reaction)
+            # If we can find a reaction with a product that works with the generated reaction,
+            # then the reaction is feasible = these prodcuts/reactions "work with" the generated reaction
             if len(feasible_reactions) > 0:
                 reaction.feasible = True
                 smarts["all_feasible"].add(reaction)
+                # Gather the IDs of the reactions that work with the generated reaction
                 feasible_ids = [
                     s.id for s in feasible_reactions if s.id is not None
                 ]
                 reaction.works_with = CSV_ID_SPLITTER.join(feasible_ids)
                 reaction.num_works_with = len(feasible_ids)
+                # Gather information about the data split of the reaction that work with the generated reaction
+                reaction.in_val_set = any(
+                    [
+                        s.split == "valid"
+                        for s in existing_reactions
+                        if s == reaction
+                    ]
+                )
+                reaction.in_test_set = any(
+                    [
+                        s.split == "test"
+                        for s in existing_reactions
+                        if s == reaction
+                    ]
+                )
 
             progress.update(task, advance=1)
 
     counter.increment("feasible", len(smarts["all_feasible"]))
 
-    # Check for exact match with existing reaction templates
+    # Check for exact match with existing reaction templates and gather sets and statistics
     logger.info("Checking for exact match with existing reaction templates...")
     smarts["all_known"] = smarts["all_feasible"] & smarts["all_existing"]
     smarts["all_new"] = smarts["all_valid"] - smarts["all_existing"]
     smarts["all_known_from_valid_split"] = {
-        s for s in smarts["all_known"] if s.split == "valid"
+        s for s in smarts["all_known"] if s.in_val_set
     }
     smarts["all_known_from_test_split"] = {
-        s for s in smarts["all_known"] if s.split == "test"
+        s for s in smarts["all_known"] if s.in_test_set
     }
     counter.increment("known", len(smarts["all_known"]))
     counter.increment(
@@ -507,18 +538,12 @@ def generate_smarts(
 
     # Generate output
     logger.info("Generating output...")
-    # all_known_split_valid = [s for s in smarts["all_known"] if s.split == "valid"]
-    # all_known_split_test = [s for s in smarts["all_known"] if s.split == "test"]
-
     column_smarts = [s.reaction_smarts for s in smarts["all_feasible"]]
-    column_known = [s in smarts["all_known"] for s in smarts["all_feasible"]]
-    column_valid_split = [
-        s in smarts["all_known_from_valid_split"]
-        for s in smarts["all_feasible"]
+    column_known = [
+        (s.in_val_set or s.in_test_set) for s in smarts["all_feasible"]
     ]
-    column_test_split = [
-        s in smarts["all_known_from_test_split"] for s in smarts["all_feasible"]
-    ]
+    column_valid_split = [s.in_val_set for s in smarts["all_feasible"]]
+    column_test_split = [s.in_test_set for s in smarts["all_feasible"]]
     column_num_works_with = [s.num_works_with for s in smarts["all_feasible"]]
     column_example = [
         s.works_with.split(CSV_ID_SPLITTER, maxsplit=1)[0]
@@ -529,9 +554,7 @@ def generate_smarts(
     # column_works_with = [s.works_with for s in smarts["all_feasible"]]
     # output = [s.reaction_smarts for s in smarts["all_known"]]
     # output.extend([s.reaction_smarts for s in smarts["all_new"]])
-    # existing_flag = [True] * len(smarts["all_known"]) + [False] * len(
-    #     smarts["all_new"]
-    # )
+    # existing_flag = [True] * len(smarts["all_known"]) + [False] * len(smarts["all_new"])
     df = pd.DataFrame(
         {
             "feasible_reaction_smarts": column_smarts,
