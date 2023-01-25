@@ -61,11 +61,7 @@ from molreactgen.tokenizer import (
 ###############################################################################
 
 # Check versions
-# The HF example requires 4.25.0.dev, but the official release as of 2022-11-29 is 4.24.0
-# Will try to use the official release first, if it fails, use dev version
-# check_min_version("4.25.0.dev0")
 check_min_version("4.24.0")
-# require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
 require_version(
     "datasets>=1.8.0",
     "To fix: see https://github.com/huggingface/transformers/blob/main/examples/"
@@ -81,7 +77,7 @@ os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"
 
 # Configure logging to wandb
 os.environ["WANDB_DISABLED"] = "false"
-os.environ["WANDB_PROJECT"] = "MolGenHF"
+os.environ["WANDB_PROJECT"] = "MolReactGen"
 os.environ["WANDB_LOG_MODEL"] = "true"
 
 logger = logging.getLogger(__name__)
