@@ -20,6 +20,7 @@ from rdchiral.main import (  # type: ignore
     rdchiralReaction,
     rdchiralRun,
 )
+from rdkit import rdBase  # type: ignore
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -273,9 +274,12 @@ def generate_smarts(
         ]
         # If there are similar reactions, see if the reaction smarts itself is syntactically valid
         if len(_similar_reactions) > 0:
+            rdBase.DisableLog("rdApp.error")
+            # broad exception clause due to RDKit raising non-Python exceptions
+            # noinspection PyBroadException
             try:
                 _rxn = rdchiralReaction(_reaction.reaction_smarts)
-            except (TypeError, ValueError):
+            except:  # noqa: E722
                 return []
             # If the reaction smarts is valid, iterate over all similar reactions and determine their products
             _feasible_reactions: list[
@@ -300,6 +304,7 @@ def generate_smarts(
                 except:  # noqa: E722
                     pass
 
+            rdBase.EnableLog("rdApp.error")
             return _feasible_reactions
 
         else:
@@ -338,8 +343,8 @@ def generate_smarts(
             "unique",
             "feasible",
             "known",
-            "known_from_valid_split",
-            "known_from_test_split",
+            "known_from_valid_set",
+            "known_from_test_set",
         ]
     )
 
@@ -472,7 +477,7 @@ def generate_smarts(
         for reaction in smarts["all_valid"]:
             feasible_reactions = get_reactions_with_feasible_products(reaction)
             # If we can find a reaction with a product that works with the generated reaction,
-            # then the reaction is feasible = these prodcuts/reactions "work with" the generated reaction
+            # then the reaction is feasible = these products/reactions "work with" the generated reaction
             if len(feasible_reactions) > 0:
                 reaction.feasible = True
                 smarts["all_feasible"].add(reaction)
@@ -506,18 +511,18 @@ def generate_smarts(
     logger.info("Checking for exact match with existing reaction templates...")
     smarts["all_known"] = smarts["all_feasible"] & smarts["all_existing"]
     smarts["all_new"] = smarts["all_valid"] - smarts["all_existing"]
-    smarts["all_known_from_valid_split"] = {
+    smarts["all_known_from_valid_set"] = {
         s for s in smarts["all_known"] if s.in_val_set
     }
-    smarts["all_known_from_test_split"] = {
+    smarts["all_known_from_test_set"] = {
         s for s in smarts["all_known"] if s.in_test_set
     }
     counter.increment("known", len(smarts["all_known"]))
     counter.increment(
-        "known_from_valid_split", len(smarts["all_known_from_valid_split"])
+        "known_from_valid_set", len(smarts["all_known_from_valid_set"])
     )
     counter.increment(
-        "known_from_test_split", len(smarts["all_known_from_test_split"])
+        "known_from_test_set", len(smarts["all_known_from_test_set"])
     )
 
     # Some final checks
@@ -542,8 +547,8 @@ def generate_smarts(
     column_known = [
         (s.in_val_set or s.in_test_set) for s in smarts["all_feasible"]
     ]
-    column_valid_split = [s.in_val_set for s in smarts["all_feasible"]]
-    column_test_split = [s.in_test_set for s in smarts["all_feasible"]]
+    column_valid_set = [s.in_val_set for s in smarts["all_feasible"]]
+    column_test_set = [s.in_test_set for s in smarts["all_feasible"]]
     column_num_works_with = [s.num_works_with for s in smarts["all_feasible"]]
     column_example = [
         s.works_with.split(CSV_ID_SPLITTER, maxsplit=1)[0]
@@ -559,9 +564,9 @@ def generate_smarts(
         {
             "feasible_reaction_smarts": column_smarts,
             "not_trained_on_but_known": column_known,
-            "known_from_valid_split": column_valid_split,
-            "known_from_test_split": column_test_split,
-            "num_works_with": column_num_works_with,
+            "known_from_valid_set": column_valid_set,
+            "known_from_test_set": column_test_set,
+            "num_products_works_with": column_num_works_with,
             "example_works_with_reaction_id": column_example,
             # "works_with": column_works_with,
         }
