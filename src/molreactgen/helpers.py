@@ -164,7 +164,7 @@ def configure_logging(
     # TODO test the log_modes
 
     if log_mode == "PRODUCTION":
-        logger.disable("molgen")
+        logger.disable("molreactgen")
         return
 
     elif log_mode == "EXPERIMENT":

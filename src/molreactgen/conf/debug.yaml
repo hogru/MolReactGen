@@ -37,7 +37,7 @@ use_auth_token: true
 
 # training_args
 output_dir: "../../checkpoints/"
-overwrite_output_dir: true
+overwrite_output_dir: false
 do_train: true
 do_eval: true
 do_predict: true
@@ -51,6 +51,7 @@ adam_beta1: 0.9
 adam_beta2: 0.95
 max_grad_norm: 1.0  # = default
 num_train_epochs: 2
+
 # the options cosine_with_restarts falls back to "cosine" due to this bug:
 # https://github.com/huggingface/transformers/issues/20552
 lr_scheduler_type: cosine
@@ -75,3 +76,7 @@ hub_model_id: MolReactGen
 hub_strategy: end
 hub_private_repo: true
 # resume_from_checkpoint: true | directory_path
+
+# additional_args
+early_stopping_patience: 5
+unique_output_subdir: true

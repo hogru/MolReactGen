@@ -8,12 +8,20 @@ Author: Stephan Holzgruber
 Student ID: K08608294
 """
 
+###############################################################################
+# Imports                                                                     #
+###############################################################################
+
 # TODO replace logging with loguru
+# from loguru import logger
+# from molreactgen.helpers configure_logging
+
 import logging
 import math
 import os
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -40,6 +48,7 @@ from transformers import (
     EarlyStoppingCallback,
     HfArgumentParser,
     Trainer,
+    TrainerCallback,
     TrainingArguments,
     is_torch_tpu_available,
     set_seed,
@@ -60,13 +69,11 @@ from molreactgen.tokenizer import (
 # Initial checks and setup                                                    #
 ###############################################################################
 
-# Check versions
+# Check Hugging Face versions (only)
+hint: str = "To fix: Install package requirements with poetry install"
 check_min_version("4.24.0")
-require_version(
-    "datasets>=1.8.0",
-    "To fix: see https://github.com/huggingface/transformers/blob/main/examples/"
-    "pytorch/language-modeling/requirements.txt",
-)
+require_version("datasets>=1.8.0", hint)
+require_version("evaluate>=0.3.0", hint)
 
 # The HF datacollator seems to first call tokenizer.encode() and then tokenizer.pad()
 # It would be faster to call tokenizer.__call__() which does both in one go
@@ -87,8 +94,7 @@ logger = logging.getLogger(__name__)
 ###############################################################################
 
 # Data related
-HUB_MODEL_ID = "hogru/molgen-hf"
-
+HUB_MODEL_ID = "hogru/MolReactGen"
 
 # Model related
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
@@ -110,6 +116,8 @@ class ModelArguments:
             )
         },
     )
+    # Theoretically we can pass any model type for causal language modeling
+    # However, this is only tested with GPT2
     model_type: Optional[str] = field(
         default=None,
         metadata={
@@ -122,20 +130,20 @@ class ModelArguments:
         metadata={
             "help": (
                 "Override some existing default config settings when a model is trained from scratch. Example: "
-                "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+                "n_positions=128,n_embd=132,n_layer=12,n_head=12"
             )
         },
     )
     config_name: Optional[str] = field(
         default=None,
         metadata={
-            "help": "Pretrained config name or path if not the same as model_name"
+            "help": "Pretrained config name or path if not the same as model_name."
         },
     )
     tokenizer_name: Optional[str] = field(
         default=None,
         metadata={
-            "help": "Pretrained tokenizer name or path if not the same as model_name"
+            "help": "Pretrained tokenizer name or path if not the same as model_name."
         },
     )
     cache_dir: Optional[str] = field(
@@ -220,6 +228,7 @@ class DataTrainingArguments:
             )
         },
     )
+    # block_size is not needed for our use case
     # block_size: Optional[int] = field(
     #     default=None,
     #     metadata={
@@ -232,18 +241,18 @@ class DataTrainingArguments:
     # )
     overwrite_cache: bool = field(
         default=False,
-        metadata={"help": "Overwrite the cached training and evaluation sets"},
+        metadata={"help": "Overwrite the cached training and evaluation sets."},
     )
     validation_split_percentage: Optional[int] = field(
         default=10,
         metadata={
-            "help": "The percentage of the train set used as validation set in case there's no validation split"
+            "help": "The percentage of the data set used as a validation set (random split)."
         },
     )
     test_split_percentage: Optional[int] = field(
         default=10,
         metadata={
-            "help": "The percentage of the train set used as test set in case there's no test split"
+            "help": "The percentage of the data set used as a test set (random split)."
         },
     )
     preprocessing_num_workers: Optional[int] = field(
@@ -256,9 +265,9 @@ class DataTrainingArguments:
     #     default=True, metadata={"help": "Whether to keep line breaks when using TXT files or not."}
     # )
     pre_tokenizer: Optional[str] = field(
-        default="SMARTS",
+        default="ATOM",
         metadata={
-            "help": "The pre-tokenizer  to use; one of " "char, atom, smarts."
+            "help": "The pre-tokenizer  to use; one of 'char', 'atom', 'smarts'."
         },
     )
 
@@ -266,20 +275,21 @@ class DataTrainingArguments:
         default="WORDLEVEL",
         metadata={
             "help": "The tokenizer algorithm to use; one of "
-            "wordlevel, bpe, wordpiece, unigram."
+            "'wordlevel', 'bpe', 'wordpiece', 'unigram'."
         },
     )
     vocab_min_frequency: Optional[int] = field(
         default=1,
         metadata={
-            "help": "The minimum frequency a pair should have in order to be merged."
+            "help": "The minimum frequency a pair should have in order to be merged. "
+            "Only relevant for the 'bpe' and 'wordpiece' algorithms."
         },
     )
     vocab_size: Optional[int] = field(
         default=0,
         metadata={
-            "help": "The vocabulary size for BPE and UNIGRAM tokenization algorithms, "
-            "irrelevant for CHAR, WORDLEVEL and SENTENCEPIECE_BPE."
+            "help": "The vocabulary size for 'bpe', 'wordpiece' and 'unigram' tokenization algorithms "
+            "(not relevant for 'wordlevel')."
         },
     )
 
@@ -300,14 +310,43 @@ class DataTrainingArguments:
                     )
 
 
+@dataclass
+class AdditionalArguments:
+    """
+    Additional miscellaneous training arguments which can not be passed to the Trainer directly.
+    """
+
+    early_stopping_patience: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "The number of evaluation calls with worsened metrics after which the training stops."
+        },
+    )
+    early_stopping_threshold: Optional[float] = field(
+        default=0.0,
+        metadata={
+            "help": "The threshold for the metric to be satisfy an early stopping condition."
+        },
+    )
+    unique_output_subdir: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether to create a unique sub-directory in the output directory or not."
+        },
+    )
+
+
 ###############################################################################
 # Functions for data manipulation                                             #
 ###############################################################################
 
-
 # TODO implement and type check
 def load_raw_dataset_from_hub(
-    dataset_name, dataset_config_name, cache_dir, use_auth_token
+    dataset_name: str,
+    *,
+    dataset_config_name: Optional[str] = None,
+    cache_dir: Optional[str] = None,
+    use_auth_token: bool = False,
 ) -> DatasetDict:
     ...
 
@@ -327,16 +366,22 @@ def load_raw_dataset_from_dir(
     # ...iterabledatasetdict-iterabledataset-expected-datasetdict/17177
     dataset: DatasetDict = load_dataset(
         data_dir, features=features, cache_dir=cache_dir, header=None
-    )
+    )  # type: ignore
     if "validation" not in dataset.keys():
         if "train" not in dataset.keys():
             raise RuntimeError("Can't load dataset, no train split found")
+        # Create random split
         dataset_shuffled: Dataset = dataset["train"].shuffle(seed=seed)
-        val_len = int(
+        val_len: int = int(
             len(dataset_shuffled) * validation_split_percentage / 100.0
         )
-        test_len = int(len(dataset_shuffled) * test_split_percentage / 100.0)
-        train_len = len(dataset_shuffled) - val_len - test_len
+        test_len: int = int(
+            len(dataset_shuffled) * test_split_percentage / 100.0
+        )
+        train_len: int = len(dataset_shuffled) - val_len - test_len
+        logger.debug(
+            f"Create random split with lengths {train_len}, {val_len}, {test_len}"
+        )
         assert len(dataset_shuffled) == train_len + val_len + test_len
         dataset["train"] = dataset_shuffled.select(range(train_len))
         dataset["validation"] = dataset_shuffled.select(
@@ -345,20 +390,6 @@ def load_raw_dataset_from_dir(
         dataset["test"] = dataset_shuffled.select(
             range(train_len + val_len, train_len + val_len + test_len)
         )
-    #     dataset["validation"] = load_dataset(
-    #         data_dir,
-    #         features=features,
-    #         split=f"train[:{validation_split_percentage}%]",
-    #         cache_dir=cache_dir,
-    #         header=None,
-    #     )
-    #     dataset["train"] = load_dataset(
-    #         data_dir,
-    #         features=features,
-    #         split=f"train[{validation_split_percentage}%:]",
-    #         cache_dir=cache_dir,
-    #         header=None,
-    #     )
 
     dataset = dataset.rename_column("0", DATASET_COLUMN_NAME)
     return dataset
@@ -368,43 +399,64 @@ def load_raw_dataset_from_dir(
 # Main training loop                                                          #
 ###############################################################################
 
-
+# @logger.catch
 def main() -> None:
+
+    # -----------------------------------------------------------------------------
+    # Setup
+    # -----------------------------------------------------------------------------
+
     # Parse arguments from command line or yaml configuration file
     parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, TrainingArguments)
+        (
+            ModelArguments,
+            DataTrainingArguments,
+            TrainingArguments,
+            AdditionalArguments,
+        ),
+        description="Train a model on a dataset.",
     )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".yaml"):
-        model_args, data_args, training_args = parser.parse_yaml_file(
-            yaml_file=Path(sys.argv[1]).resolve().as_posix()
-        )  # (os.path.abspath(sys.argv[1])
+        (
+            model_args,
+            data_args,
+            training_args,
+            additional_args,
+        ) = parser.parse_yaml_file(Path(sys.argv[1]).resolve().as_posix())
     else:
         (
             model_args,
             data_args,
             training_args,
+            additional_args,
         ) = parser.parse_args_into_dataclasses()
 
     # Setup logging
+    # configure_logging()
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    log_level = training_args.get_process_log_level()
-    logger.setLevel(log_level)
+    log_level = (
+        training_args.get_process_log_level()
+    )  # This returns a log level depending on main process yes/no etc.
+    logger.setLevel(
+        log_level
+    )  # This conflicts with configure_logging() TODO need to think about this
     datasets.utils.logging.set_verbosity(log_level)
+    evaluate.utils.logging.set_verbosity(log_level)
     transformers.utils.logging.set_verbosity(log_level)
-    transformers.utils.logging.enable_default_handler()
-    transformers.utils.logging.enable_explicit_format()
+    transformers.utils.logging.enable_default_handler()  # TODO with loguru, delete this line?
+    transformers.utils.logging.enable_explicit_format()  # TODO with loguru, delete this line?
 
     # Log a small summary on each process
-    # logger.warning(
-    #     f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-    #     + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
-    # )
+    logger.info(
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu} "
+        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+    )
 
-    logger.info(f"Training/evaluation parameters \n{training_args}")
+    logger.debug(f"Training/evaluation parameters \n{training_args}")
 
     # Set seed in random, numpy, torch (not only for training, but also for dataset creation, if applicable)
     set_seed(training_args.seed)
@@ -415,13 +467,17 @@ def main() -> None:
 
     raw_datasets: DatasetDict
     if data_args.dataset_name is not None:
+        logger.info(f"Loading dataset {data_args.dataset_name} from hub...")
         raw_datasets = load_raw_dataset_from_hub(
             data_args.dataset_name,
-            data_args.dataset_config_name,
-            model_args.cache_dir,
-            model_args.use_auth_token,
+            dataset_config_name=data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=model_args.use_auth_token,
         )
     else:
+        logger.info(
+            f"Loading dataset from directory {data_args.dataset_dir}..."
+        )
         raw_datasets = load_raw_dataset_from_dir(
             data_args.dataset_dir,
             validation_split_percentage=data_args.validation_split_percentage,
@@ -429,45 +485,50 @@ def main() -> None:
             cache_dir=model_args.cache_dir,
             seed=training_args.seed,
         )
-    print(raw_datasets)
+    logger.debug(raw_datasets)
 
     # -----------------------------------------------------------------------------
     # Configure model - Step 1 (before tokenizer config)
     # -----------------------------------------------------------------------------
 
     # Define base model config
+    logger.info("Configuring model...")
     config_kwargs = {
         "cache_dir": model_args.cache_dir,
         "revision": model_args.model_revision,
         "use_auth_token": True if model_args.use_auth_token else None,
     }
-    # TODO check first 2 IFs (currently not used)
-    if model_args.config_name:
-        logger.info(f"Loading configuration from {model_args.config_name}")
-        config = AutoConfig.from_pretrained(
-            model_args.config_name, **config_kwargs
-        )
-    elif model_args.model_name_or_path:
+
+    if model_args.model_name_or_path:
         logger.info(
             f"Loading configuration from {model_args.model_name_or_path}"
         )
         config = AutoConfig.from_pretrained(
             model_args.model_name_or_path, **config_kwargs
         )
+
+    elif model_args.config_name:
+        logger.info(f"Loading configuration from {model_args.config_name}")
+        config = AutoConfig.from_pretrained(
+            model_args.config_name, **config_kwargs
+        )
+
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.info(f"Training model type {model_args.model_type} from scratch")
-        logger.info(f"Old config {config}")
+        # logger.debug(f"Old config {config}")
         if model_args.config_overrides is not None:
-            logger.info(f"Overriding config: {model_args.config_overrides}")
+            logger.info("Overriding model config...")
+            logger.debug(f"{model_args.config_overrides}")
             config_overrides = model_args.config_overrides.replace(" ", "")
             config.update_from_string(config_overrides)
-            logger.info(f"New config: {config}")
+            logger.debug(f"New config:\n{config}")
 
     # -----------------------------------------------------------------------------
     # Configure / Train tokenizer
     # -----------------------------------------------------------------------------
 
+    logger.info("Configuring tokenizer...")
     tokenizer_kwargs = {
         "cache_dir": model_args.cache_dir,
         "use_fast": True,
@@ -475,14 +536,24 @@ def main() -> None:
         "use_auth_token": True if model_args.use_auth_token else None,
     }
     if model_args.tokenizer_name:
+        logger.info(f"Loading tokenizer from {model_args.tokenizer_name}")
         tokenizer = AutoTokenizer.from_pretrained(
             model_args.tokenizer_name, **tokenizer_kwargs
         )
     elif model_args.model_name_or_path:
+        logger.info(f"Loading tokenizer from {model_args.model_name_or_path}")
         tokenizer = AutoTokenizer.from_pretrained(
             model_args.model_name_or_path, **tokenizer_kwargs
         )
     else:
+        logger.info("Building tokenizer...")
+        logger.debug(
+            f"Pre-tokenizer: {data_args.pre_tokenizer}, "
+            f"algorithm: {data_args.algorithm}, "
+            f"vocabulary size: {data_args.vocab_size}, "
+            f"min frequency: {data_args.vocab_min_frequency}, "
+            f"max length: {config.n_positions}"
+        )
         data_iterator = raw_datasets["train"][DATASET_COLUMN_NAME]
         tokenizer = get_tokenizer(
             pre_tokenizer=data_args.pre_tokenizer,
@@ -493,8 +564,9 @@ def main() -> None:
             model_max_length=config.n_positions,
         )
 
-    with training_args.main_process_first(desc="dataset map tokenization"):
-        tokenized_datasets = raw_datasets.map(
+    logger.info("Training tokenizer...")
+    with training_args.main_process_first(desc="Tokenize dataset (map)"):
+        tokenized_datasets: DatasetDict = raw_datasets.map(
             partial(tokenize_function, tokenizer=tokenizer),
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
@@ -507,17 +579,11 @@ def main() -> None:
     # Configure model - Step 2 (after tokenizer config)
     # -----------------------------------------------------------------------------
 
-    # Update model with information from tokenizer
-    model_overrides: dict[str, Any] = {
-        "vocab_size": tokenizer.vocab_size,
-        "bos_token_id": tokenizer.bos_token_id,
-        "eos_token_id": tokenizer.eos_token_id,
-        "pad_token": tokenizer.pad_token,
-    }
-    config.update(model_overrides)
-
     # Create causal language model
     if model_args.model_name_or_path:
+        logger.info(
+            f"Loading pre-trained model from {model_args.model_name_or_path}..."
+        )
         model = AutoModelForCausalLM.from_pretrained(
             model_args.model_name_or_path,
             from_tf=bool(".ckpt" in model_args.model_name_or_path),
@@ -527,40 +593,74 @@ def main() -> None:
             use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
-        model = AutoModelForCausalLM.from_config(config)
-        n_params = sum(
-            dict((p.data_ptr(), p.numel()) for p in model.parameters()).values()
+        # Update model with information from tokenizer
+        logger.info(
+            "Updating model configuration with tokenizer information..."
         )
-        logger.info(f"Model size: {n_params/2**20:.2f}M params")
+        logger.debug(
+            f"Vocabulary size: {tokenizer.vocab_size}, "
+            f"BOS token id: {tokenizer.bos_token_id}, "
+            f"EOS token id: {tokenizer.eos_token_id}, "
+            f"PAD token: {tokenizer.pad_token}"
+        )
+        model_overrides: dict[str, Any] = {
+            "vocab_size": tokenizer.vocab_size,
+            "bos_token_id": tokenizer.bos_token_id,
+            "eos_token_id": tokenizer.eos_token_id,
+            "pad_token": tokenizer.pad_token,
+        }
+        config.update(model_overrides)
+        logger.info("Creating model...")
+        model = AutoModelForCausalLM.from_config(config)
+    n_params = sum(
+        dict((p.data_ptr(), p.numel()) for p in model.parameters()).values()
+    )
+    logger.info(f"Model size: {n_params/2**20:.2f}M params")
 
     # Reshape the embeddings if necessary
     embedding_size = model.get_input_embeddings().weight.shape[0]
     if len(tokenizer) > embedding_size:
-        model.resize_token_embeddings(len(tokenizer))
+        logger.error(
+            "Reshaping of model's embedding necessary (should NOT happen)"
+        )
+        logger.error(
+            f"Tokenizer length: {len(tokenizer)}, embedding size: {embedding_size}"
+        )
+        # model.resize_token_embeddings(len(tokenizer))
+        raise RuntimeError("Length of tokenizer is greater than embedding size")
 
     # -----------------------------------------------------------------------------
-    # Configure training
+    # Load last checkpoint
     # -----------------------------------------------------------------------------
+
+    logger.info("Configuring training...")
 
     # Detect last checkpoint
-    last_checkpoint = None
+    last_checkpoint: Optional[str] = None
+    # output_dir: Path = Path(training_args.output_dir).resolve()
+    if additional_args.unique_output_subdir:
+        training_args.output_dir = (
+            Path(training_args.output_dir)
+            / f"{datetime.now():%Y-%m-%d_%H-%M}_experiment"
+        ).as_posix()
+
     if (
-        # os.path.isdir(training_args.output_dir)
         Path(training_args.output_dir).is_dir()
         and training_args.do_train
         and not training_args.overwrite_output_dir
     ):
+        # get_last_checkpoint() not documented, see code here:
+        # https://github.com/huggingface/transformers/blob/main/src/transformers/trainer_utils.py
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
-        if (
+        if (  # no checkpoint found but other files in directory
             last_checkpoint is None
-            # and len(os.listdir(training_args.output_dir)) > 0
             and len(list(Path(training_args.output_dir).iterdir())) > 0
         ):
             raise ValueError(
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
-        elif (
+        elif (  # checkpoint found but training not configured to resume from this checkpoint
             last_checkpoint is not None
             and training_args.resume_from_checkpoint is None
         ):
@@ -569,26 +669,47 @@ def main() -> None:
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
 
+    # -----------------------------------------------------------------------------
+    # Configure training data
+    # -----------------------------------------------------------------------------
+
     # Define training/validation sets and limit to max length if necessary
     if training_args.do_train:
         if "train" not in tokenized_datasets:
             raise ValueError("--do_train requires a train dataset")
-        train_dataset = tokenized_datasets["train"]
+        train_dataset: Dataset = tokenized_datasets["train"]
         if data_args.max_train_samples is not None:
-            max_train_samples = min(
+            max_train_samples: int = min(
                 len(train_dataset), data_args.max_train_samples
             )
+            logger.info(f"Limit training samples to {max_train_samples}")
             train_dataset = train_dataset.select(range(max_train_samples))
 
     if training_args.do_eval:
         if "validation" not in tokenized_datasets:
             raise ValueError("--do_eval requires a validation dataset")
-        eval_dataset = tokenized_datasets["validation"]
+        eval_dataset: Dataset = tokenized_datasets["validation"]
         if data_args.max_eval_samples is not None:
-            max_eval_samples = min(
+            max_eval_samples: int = min(
                 len(eval_dataset), data_args.max_eval_samples
             )
+            logger.info(f"Limit validation samples to {max_eval_samples}")
             eval_dataset = eval_dataset.select(range(max_eval_samples))
+
+    # Configure data collator
+    # Pad to multiples of 8 for NVIDIA tensor cores, see
+    # https://developer.nvidia.com/blog/optimizing-gpu-performance-tensor-cores/
+
+    data_collator = DataCollatorForLanguageModeling(
+        tokenizer, pad_to_multiple_of=8, mlm=False
+    )
+
+    # -----------------------------------------------------------------------------
+    # Define helper functions for metric computation
+    # -----------------------------------------------------------------------------
+
+    logger.info("Setting up metric computation...")
+    metric = evaluate.load("accuracy")
 
     def preprocess_logits_for_metrics(
         logits: Union[tuple[torch.Tensor, ...], torch.Tensor],
@@ -598,9 +719,8 @@ def main() -> None:
             # Depending on the model and config, logits may contain extra tensors,
             # like past_key_values, but logits always come first
             logits = logits[0]
-        return logits.argmax(dim=-1)
 
-    metric = evaluate.load("accuracy")
+        return logits.argmax(dim=-1)
 
     def compute_metrics(
         eval_preds: tuple[torch.Tensor, torch.Tensor]
@@ -610,23 +730,29 @@ def main() -> None:
         # by preprocess_logits_for_metrics, but we need to shift the labels
         labels = labels[:, 1:].reshape(-1)
         preds = preds[:, :-1].reshape(-1)
-        # labels = labels[:, :].reshape(-1)
-        # preds = preds[:, :].reshape(-1)
+
         # metric.compute() returns Optional[dict[str, float]] but is not annotated as such
         return metric.compute(predictions=preds, references=labels)  # type: ignore
 
+    # -----------------------------------------------------------------------------
+    # Do final configuration steps and initialize trainer
+    # -----------------------------------------------------------------------------
+
+    callbacks: list[TrainerCallback] = []
+
     # Configure early stopping
-    early_stopping_callback = EarlyStoppingCallback(early_stopping_patience=5)
+    if additional_args.early_stopping_patience is not None:
+        early_stopping_callback = EarlyStoppingCallback(
+            early_stopping_patience=additional_args.early_stopping_patience,
+            early_stopping_threshold=additional_args.early_stopping_threshold,
+        )
+        callbacks.append(early_stopping_callback)
 
-    # TODO: might build the lr scheduler "by hand" due to this hugging face bug:
+    # Configure lr scheduler (done via argument)
+    # We could build a more advanced lr scheduler "by hand" instead of passing an argument, see
+    # https://huggingface.co/docs/transformers/v4.26.0/en/main_classes/trainer#transformers.Trainer.create_scheduler
+    # Cosine with restarts **has** to be built manually, due to a hugging face issue, see
     # https://github.com/huggingface/transformers/issues/20552
-
-    # Configure data collator
-    # Pad to multiples of 8 for NVIDIA tensor cores
-    # see: https://developer.nvidia.com/blog/optimizing-gpu-performance-tensor-cores/
-    data_collator = DataCollatorForLanguageModeling(
-        tokenizer, pad_to_multiple_of=8, mlm=False
-    )
 
     # Initialize the Trainer
     trainer = Trainer(
@@ -635,8 +761,6 @@ def main() -> None:
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
         tokenizer=tokenizer,
-        # Data collator will default to DataCollatorWithPadding, so we change it.
-        # data_collator=default_data_collator,
         data_collator=data_collator,
         compute_metrics=compute_metrics
         if training_args.do_eval and not is_torch_tpu_available()
@@ -644,7 +768,7 @@ def main() -> None:
         preprocess_logits_for_metrics=preprocess_logits_for_metrics
         if training_args.do_eval and not is_torch_tpu_available()
         else None,
-        callbacks=[early_stopping_callback],
+        callbacks=callbacks,
     )
 
     # -----------------------------------------------------------------------------
@@ -653,45 +777,58 @@ def main() -> None:
 
     # Training (train/validation set)
     if training_args.do_train:
-        checkpoint = None
+        checkpoint: Optional[Union[bool, str]] = None
         if training_args.resume_from_checkpoint is not None:
             checkpoint = training_args.resume_from_checkpoint
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
+        if checkpoint is not None and isinstance(checkpoint, bool):
+            logger.info(f"Resuming training from checkpoint {checkpoint}")
+        elif checkpoint is not None and isinstance(checkpoint, str):
+            logger.info(
+                f"Resuming training from checkpoint {training_args.output_dir}"
+            )
+        logger.info("Training...")
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
+        logger.info("Saving model...")
         trainer.save_model()
 
+        # Save training metrics
+        logger.info("Saving training metrics...")
         metrics = train_result.metrics
-
         max_train_samples = (
             data_args.max_train_samples
             if data_args.max_train_samples is not None
             else len(train_dataset)
         )
         metrics["train_samples"] = min(max_train_samples, len(train_dataset))
-
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
         trainer.save_state()
 
     # Evaluation (test set)
     if training_args.do_predict:
-        logger.info("*** Evaluate on test set ***")
         if "test" not in tokenized_datasets:
             raise ValueError("--do_predict requires a test dataset")
         test_dataset = tokenized_datasets["test"]
 
-        # There is also a Trainer.predict() but it returns more than needed here
+        # There is also Trainer.predict() but it returns more than needed here
+        logger.info("Evaluating trained model on test set...")
         metrics = trainer.evaluate(test_dataset, metric_key_prefix="test")
 
+        # Save test metrics
+        logger.info("Saving evaluation metrics...")
         try:
             perplexity = math.exp(metrics["test_loss"])
         except OverflowError:
             perplexity = float("inf")
         metrics["perplexity"] = perplexity
-
         trainer.log_metrics("test", metrics)
         trainer.save_metrics("test", metrics)
+
+    # -----------------------------------------------------------------------------
+    # (Prepare) to push the model/dataset to the hub
+    # -----------------------------------------------------------------------------
 
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
@@ -708,14 +845,16 @@ def main() -> None:
             kwargs["dataset"] = data_args.dataset_name
 
     if training_args.push_to_hub:
+        logger.info("Pushing model/dataset to the hub...")
         trainer.push_to_hub(**kwargs)
     else:
+        logger.info("Creating model/dataset card template...")
         trainer.create_model_card(**kwargs)
 
 
-# def _mp_fn(index):
-#     # For xla_spawn (TPUs)
-#     main()
+# For xla_spawn (TPUs)
+def _mp_fn(index: int) -> None:
+    main()
 
 
 if __name__ == "__main__":
