@@ -9,17 +9,23 @@ Student ID: K08608294
 
 import hashlib
 import inspect
+import logging
 import os
 import sys
 import warnings
+from functools import partialmethod
 from pathlib import Path
+from types import FrameType
 from typing import Any, Generator, Iterable, Optional, Sequence, Union, overload
 
 import torch
 from loguru import logger
 
-# PathLike = TypeVar("PathLike", str, Path, os.PathLike)
 from molreactgen.config import PathLike
+
+###############################################################################
+# Counter, used during generation                                             #
+###############################################################################
 
 
 # TODO Refactor Counter class
@@ -144,54 +150,78 @@ class Counter:
         return fractions
 
 
+###############################################################################
+# Loguru Logging                                                              #
+###############################################################################
+
+
+# Code taken from https://github.com/Delgan/loguru#entirely-compatible-with-standard-logging
+# Type annotations are my own
+class InterceptHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        # Get corresponding Loguru level if it exists.
+        level: Union[int, str]
+        try:
+            level = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+
+        # Find caller from where originated the logged message
+        frame: Optional[FrameType]
+        depth: int
+        frame, depth = sys._getframe(6), 6
+        while frame and frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+
+        logger.opt(depth=depth, exception=record.exc_info).log(
+            level, record.getMessage()
+        )
+
+
 def show_warning(message: str, *_: Any, **__: Any) -> None:
     logger.warning(message)
 
 
 def configure_logging(
+    log_level: int = 20,
     *,
-    log_mode: str = "DEVELOPMENT",
+    console_format: Optional[str] = None,
+    file_format: Optional[str] = None,
+    file_log_level: Optional[int] = None,
     log_dir: Optional[PathLike] = None,
     log_file: Optional[PathLike] = None,
-    console_log_level: Optional[str] = None,
-    file_log_level: Optional[str] = None,
+    rotation: str = "1 day",
+    retention: str = "7 days",
 ) -> None:
 
-    # logger.debug(f'Module name: {__name__}')
+    # This is the default format used by loguru
+    # default_console_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | " \
+    #                          "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - " \
+    #                          "<level>{message}</level>"
+    default_console_format = "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>"
+    default_file_format = (
+        "{time:YYYY-MM-DD HH:mm:ss.SSS} | <level>{level: <8}</level> | "
+        "{name}:{function}:{line} - <level>{message}</level>"
+    )
 
-    log_mode = log_mode.upper()
+    # Allow for separate log levels for console and file logging
+    console_log_level: int = int(log_level)
+    file_log_level = (
+        console_log_level if file_log_level is None else int(file_log_level)
+    )
 
-    # TODO test the log_modes
+    console_format = (
+        default_console_format
+        if console_format is None
+        else str(console_format)
+    )
+    file_format = (
+        default_file_format if file_format is None else str(file_format)
+    )
 
-    if log_mode == "PRODUCTION":
-        logger.disable("molreactgen")
-        return
-
-    elif log_mode == "EXPERIMENT":
-        console_log_level = (
-            "INFO" if console_log_level is None else console_log_level
-        )
-        file_log_level = "DEBUG" if file_log_level is None else file_log_level
-
-    elif log_mode == "TEST":
-        console_log_level = (
-            "WARNING" if console_log_level is None else console_log_level
-        )
-        file_log_level = "DEBUG" if file_log_level is None else file_log_level
-
-    elif log_mode == "DEVELOPMENT":
-        console_log_level = (
-            "DEBUG" if console_log_level is None else console_log_level
-        )
-        file_log_level = "DEBUG" if file_log_level is None else file_log_level
-
-    else:
-        raise ValueError(f"Invalid log_mode: {log_mode}")
-
-    logger.remove()
-    logger.level("HEADING", no=21, color="<red><BLACK><bold>")
-    logger.add(sys.stderr, level=console_log_level)
-
+    # Determine log file path
+    # To be changed with python version ≥ 3.11: A list of FrameInfo objects is returned.
     caller_file_path = Path(inspect.stack()[1].filename).resolve()
     if log_dir is None:
         log_dir = Path(caller_file_path.parent) / "logs"
@@ -204,25 +234,51 @@ def configure_logging(
 
     log_file = log_dir / log_file
 
+    rotation = str(rotation)
+    retention = str(retention)
+
+    # Remove all previously added handlers
+    logger.remove()
+
+    # Allow for logging of headers, add log level
+    try:
+        logger.level("heading", no=21, color="<red><BLACK><bold>")
+        logger.__class__.heading = partialmethod(logger.__class__.log, "heading")  # type: ignore
+    except TypeError:  # log level already exists
+        pass
+
+    # Add console handler
+    logger.add(sys.stderr, level=console_log_level, format=console_format)
+
+    # Add file handler
     logger.add(
         sink=log_file,
-        rotation="1 day",
-        retention="7 days",
+        rotation=rotation,
+        retention=retention,
         level=file_log_level,
+        format=file_format,
         enqueue=True,
         backtrace=True,
         diagnose=True,
         colorize=False,
     )
 
+    # Redirect warnings to logger
     warnings.showwarning = show_warning  # type: ignore
 
+    # Intercept logging messages from other libraries
+    logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+
+    logger.info(f"Logging to file '{log_file}'")
     logger.debug("Logging configured")
-    logger.debug(f"Log to file '{log_file}'")
 
 
-# TODO refactor name as get_hash_code
-def get_hash_value(file_path: Union[str, Path]) -> int:
+###############################################################################
+# Miscellaneous                                                               #
+###############################################################################
+
+
+def get_hash_code(file_path: Union[str, Path]) -> int:
     file_path = Path(file_path).resolve()
     hash_fn = hashlib.md5()
 
