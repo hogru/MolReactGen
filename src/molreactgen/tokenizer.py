@@ -36,6 +36,7 @@ EOS_TOKEN: str = "_"
 PAD_TOKEN: str = " "
 UNK_TOKEN: str = "§"
 ADD_TOKEN: str = "°"  # Not sure if needed at all; might be used to map special model tokens to like CLS, SEP etc.
+MODEL_MAX_LENGTH = 1024
 
 REGEX_INPUT = {
     # everything within brackets becomes a single token; might play with that, alternative below
@@ -108,7 +109,7 @@ def get_tokenizer(
     train_source: Sequence[str],
     *,
     vocab_size: int = 0,
-    model_max_length: int = 1024,
+    model_max_length: int = MODEL_MAX_LENGTH,
     min_frequency: int = 1,
     bos_token: str = BOS_TOKEN,
     eos_token: str = EOS_TOKEN,
