@@ -7,19 +7,13 @@ Causal language modeling (CLM) with a transformer decoder model
 Author: Stephan Holzgruber
 Student ID: K08608294
 """
-
-###############################################################################
-# Imports                                                                     #
-###############################################################################
-
-# TODO replace logging with loguru
-# from loguru import logger
-# from molreactgen.helpers configure_logging
-
-import logging
+import json
 import math
 import os
 import sys
+import tempfile
+import warnings
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import partial
@@ -38,6 +32,7 @@ from datasets import (  # type: ignore
     Value,
     load_dataset,
 )
+from loguru import logger
 from transformers import (
     CONFIG_MAPPING,
     MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -46,7 +41,9 @@ from transformers import (
     AutoTokenizer,
     DataCollatorForLanguageModeling,
     EarlyStoppingCallback,
+    GPT2TokenizerFast,
     HfArgumentParser,
+    PreTrainedTokenizerFast,
     Trainer,
     TrainerCallback,
     TrainingArguments,
@@ -59,11 +56,20 @@ from transformers.trainer_utils import get_last_checkpoint  # type: ignore
 from transformers.utils import check_min_version  # type: ignore
 from transformers.utils.versions import require_version  # type: ignore
 
+from molreactgen.helpers import configure_logging
 from molreactgen.tokenizer import (
     DATASET_COLUMN_NAME,
+    enclose_function,
+    get_merges,
+    get_modified_vocab,
     get_tokenizer,
     tokenize_function,
 )
+
+###############################################################################
+# Imports                                                                     #
+###############################################################################
+
 
 ###############################################################################
 # Initial checks and setup                                                    #
@@ -87,7 +93,6 @@ os.environ["WANDB_DISABLED"] = "false"
 os.environ["WANDB_PROJECT"] = "MolReactGen"
 os.environ["WANDB_LOG_MODEL"] = "true"
 
-logger = logging.getLogger(__name__)
 
 ###############################################################################
 # Prepare config                                                              #
@@ -184,7 +189,7 @@ class ModelArguments:
 
 
 @dataclass
-class DataTrainingArguments:
+class DataArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
@@ -278,13 +283,6 @@ class DataTrainingArguments:
             "'wordlevel', 'bpe', 'wordpiece', 'unigram'."
         },
     )
-    vocab_min_frequency: Optional[int] = field(
-        default=1,
-        metadata={
-            "help": "The minimum frequency a pair should have in order to be merged. "
-            "Only relevant for the 'bpe' and 'wordpiece' algorithms."
-        },
-    )
     vocab_size: Optional[int] = field(
         default=0,
         metadata={
@@ -292,22 +290,48 @@ class DataTrainingArguments:
             "(not relevant for 'wordlevel')."
         },
     )
+    vocab_min_frequency: Optional[int] = field(
+        default=1,
+        metadata={
+            "help": "The minimum frequency a pair should have in order to be merged. "
+            "Only relevant for the 'bpe' and 'wordpiece' algorithms."
+        },
+    )
+    map_tokenizers: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether to train a new tokenizer and map the vocabulary into a pre-trained tokenizer."
+        },
+    )
 
     def __post_init__(self) -> None:
         if self.dataset_name is None and self.dataset_dir is None:
             raise ValueError(
-                "Need either a dataset name or a dataset directory with training (and validation) file(s)."
+                "Need either a dataset name or a dataset directory."
             )
         elif self.dataset_dir is not None:
             for file in Path(self.dataset_dir).glob("*"):
                 if (
                     file.suffix.lower() not in (".csv", ".json", ".txt")
-                    and file.name != ".DS_Store"
+                    and file.name != ".DS_Store"  # macOS specific
                 ):
                     raise ValueError(
                         f"Dataset directory {self.dataset_dir} contains file {file.name} "
                         f"with unsupported extension {file.suffix}"
                     )
+        if self.map_tokenizers:
+            if (
+                self.pre_tokenizer is None
+                or self.algorithm is None
+                or str(self.pre_tokenizer.upper()) != "CHAR"
+                or str(self.algorithm.upper()) != "BPE"
+            ):
+                warnings.warn(
+                    "Mapping tokenizers is currently only supported for character-level tokenization with BPE. "
+                    "The pre-tokenizer and algorithm will be set to 'char' and 'bpe' respectively."
+                )
+            self.pre_tokenizer = "CHAR"
+            self.algorithm = "BPE"
 
 
 @dataclass
@@ -410,7 +434,7 @@ def main() -> None:
     parser = HfArgumentParser(
         (
             ModelArguments,
-            DataTrainingArguments,
+            DataArguments,
             TrainingArguments,
             AdditionalArguments,
         ),
@@ -432,18 +456,18 @@ def main() -> None:
         ) = parser.parse_args_into_dataclasses()
 
     # Setup logging
-    # configure_logging()
-    logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        handlers=[logging.StreamHandler(sys.stdout)],
-    )
+    # logging.basicConfig(
+    #     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    #     datefmt="%m/%d/%Y %H:%M:%S",
+    #     handlers=[logging.StreamHandler(sys.stdout)],
+    # )
     log_level = (
         training_args.get_process_log_level()
     )  # This returns a log level depending on main process yes/no etc.
-    logger.setLevel(
-        log_level
-    )  # This conflicts with configure_logging() TODO need to think about this
+    # logger.setLevel(
+    #     log_level
+    # )  # This conflicts with configure_logging() TODO need to think about this
+    configure_logging(log_level)
     datasets.utils.logging.set_verbosity(log_level)
     evaluate.utils.logging.set_verbosity(log_level)
     transformers.utils.logging.set_verbosity(log_level)
@@ -528,25 +552,56 @@ def main() -> None:
     # Configure / Train tokenizer
     # -----------------------------------------------------------------------------
 
-    logger.info("Configuring tokenizer...")
+    logger.info("Configuring tokenizer(s)...")
     tokenizer_kwargs = {
         "cache_dir": model_args.cache_dir,
         "use_fast": True,
         "revision": model_args.model_revision,
         "use_auth_token": True if model_args.use_auth_token else None,
     }
-    if model_args.tokenizer_name:
-        logger.info(f"Loading tokenizer from {model_args.tokenizer_name}")
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_args.tokenizer_name, **tokenizer_kwargs
-        )
-    elif model_args.model_name_or_path:
-        logger.info(f"Loading tokenizer from {model_args.model_name_or_path}")
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_args.model_name_or_path, **tokenizer_kwargs
-        )
+
+    need_tokenizer_from_scratch: bool = True
+    if data_args.map_tokenizers:
+        logger.info("Loading pre-trained tokenizer...")
+        tokenizer_pretrained: PreTrainedTokenizerFast
+        if model_args.tokenizer_name:
+            logger.info(f"Loading tokenizer from {model_args.tokenizer_name}")
+            tokenizer_pretrained = AutoTokenizer.from_pretrained(
+                model_args.tokenizer_name, **tokenizer_kwargs
+            )
+        elif model_args.model_name_or_path:
+            logger.info(
+                f"Loading tokenizer from {model_args.model_name_or_path}"
+            )
+            tokenizer_pretrained = AutoTokenizer.from_pretrained(
+                model_args.model_name_or_path, **tokenizer_kwargs
+            )
+        else:
+            raise ValueError(
+                "Mapping tokenizers requires a pre-trained model or tokenizer"
+            )
+
     else:
-        logger.info("Building tokenizer...")
+        tokenizer: PreTrainedTokenizerFast
+        if model_args.tokenizer_name:
+            need_tokenizer_from_scratch = False
+            logger.info(f"Loading tokenizer from {model_args.tokenizer_name}")
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_args.tokenizer_name, **tokenizer_kwargs
+            )
+        elif model_args.model_name_or_path:
+            need_tokenizer_from_scratch = False
+            logger.info(
+                f"Loading tokenizer from {model_args.model_name_or_path}"
+            )
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_args.model_name_or_path, **tokenizer_kwargs
+            )
+        else:
+            pass
+
+    if need_tokenizer_from_scratch:
+        logger.info("Building & training tokenizer from scratch...")
         logger.debug(
             f"Pre-tokenizer: {data_args.pre_tokenizer}, "
             f"algorithm: {data_args.algorithm}, "
@@ -555,7 +610,7 @@ def main() -> None:
             f"max length: {config.n_positions}"
         )
         data_iterator = raw_datasets["train"][DATASET_COLUMN_NAME]
-        tokenizer = get_tokenizer(
+        tokenizer_from_scratch: PreTrainedTokenizerFast = get_tokenizer(
             pre_tokenizer=data_args.pre_tokenizer,
             algorithm=data_args.algorithm,
             train_source=data_iterator,
@@ -564,8 +619,97 @@ def main() -> None:
             model_max_length=config.n_positions,
         )
 
-    logger.info("Training tokenizer...")
+    if data_args.map_tokenizers:
+        # Get the token frequencies by tokenizing the training data
+        all_tokens: list[str] = []
+        for item in data_iterator:
+            tokens = tokenizer_from_scratch.tokenize(item)
+            all_tokens.extend(tokens)
+        token_counter = Counter(all_tokens)
+
+        # Add tokens that did not make into the token_counter, i.e. don't occur for whatever reason
+        counter_set = {t[0] for t in token_counter.most_common(None)}
+        vocab_set = set(tokenizer_from_scratch.get_vocab().keys())
+        delta_set = (
+            vocab_set
+            - counter_set
+            - set(tokenizer_from_scratch.all_special_tokens)
+        )
+        delta_counter = {k: 0 for k in delta_set}
+        token_counter.update(delta_counter)
+
+        # Make "room" for the tokens with zero frequency and the special tokens of the pre-trained tokenizer
+        end_idx = (
+            len(tokenizer_pretrained)
+            - len(tokenizer_pretrained.all_special_tokens)
+            - len(delta_counter)
+        )
+
+        # Add BOS and EOS frequencies
+        item_count = len(data_iterator)
+        token_counter.update(
+            {
+                tokenizer_from_scratch.bos_token: item_count,
+                tokenizer_from_scratch.eos_token: item_count,
+            }
+        )
+
+        # Map vocab from the new tokenizer to the pre-trained tokenizer
+        # Assuming byte-level encoding here
+        # Start at index 256, i.e. 0..255 used for byte-level encoding
+        vocab_modified = get_modified_vocab(
+            tokenizer_pretrained, token_counter, start_idx=256, end_idx=end_idx
+        )
+
+        # Build a new gpt2 tokenizer with the modified vocabulary
+        with tempfile.TemporaryDirectory(), tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json"
+        ) as f_vocab_modified, tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt"
+        ) as f_merge_modified:
+
+            # Write vocabulary file
+            json.dump(vocab_modified, f_vocab_modified, ensure_ascii=False)
+
+            # Create and write merges file
+            merges = get_merges(tokenizer_from_scratch)
+            f_merge_modified.writelines("\n".join(merges))
+            # f_merge_modified.write("#This is empty")
+
+            # Flush files before reading them; otherwise an error is raised
+            f_vocab_modified.flush()
+            f_merge_modified.flush()
+
+            # Load a new gpt2 tokenizer with those two files
+            tokenizer = GPT2TokenizerFast(
+                vocab_file=f_vocab_modified.name,
+                merges_file=f_merge_modified.name,
+                model_max_length=config.n_positions,
+                # padding_side="right",
+                # truncation_side="left",
+                pad_token=tokenizer_pretrained.eos_token,
+            )
+
+    else:
+        tokenizer = tokenizer_from_scratch
+
+    logger.info("Tokenizing datasets...")
     with training_args.main_process_first(desc="Tokenize dataset (map)"):
+
+        if data_args.map_tokenizers:
+            enclosed_datasets = raw_datasets.map(
+                partial(
+                    enclose_function,
+                    start_token=tokenizer_from_scratch.bos_token,
+                    end_token=tokenizer_from_scratch.eos_token,
+                ),
+                batched=True,
+                num_proc=4,
+                load_from_cache_file=True,
+                desc="Enclose datasets",
+            )
+            raw_datasets = enclosed_datasets
+
         tokenized_datasets: DatasetDict = raw_datasets.map(
             partial(tokenize_function, tokenizer=tokenizer),
             batched=True,

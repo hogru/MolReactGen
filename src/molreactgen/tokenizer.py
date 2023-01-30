@@ -460,7 +460,7 @@ def get_modified_vocab(
     return vocab_modified
 
 
-def get_merges(tokenizer: PreTrainedTokenizerFast) -> list[Optional[str]]:
+def get_merges(tokenizer: PreTrainedTokenizerFast) -> list[str]:
     # Save the tokenizer and read the merges from file
     with tempfile.TemporaryDirectory() as d_tokenizer:
         tokenizer.save_pretrained(d_tokenizer)
@@ -468,6 +468,6 @@ def get_merges(tokenizer: PreTrainedTokenizerFast) -> list[Optional[str]]:
         with open(tokenizer_file, "r") as f:
             items: dict[Any, Any] = json.load(f)
             model: dict[str, Any] = items.get("model", {})
-            merges: list[Optional[str]] = model.get("merges", [])
+            merges: list[str] = model.get("merges", [])
 
     return merges
