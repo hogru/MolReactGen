@@ -23,7 +23,7 @@ model_type: gpt2
 # see https://huggingface.co/docs/transformers/v4.24.0/en/model_doc/gpt2#transformers.GPT2Config
 # n_embd must be divisible by n_head
 config_overrides: "
-n_positions=1024,
+n_positions=896,
 n_embd=132,
 n_layer=12,
 n_head=12
@@ -31,7 +31,6 @@ n_head=12
 # activation_function=gelu_new,
 # reorder_and_upcast_attn=true
 # scale_attn_by_inverse_layer_idx=true
-
 
 use_auth_token: true
 

@@ -1,6 +1,9 @@
 /.idea/*
 /checkpoints/*
-/data/*
+/data/generated/*
+/data/prep/*
+/data/raw/*
+!/data/raw/debug
 /docs/*
 /logs/*
 /src/molreactgen/checkpoints/*
@@ -14,7 +17,6 @@
 .ipynb_checkpoints
 .mypy_cache
 .pytest_cache
-*.csv
 *.json
 *.numbers
 *.ignore
