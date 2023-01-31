@@ -1,13 +1,22 @@
 # coding=utf-8
 import argparse
+
+# import gzip
+# import shutil
 from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd  # type: ignore
+import pooch
+from loguru import logger
 from tdc.generation import MolGen  # type: ignore
 
-# This creates a huge list of mypy issues (without it, no issues)
-from molreactgen.molecule import remove_atom_mapping  # type: ignore
+from molreactgen.helpers import configure_logging, guess_project_root_dir
+from molreactgen.molecule import remove_atom_mapping
+
+PROJECT_ROOT_DIR: Path = guess_project_root_dir()
+RAW_DATA_DIR: Path = PROJECT_ROOT_DIR / "data" / "raw"
+PREP_DATA_DIR: Path = PROJECT_ROOT_DIR / "data" / "prep"
 
 VALID_DATASETS: tuple[str, ...] = (
     "all",
@@ -16,6 +25,63 @@ VALID_DATASETS: tuple[str, ...] = (
     "uspto50k",
     "zinc",
 )
+
+RAW_DIRS: dict[str, Path] = {
+    "debug": RAW_DATA_DIR / "debug",
+    "guacamol": RAW_DATA_DIR / "guacamol",
+    "uspto50k": RAW_DATA_DIR / "uspto50k",
+    "usptofull": RAW_DATA_DIR / "usptofull",
+    "zinc": RAW_DATA_DIR / "zinc",
+}
+
+PREP_DIRS: dict[str, Path] = {
+    "debug": PREP_DATA_DIR / "debug" / "csv",
+    "guacamol": PREP_DATA_DIR / "guacamol" / "csv",
+    "uspto50k": PREP_DATA_DIR / "uspto50k" / "csv",
+    "usptofull": PREP_DATA_DIR / "usptofull" / "csv",
+    "zinc": PREP_DATA_DIR / "zinc" / "csv",
+}
+
+# TODO Change debug github link once merged into main
+POOCHES: dict[str, pooch.Pooch] = {
+    "debug": pooch.create(
+        path=RAW_DIRS["debug"].as_posix(),
+        base_url="https://github.com/hogru/MolReactGen/tree/feature/download_data/data/raw/debug/",
+        registry={
+            "debug_train.csv": None,  # Downloads from github changes the hash code of the file
+            "debug_val.csv": None,
+            "debug_test.csv": None,
+            "debug_all.csv": None,
+        },
+    ),
+    "guacamol": pooch.create(
+        path=RAW_DIRS["guacamol"].as_posix(),
+        base_url="https://figshare.com/ndownloader/files/",
+        registry={
+            "13612760": "3c67ee945f351dbbdc02d9016da22efaffc32a39d882021b6f213d5cd60b6a80",
+            "13612766": "124c4e76062bebf3a9bba9812e76fea958a108f25e114a98ddf49c394c4773bf",
+            "13612757": "0b7e1e88e7bd07ee7fe5d2ef668e8904c763635c93654af094fa5446ff363015",
+            "13612745": "ef19489c265c8f5672c6dc8895de0ebe20eeeb086957bd49421afd7bdf429bef",
+        },
+    ),
+    "uspto50k": pooch.create(
+        path=RAW_DIRS["uspto50k"].as_posix(),
+        # base_url="https://github.com/ml-jku/mhn-react/blob/main/data/",
+        base_url="https://github.com/ml-jku/mhn-react/blob/de0fda32f76f866835aa65a6ff857964302b2178/data/",
+        registry={
+            "USPTO_50k_MHN_prepro.csv.gz": None,  # Downloads from github changes the hash code of the file
+        },
+    ),
+}
+
+
+FILE_NAME_TRANSLATIONS: dict[str, str] = {
+    "13612760": "guacamol_v1_train.csv",
+    "13612766": "guacamol_v1_valid.csv",
+    "13612757": "guacamol_v1_test.csv",
+    "13612745": "guacamol_v1_all.csv",
+    "USPTO_50k_MHN_prepro.csv.gz": "USPTO_50k_MHN_prepro.csv",
+}
 
 
 def _cleanse_and_copy_data(
@@ -30,77 +96,68 @@ def _cleanse_and_copy_data(
     df.to_csv(output_file_path, header=False, index=False)
 
 
-def _download_debug_dataset(raw_dir: Path, enforce_download: bool) -> bool:
-    print(
-        "Download not intended, skipping (just checking if files exist locally) ..."
-    )
-    files = (
-        "debug_all.csv",
-        "debug_train.csv",
-        "debug_val.csv",
-        "debug_test.csv",
-    )
-    for file in files:
-        if not (raw_dir / file).is_file():
-            raise FileNotFoundError(f"File {file} not found in {raw_dir}")
-    return False
+def _download_pooched_dataset(
+    dataset: str, raw_dir: Path, enforce_download: bool
+) -> None:
+    assert raw_dir.samefile(POOCHES[dataset].path)
+    if enforce_download:
+        for file in POOCHES[dataset].registry:
+            if (raw_dir / file).exists():
+                logger.info(f"Deleting file {file}...")
+                (raw_dir / file).unlink()
+
+    for file in POOCHES[dataset].registry:
+        file_name = Path(
+            POOCHES[dataset].fetch(
+                file, processor=pooch.Decompress(name="test.csv")
+            )
+        )
+        logger.info(f"Cacheing file {file_name.name}...")
+
+
+def _prepare_pooched_dataset(
+    dataset: str, raw_dir: Path, prep_dir: Path
+) -> None:
+    assert raw_dir.samefile(POOCHES[dataset].path)
+    prep_dir.mkdir(parents=True, exist_ok=True)
+    for file in POOCHES[dataset].registry:
+        file_renamed = FILE_NAME_TRANSLATIONS.get(file, file)
+        _cleanse_and_copy_data(raw_dir / file, prep_dir / file_renamed)
+
+
+def _download_debug_dataset(raw_dir: Path, enforce_download: bool) -> None:
+    _download_pooched_dataset("debug", raw_dir, enforce_download)
 
 
 def _prepare_debug_dataset(raw_dir: Path, prep_dir: Path) -> None:
-    files = (
-        "debug_all.csv",
-        "debug_train.csv",
-        "debug_val.csv",
-        "debug_test.csv",
-    )
-    prep_dir.mkdir(parents=True, exist_ok=True)
-    for file in files:
-        # copy2(raw_dir / file, prep_dir / file)
-        _cleanse_and_copy_data(raw_dir / file, prep_dir / file)
+    _prepare_pooched_dataset("debug", raw_dir, prep_dir)
 
 
-def _download_guacamol_dataset(raw_dir: Path, enforce_download: bool) -> bool:
-    # TODO implement download from source (wget)
-    print("Download not yet implemented, checking if files exist locally ...")
-    files = (
-        "guacamol_v1_all.smiles",
-        "guacamol_v1_train.smiles",
-        "guacamol_v1_valid.smiles",
-        "guacamol_v1_test.smiles",
-    )
-    for file in files:
-        if not (raw_dir / file).is_file():
-            raise FileNotFoundError(f"File {file} not found in {raw_dir}")
-    return False
+def _download_guacamol_dataset(raw_dir: Path, enforce_download: bool) -> None:
+    _download_pooched_dataset("guacamol", raw_dir, enforce_download)
 
 
 def _prepare_guacamol_dataset(raw_dir: Path, prep_dir: Path) -> None:
-    files = (
-        "guacamol_v1_all.smiles",
-        "guacamol_v1_train.smiles",
-        "guacamol_v1_valid.smiles",
-        "guacamol_v1_test.smiles",
-    )
-    prep_dir.mkdir(parents=True, exist_ok=True)
-    for file in files:
-        raw_file = raw_dir / file
-        prep_file = (prep_dir / raw_file.name).with_suffix(".csv")
-        # copy2(raw_file, prep_file)
-        _cleanse_and_copy_data(raw_file, prep_file)
+    _prepare_pooched_dataset("guacamol", raw_dir, prep_dir)
 
 
-def _download_uspto_50k_dataset(raw_dir: Path, enforce_download: bool) -> bool:
-    # TODO implement download from source (wget)
-    # raw_url = "https://github.com/ml-jku/mhn-react/blob/main/data/USPTO_50k_MHN_prepro.csv.gz"
-    print("Download not yet implemented, checking if file exist locally ...")
-    file = "USPTO_50k_MHN_prepro.csv"
-    if not (raw_dir / file).is_file():
-        raise FileNotFoundError(f"File {file} not found in {raw_dir}")
-    return False
+def _download_uspto_50k_dataset(raw_dir: Path, enforce_download: bool) -> None:
+    # TODO Implement download of USPTO50k dataset
+    # Once this issue is fixed: https://github.com/fatiando/pooch/issues/338
+    return
+    _download_pooched_dataset("uspto50k", raw_dir, enforce_download)
 
 
 def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
-    # raw_url = "https://github.com/ml-jku/mhn-react/blob/main/data/USPTO_50k_MHN_prepro.csv.gz"
+    # assert raw_dir.samefile(POOCHES["uspto50k"].path)
+    # prep_dir.mkdir(parents=True, exist_ok=True)
+    # for file in POOCHES["uspto50k"].registry:
+    #     file_renamed = FILE_NAME_TRANSLATIONS.get(file, file)
+    #     print(raw_dir / file)
+    #     with gzip.open(raw_dir / file, "rb") as f_in:
+    #         with open(raw_dir / file_renamed, "wb") as f_out:
+    #             print("do I get here?")
+    #             shutil.copyfileobj(f_in, f_out)
 
     # Setup file, column, split names
     raw_file = raw_dir / "USPTO_50k_MHN_prepro.csv"
@@ -178,24 +235,23 @@ def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
         ), "Train set includes reactions from validation and/or test set!"
 
 
-def _download_zinc_dataset(raw_dir: Path, enforce_download: bool) -> bool:
+def _download_zinc_dataset(raw_dir: Path, enforce_download: bool) -> None:
     file = "zinc.tab"
     raw_dir.mkdir(parents=True, exist_ok=True)
     if enforce_download:
-        print(f"Enforcing download, deleting file {file} ...")
-        (raw_dir / file).unlink()
+        if (raw_dir / file).exists():
+            logger.info(f"Deleting file {file}...")
+            (raw_dir / file).unlink()
 
     if (raw_dir / file).is_file():
-        print(f"File {file} already exists in {raw_dir}")
-        return False
+        logger.info(f"File {file} already exists, skipping download...")
     else:
-        print(f"Downloading file {file} to {raw_dir} ...")
+        logger.info(f"Cacheing file {file} to {raw_dir}...")
         _ = MolGen(
             name="ZINC",
             path=raw_dir,
             print_stats=False,
         )
-        return True
 
 
 def _prepare_zinc_dataset(raw_dir: Path, prep_dir: Path) -> None:
@@ -203,47 +259,55 @@ def _prepare_zinc_dataset(raw_dir: Path, prep_dir: Path) -> None:
     prep_dir.mkdir(parents=True, exist_ok=True)
     raw_file = raw_dir / file
     prep_file = (prep_dir / raw_file.name).with_suffix(".csv")
-    # copy2(raw_file, prep_file)
     _cleanse_and_copy_data(raw_file, prep_file)
+
+
+DOWNLOAD_FNS: dict[str, Callable[[Path, bool], bool]] = {
+    "debug": _download_debug_dataset,
+    "guacamol": _download_guacamol_dataset,
+    "uspto50k": _download_uspto_50k_dataset,
+    "zinc": _download_zinc_dataset,
+}
 
 
 def download_dataset(
     dataset: str, raw_dir: Path, enforce_download: bool = False
 ) -> bool:
-    download_fns: dict[str, Callable[[Path, bool], bool]] = {
-        "debug": _download_debug_dataset,
-        "guacamol": _download_guacamol_dataset,
-        "uspto50k": _download_uspto_50k_dataset,
-        "zinc": _download_zinc_dataset,
-    }
-
-    download_fn = download_fns.get(dataset, None)
+    download_fn = DOWNLOAD_FNS.get(dataset, None)
     if download_fn is None:
         raise ValueError(f"Invalid dataset: {dataset}")
     else:
-        print(f"Downloading dataset {dataset} to {raw_dir} ...")
+        enforce_str = (
+            " (force deleting cached files)" if enforce_download else ""
+        )
+        logger.info(
+            f"Downloading dataset {dataset} to {raw_dir}{enforce_str}..."
+        )
         return download_fn(raw_dir, enforce_download)
 
 
-def prepare_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> None:
-    prepare_fns: dict[str, Callable[[Path, Path], None]] = {
-        "debug": _prepare_debug_dataset,
-        "guacamol": _prepare_guacamol_dataset,
-        "uspto50k": _prepare_uspto_50k_dataset,
-        "zinc": _prepare_zinc_dataset,
-    }
+PREPARE_FNS: dict[str, Callable[[Path, Path], None]] = {
+    "debug": _prepare_debug_dataset,
+    "guacamol": _prepare_guacamol_dataset,
+    "uspto50k": _prepare_uspto_50k_dataset,
+    "zinc": _prepare_zinc_dataset,
+}
 
-    prepare_fn = prepare_fns.get(dataset, None)
+
+def prepare_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> None:
+    prepare_fn = PREPARE_FNS.get(dataset, None)
     if prepare_fn is None:
         raise ValueError(f"Invalid dataset: {dataset}")
     else:
-        print(f"Preparing dataset {dataset} into {prep_dir} ...")
+        logger.info(
+            f"Preparing dataset {dataset} from {raw_dir} into {prep_dir}..."
+        )
         return prepare_fn(raw_dir, prep_dir)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Prepare data for training of the huggingface model"
+        description="Prepare data for training of the Hugging Face model."
     )
     parser.add_argument(
         "dataset",
@@ -251,40 +315,44 @@ def main() -> None:
         nargs="?",
         default="all",
         choices=VALID_DATASETS,
-        help="the dataset to prepare, default: '%(default)s' for all datasets",
+        help="the dataset to prepare, default: '%(default)s' for all datasets.",
     )
     parser.add_argument(
         "-d",
         "--data_dir",
         type=Path,
-        default="../../data",
-        help="root of the data directory, default: '%(default)s'",
+        default=f"{PREP_DATA_DIR}",
+        help="root of the data directory, default: '%(default)s'.",
     )
     parser.add_argument(
         "-e",
         "--enforce_download",
         default=False,
         action="store_true",
-        help="enforce downloading the dataset(s), default: '%(default)s'",
+        help="enforce downloading the dataset(s), default: '%(default)s'.",
     )
     # parser.add_argument('-p', '--preprocess', default=True, action='store_true', help="preprocess the dataset(s)")
 
     args = parser.parse_args()
+
+    configure_logging()
 
     if "all" in args.dataset:
         datasets = sorted(set(VALID_DATASETS) - {"all"})
     else:
         datasets = [args.dataset]
 
-    data_dir = args.data_dir.resolve()
+    # TODO what if data_dir is set?
+    # data_dir = args.data_dir.resolve()
 
     for dataset in datasets:
-        raw_dir = data_dir / "raw" / dataset
+        logger.heading(f"Preparing dataset {dataset}...")
+        raw_dir = RAW_DIRS[dataset]
         download_dataset(dataset, raw_dir, args.enforce_download)
-        prep_dir = data_dir / "prep" / dataset / "csv"
+        prep_dir = PREP_DIRS[dataset]
         prepare_dataset(dataset, raw_dir, prep_dir)
 
-    print("Done!")
+    logger.info("Done!")
 
 
 if __name__ == "__main__":

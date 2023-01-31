@@ -227,7 +227,10 @@ def configure_logging(
     # To be changed with python version ≥ 3.11: A list of FrameInfo objects is returned.
     caller_file_path = Path(inspect.stack()[1].filename).resolve()
     if log_dir is None:
-        log_dir = Path(caller_file_path.parent) / "logs"
+        # log_dir = Path(caller_file_path.parent) / "logs"
+        log_dir = (
+            guess_project_root_dir(caller_file_path=caller_file_path) / "logs"
+        )
     else:
         log_dir = Path(log_dir).resolve()
     Path(log_dir).mkdir(parents=True, exist_ok=True)
@@ -245,8 +248,8 @@ def configure_logging(
 
     # Allow for logging of headers, add log level
     try:
-        logger.level("heading", no=21, color="<red><BLACK><bold>")
-        logger.__class__.heading = partialmethod(logger.__class__.log, "heading")  # type: ignore
+        logger.level("HEADING", no=21, color="<red><BLACK><bold>")
+        logger.__class__.heading = partialmethod(logger.__class__.log, "HEADING")  # type: ignore
     except TypeError:  # log level already exists
         pass
 
@@ -272,7 +275,9 @@ def configure_logging(
     # Intercept logging messages from other libraries
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
-    logger.info(f"Logging to file '{log_file}'")
+    logger.info(
+        f"Logging to file {log_file} with rotation {rotation} and retention {retention}"
+    )
     logger.debug("Logging configured")
 
 
@@ -282,10 +287,16 @@ def configure_logging(
 
 
 def guess_project_root_dir(
+    caller_file_path: Optional[PathLike] = None,
     signs_for_root_dir: Iterable[str] = SIGNS_FOR_ROOT_DIR,
 ) -> Path:
     """Guess the root directory of the project."""
-    directory = caller_file_path = Path(inspect.stack()[1].filename).resolve()
+    caller_file_path = (
+        Path(inspect.stack()[1].filename).resolve()
+        if caller_file_path is None
+        else Path(caller_file_path).resolve()
+    )
+    directory = caller_file_path
     while (directory != directory.parent) and (directory := directory.parent):
         if any(
             directory.joinpath(sign).exists() for sign in signs_for_root_dir
@@ -295,9 +306,16 @@ def guess_project_root_dir(
     return caller_file_path.parent
 
 
-def get_hash_code(file_path: Union[str, Path]) -> int:
+def get_hash_code(
+    file_path: Union[str, Path], algorithm: str = "sha256"
+) -> int:
     file_path = Path(file_path).resolve()
-    hash_fn = hashlib.md5()
+    if algorithm.upper() == "MD5":
+        hash_fn = hashlib.md5()
+    elif algorithm.upper() == "SHA256":
+        hash_fn = hashlib.sha256()
+    else:
+        raise ValueError(f"Unsupported hash algorithm '{algorithm}'")
 
     file_list: Union[list[Path], Generator[Path, None, None]]
     if file_path.is_file():
