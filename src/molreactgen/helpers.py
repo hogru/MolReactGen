@@ -23,6 +23,9 @@ from loguru import logger
 
 from molreactgen.config import PathLike
 
+SIGNS_FOR_ROOT_DIR = (".git", "pyproject.toml", "setup.py", "setup.cfg")
+
+
 ###############################################################################
 # Counter, used during generation                                             #
 ###############################################################################
@@ -274,8 +277,22 @@ def configure_logging(
 
 
 ###############################################################################
-# Miscellaneous                                                               #
+# File related                                                                #
 ###############################################################################
+
+
+def guess_project_root_dir(
+    signs_for_root_dir: Iterable[str] = SIGNS_FOR_ROOT_DIR,
+) -> Path:
+    """Guess the root directory of the project."""
+    directory = caller_file_path = Path(inspect.stack()[1].filename).resolve()
+    while (directory != directory.parent) and (directory := directory.parent):
+        if any(
+            directory.joinpath(sign).exists() for sign in signs_for_root_dir
+        ):
+            return directory
+
+    return caller_file_path.parent
 
 
 def get_hash_code(file_path: Union[str, Path]) -> int:
@@ -330,6 +347,11 @@ def create_file_link(
 #         return Path(link_file_path.readlink())
 #     else:
 #         return Path(link_file_path)
+
+
+###############################################################################
+# Miscellaneous                                                               #
+###############################################################################
 
 
 def get_num_workers(spare_cpus: int = 1) -> int:
