@@ -17,6 +17,7 @@ from molreactgen.molecule import remove_atom_mapping
 PROJECT_ROOT_DIR: Path = guess_project_root_dir()
 RAW_DATA_DIR: Path = PROJECT_ROOT_DIR / "data" / "raw"
 PREP_DATA_DIR: Path = PROJECT_ROOT_DIR / "data" / "prep"
+GZIP_FILE_EXTENSIONS = (".xz", ".gz", ".bz2")
 
 VALID_DATASETS: tuple[str, ...] = (
     "all",
@@ -67,9 +68,9 @@ POOCHES: dict[str, pooch.Pooch] = {
     "uspto50k": pooch.create(
         path=RAW_DIRS["uspto50k"].as_posix(),
         # base_url="https://github.com/ml-jku/mhn-react/blob/main/data/",
-        base_url="https://github.com/ml-jku/mhn-react/blob/de0fda32f76f866835aa65a6ff857964302b2178/data/",
+        base_url="https://github.com/ml-jku/mhn-react/raw/de0fda32f76f866835aa65a6ff857964302b2178/data/",
         registry={
-            "USPTO_50k_MHN_prepro.csv.gz": None,  # Downloads from github changes the hash code of the file
+            "USPTO_50k_MHN_prepro.csv.gz": "be7a15e61a8c22cd2bf48be8ce710bbe98843a60a8cf7b3d2d1b667768253c23",
         },
     ),
 }
@@ -80,7 +81,8 @@ FILE_NAME_TRANSLATIONS: dict[str, str] = {
     "13612766": "guacamol_v1_valid.csv",
     "13612757": "guacamol_v1_test.csv",
     "13612745": "guacamol_v1_all.csv",
-    "USPTO_50k_MHN_prepro.csv.gz": "USPTO_50k_MHN_prepro.csv",
+    # "USPTO_50k_MHN_prepro.csv.gz": "USPTO_50k_MHN_prepro.csv",
+    "USPTO_50k_MHN_prepro.csv.gz.decomp": "USPTO_50k_MHN_prepro.csv",
 }
 
 
@@ -106,10 +108,15 @@ def _download_pooched_dataset(
                 logger.info(f"Deleting file {file}...")
                 (raw_dir / file).unlink()
 
+    processor: pooch.processors
     for file in POOCHES[dataset].registry:
+        processor = (
+            pooch.Decompress() if file.endswith(GZIP_FILE_EXTENSIONS) else None
+        )
         file_name = Path(
             POOCHES[dataset].fetch(
-                file, processor=pooch.Decompress(name="test.csv")
+                file,
+                processor=processor,
             )
         )
         logger.info(f"Cacheing file {file_name.name}...")
@@ -142,9 +149,6 @@ def _prepare_guacamol_dataset(raw_dir: Path, prep_dir: Path) -> None:
 
 
 def _download_uspto_50k_dataset(raw_dir: Path, enforce_download: bool) -> None:
-    # TODO Implement download of USPTO50k dataset
-    # Once this issue is fixed: https://github.com/fatiando/pooch/issues/338
-    return
     _download_pooched_dataset("uspto50k", raw_dir, enforce_download)
 
 
@@ -160,7 +164,7 @@ def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
     #             shutil.copyfileobj(f_in, f_out)
 
     # Setup file, column, split names
-    raw_file = raw_dir / "USPTO_50k_MHN_prepro.csv"
+    raw_file = raw_dir / "USPTO_50k_MHN_prepro.csv.gz.decomp"
     files: dict[str, str] = {
         "known": "USPTO_50k_known.csv",  # "known" means in either in validation or test set (but not train set)
         "train": "USPTO_50k_train.csv",
@@ -262,7 +266,7 @@ def _prepare_zinc_dataset(raw_dir: Path, prep_dir: Path) -> None:
     _cleanse_and_copy_data(raw_file, prep_file)
 
 
-DOWNLOAD_FNS: dict[str, Callable[[Path, bool], bool]] = {
+DOWNLOAD_FNS: dict[str, Callable[[Path, bool], None]] = {
     "debug": _download_debug_dataset,
     "guacamol": _download_guacamol_dataset,
     "uspto50k": _download_uspto_50k_dataset,
@@ -272,7 +276,7 @@ DOWNLOAD_FNS: dict[str, Callable[[Path, bool], bool]] = {
 
 def download_dataset(
     dataset: str, raw_dir: Path, enforce_download: bool = False
-) -> bool:
+) -> None:
     download_fn = DOWNLOAD_FNS.get(dataset, None)
     if download_fn is None:
         raise ValueError(f"Invalid dataset: {dataset}")
