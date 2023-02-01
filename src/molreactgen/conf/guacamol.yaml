@@ -59,7 +59,7 @@ logging_steps: 100
 save_strategy: epoch
 save_total_limit: 5
 seed: 42
-fp16: false  # TODO might change to true
+fp16: false  # might change to true, gpu only
 dataloader_num_workers: 4
 # past_index: 2  # might use for TransformerXL or XLNet
 run_name: MolGen  # TODO might determine during runtime

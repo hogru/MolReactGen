@@ -54,7 +54,6 @@ PREP_DIRS: dict[str, Path] = {
     "zinc": PREP_DATA_DIR / "zinc" / "csv",
 }
 
-# TODO Change debug github link once merged into main
 POOCHES: dict[str, pooch.Pooch] = {
     "debug": pooch.create(
         path=RAW_DIRS["debug"].as_posix(),

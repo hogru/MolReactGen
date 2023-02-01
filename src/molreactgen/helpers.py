@@ -365,20 +365,20 @@ def get_hash_code(
     return int(hash_fn.hexdigest(), 16)
 
 
-# TODO is that used anywhere?
-def create_file_link(
-    link_file_path: PathLike, target_file_path: PathLike, hardlink: bool = False
-) -> bool:
-    link_file_path = Path(link_file_path)
-    target_file_path = Path(target_file_path).resolve()
-    link_file_path.unlink(missing_ok=True)
-    if hardlink:
-        # deprecated in 3.10, use link_file_path.hardlink_to(target_file_path) instead
-        target_file_path.link_to(link_file_path)
-    else:  # symlink
-        link_file_path.symlink_to(target_file_path)
-
-    return True
+# Not used anymore
+# def create_file_link(
+#     link_file_path: PathLike, target_file_path: PathLike, hardlink: bool = False
+# ) -> bool:
+#     link_file_path = Path(link_file_path)
+#     target_file_path = Path(target_file_path).resolve()
+#     link_file_path.unlink(missing_ok=True)
+#     if hardlink:
+#         # deprecated in 3.10, use link_file_path.hardlink_to(target_file_path) instead
+#         target_file_path.link_to(link_file_path)
+#     else:  # symlink
+#         link_file_path.symlink_to(target_file_path)
+#
+#     return True
 
 
 # Just replace with .resolve()?!
@@ -431,15 +431,14 @@ def get_device_type() -> str:
     return device_type
 
 
-# TODO Refactor and test
-"""
-def try_gpu(i=0):
-    if torch.cuda.device_count() >= i + 1:
-        return torch.device(f'cuda:{i}')
-    return torch.device('cpu')
-
-
-def try_all_gpus():
-    devices = [torch.device(f'cuda:{i}') for i in range(torch.cuda.device_count())]
-    return devices if devices else [torch.device('cpu')]
-"""
+# Not used anymore
+# def try_gpu(i=0):
+#     if torch.cuda.device_count() >= i + 1:
+#         return torch.device(f'cuda:{i}')
+#     return torch.device('cpu')
+#
+#
+# def try_all_gpus():
+#     devices = [torch.device(f'cuda:{i}') for i in range(torch.cuda.device_count())]
+#     return devices if devices else [torch.device('cpu')]
+#

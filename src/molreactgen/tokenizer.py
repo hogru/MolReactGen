@@ -260,7 +260,7 @@ def get_tokenizer(
     #         vocab_size=vocab_size,
     #         min_frequency=min_frequency,
     #         show_progress=True,
-    #         # limit_alphabet=1000,  # TODO R&D, make configurable, default=1000
+    #         # limit_alphabet=1000,  # might make configurable, default=1000
     #         special_tokens=special_tokens,
     #     )
     #
@@ -273,7 +273,6 @@ def get_tokenizer(
     #         )
     #     tokenizer = SentencePieceUnigramTokenizer(add_prefix_space=False)
     #     # SentencePieceUnigramTokenizers sets the normalizer to [Nmt, NFKC, Replace(Regex(" {2,}"), " ")] by default
-    #     # TODO R&D what this does
     #     # tokenizer.normalizer = None
     #     # tokenizer.pre_tokenizer = Split(
     #     #     pattern=regex_pattern, behavior="isolated", invert=False
