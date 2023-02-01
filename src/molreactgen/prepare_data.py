@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd  # type: ignore
-import pooch
+import pooch  # type: ignore
 from loguru import logger
 from tdc.generation import MolGen  # type: ignore
 
@@ -415,7 +415,7 @@ def main() -> None:
     # data_dir = args.data_dir.resolve()
 
     for dataset in datasets:
-        logger.heading(f"Preparing dataset {dataset}...")
+        logger.heading(f"Preparing dataset {dataset}...")  # type: ignore
         raw_dir = RAW_DIRS[dataset]
         download_dataset(dataset, raw_dir, args.enforce_download)
         prep_dir = PREP_DIRS[dataset]
