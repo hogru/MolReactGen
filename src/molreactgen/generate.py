@@ -44,6 +44,7 @@ VALID_GENERATION_MODES = [
     "smiles",
     "smarts",
 ]  # TODO Type hinting with Literal?!
+# TODO replace fixed path with guess_project_root_dir()
 DEFAULT_OUTPUT_FILE_PATH = (
     f"../../data/generated/{datetime.now():%Y-%m-%d_%H-%M}_generated.csv"
 )

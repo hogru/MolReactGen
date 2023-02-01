@@ -49,7 +49,7 @@ POOCHES: dict[str, pooch.Pooch] = {
         path=RAW_DIRS["debug"].as_posix(),
         base_url="https://github.com/hogru/MolReactGen/tree/feature/download_data/data/raw/debug/",
         registry={
-            "debug_train.csv": None,  # Downloads from github changes the hash code of the file
+            "debug_train.csv": None,  # We can change the debug data as we like, so no hash code
             "debug_val.csv": None,
             "debug_test.csv": None,
             "debug_all.csv": None,
