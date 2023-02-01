@@ -1,4 +1,5 @@
 /.idea/*
+/_archive/*
 /checkpoints/*
 /data/generated/*
 /data/prep/*
