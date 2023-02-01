@@ -23,6 +23,14 @@ from loguru import logger
 
 from molreactgen.config import PathLike
 
+LOG_LEVELS = (
+    logging.DEBUG,
+    logging.INFO,
+    logging.WARNING,
+    logging.ERROR,
+    logging.CRITICAL,
+)
+DEFAULT_LOG_LEVEL = logging.INFO
 SIGNS_FOR_ROOT_DIR = (".git", "pyproject.toml", "setup.py", "setup.cfg")
 
 
@@ -158,6 +166,21 @@ class Counter:
 ###############################################################################
 
 
+def determine_log_level(
+    adjustments: Iterable[int] = (),
+    default_log_level: int = DEFAULT_LOG_LEVEL,
+    log_levels: Iterable[int] = LOG_LEVELS,
+) -> int:
+    log_levels = sorted(list(log_levels))
+    log_level_idx: int = log_levels.index(default_log_level)
+    # For each "-q" and "-v" flag, adjust the logging verbosity accordingly
+    # making sure to clamp off the value from 0 to 4, inclusive of both
+    for adj in adjustments:
+        log_level_idx = min(len(log_levels) - 1, max(log_level_idx + adj, 0))
+
+    return log_levels[log_level_idx]
+
+
 # Code taken from https://github.com/Delgan/loguru#entirely-compatible-with-standard-logging
 # Type annotations are my own
 class InterceptHandler(logging.Handler):
@@ -187,7 +210,7 @@ def show_warning(message: str, *_: Any, **__: Any) -> None:
 
 
 def configure_logging(
-    log_level: int = 20,
+    log_level: int = logging.INFO,
     *,
     console_format: Optional[str] = None,
     file_format: Optional[str] = None,
@@ -276,7 +299,7 @@ def configure_logging(
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
     logger.info(
-        f"Logging to file {log_file} with rotation {rotation} and retention {retention}"
+        f"Logging with log level {log_level} to file {log_file} with rotation {rotation} and retention {retention}"
     )
     logger.debug("Logging configured")
 

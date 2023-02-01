@@ -1,8 +1,5 @@
 # coding=utf-8
 import argparse
-
-# import gzip
-# import shutil
 from collections.abc import Callable
 from pathlib import Path
 
@@ -11,8 +8,22 @@ import pooch
 from loguru import logger
 from tdc.generation import MolGen  # type: ignore
 
-from molreactgen.helpers import configure_logging, guess_project_root_dir
-from molreactgen.molecule import remove_atom_mapping
+from molreactgen.helpers import (
+    configure_logging,
+    determine_log_level,
+    guess_project_root_dir,
+)
+
+# Determining if tqdm is installed and if so, use it for the download progressbar
+# Might experiment with a custom progressbar later
+# Sample code: https://www.fatiando.org/pooch/latest/progressbars.html#custom-progressbar
+progressbar: bool
+try:
+    from tqdm import tqdm  # noqa: F401 # type: ignore
+
+    progressbar = True
+except ImportError:
+    progressbar = False
 
 PROJECT_ROOT_DIR: Path = guess_project_root_dir()
 RAW_DATA_DIR: Path = PROJECT_ROOT_DIR / "data" / "raw"
@@ -47,7 +58,8 @@ PREP_DIRS: dict[str, Path] = {
 POOCHES: dict[str, pooch.Pooch] = {
     "debug": pooch.create(
         path=RAW_DIRS["debug"].as_posix(),
-        base_url="https://github.com/hogru/MolReactGen/tree/feature/download_data/data/raw/debug/",
+        # base_url="https://github.com/hogru/MolReactGen/tree/feature/download_data/data/raw/debug/",
+        base_url="https://github.com/hogru/MolReactGen/raw/313d5981eb2a339d5baae42917ab55ba03082b7d/data/raw/debug/",
         registry={
             "debug_train.csv": None,  # We can change the debug data as we like, so no hash code
             "debug_val.csv": None,
@@ -57,12 +69,17 @@ POOCHES: dict[str, pooch.Pooch] = {
     ),
     "guacamol": pooch.create(
         path=RAW_DIRS["guacamol"].as_posix(),
-        base_url="https://figshare.com/ndownloader/files/",
+        # base_url="https://figshare.com/ndownloader/files/",
+        base_url="doi:10.6084/",
         registry={
-            "13612760": "3c67ee945f351dbbdc02d9016da22efaffc32a39d882021b6f213d5cd60b6a80",
-            "13612766": "124c4e76062bebf3a9bba9812e76fea958a108f25e114a98ddf49c394c4773bf",
-            "13612757": "0b7e1e88e7bd07ee7fe5d2ef668e8904c763635c93654af094fa5446ff363015",
-            "13612745": "ef19489c265c8f5672c6dc8895de0ebe20eeeb086957bd49421afd7bdf429bef",
+            # "13612760": "3c67ee945f351dbbdc02d9016da22efaffc32a39d882021b6f213d5cd60b6a80",
+            # "13612766": "124c4e76062bebf3a9bba9812e76fea958a108f25e114a98ddf49c394c4773bf",
+            # "13612757": "0b7e1e88e7bd07ee7fe5d2ef668e8904c763635c93654af094fa5446ff363015",
+            # "13612745": "ef19489c265c8f5672c6dc8895de0ebe20eeeb086957bd49421afd7bdf429bef",
+            "m9.figshare.7322228.v2/guacamol_v1_train.smiles": "3c67ee945f351dbbdc02d9016da22efaffc32a39d882021b6f213d5cd60b6a80",
+            "m9.figshare.7322243.v3/guacamol_v1_valid.smiles": "124c4e76062bebf3a9bba9812e76fea958a108f25e114a98ddf49c394c4773bf",
+            "m9.figshare.7322246.v2/guacamol_v1_test.smiles": "0b7e1e88e7bd07ee7fe5d2ef668e8904c763635c93654af094fa5446ff363015",
+            "m9.figshare.7322252.v2/guacamol_v1_all.smiles": "ef19489c265c8f5672c6dc8895de0ebe20eeeb086957bd49421afd7bdf429bef",
         },
     ),
     "uspto50k": pooch.create(
@@ -77,13 +94,33 @@ POOCHES: dict[str, pooch.Pooch] = {
 
 
 FILE_NAME_TRANSLATIONS: dict[str, str] = {
-    "13612760": "guacamol_v1_train.csv",
-    "13612766": "guacamol_v1_valid.csv",
-    "13612757": "guacamol_v1_test.csv",
-    "13612745": "guacamol_v1_all.csv",
+    # "13612760": "guacamol_v1_train.csv",
+    # "13612766": "guacamol_v1_valid.csv",
+    # "13612757": "guacamol_v1_test.csv",
+    # "13612745": "guacamol_v1_all.csv",
+    "m9.figshare.7322228.v2/guacamol_v1_train.smiles": "guacamol_v1_train.csv",
+    "m9.figshare.7322243.v3/guacamol_v1_valid.smiles": "guacamol_v1_valid.csv",
+    "m9.figshare.7322246.v2/guacamol_v1_test.smiles": "guacamol_v1_test.csv",
+    "m9.figshare.7322252.v2/guacamol_v1_all.smiles": "guacamol_v1_all.csv",
     # "USPTO_50k_MHN_prepro.csv.gz": "USPTO_50k_MHN_prepro.csv",
     "USPTO_50k_MHN_prepro.csv.gz.decomp": "USPTO_50k_MHN_prepro.csv",
 }
+
+"""
+def flatten_dir(file_name: str, action: str, pup: pooch.Pooch) -> str:
+    file_path = Path(file_name)
+    action = str(action).lower()
+
+    cache_dir = Path(pup.path)
+    download_dir = file_path.parent
+    if cache_dir != download_dir:
+        # Move file to cache dir
+        shutil.move(file_path, cache_dir)
+        file_path = cache_dir / file_path.name
+        download_dir.rmdir()
+
+    return file_path.as_posix()
+"""
 
 
 def _cleanse_and_copy_data(
@@ -117,9 +154,10 @@ def _download_pooched_dataset(
             POOCHES[dataset].fetch(
                 file,
                 processor=processor,
+                progressbar=progressbar,
             )
         )
-        logger.info(f"Cacheing file {file_name.name}...")
+        logger.info(f"Loaded file {file_name.name}")
 
 
 def _prepare_pooched_dataset(
@@ -128,6 +166,7 @@ def _prepare_pooched_dataset(
     assert raw_dir.samefile(POOCHES[dataset].path)
     prep_dir.mkdir(parents=True, exist_ok=True)
     for file in POOCHES[dataset].registry:
+        # sub_dir = Path(file).parent
         file_renamed = FILE_NAME_TRANSLATIONS.get(file, file)
         _cleanse_and_copy_data(raw_dir / file, prep_dir / file_renamed)
 
@@ -165,6 +204,10 @@ def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
 
     # Setup file, column, split names
     raw_file = raw_dir / "USPTO_50k_MHN_prepro.csv.gz.decomp"
+    if not Path(raw_file).is_file():
+        raise FileNotFoundError(
+            f"File {raw_file} not found. The raw file name seems to have changed."
+        )
     files: dict[str, str] = {
         "known": "USPTO_50k_known.csv",  # "known" means in either in validation or test set (but not train set)
         "train": "USPTO_50k_train.csv",
@@ -172,11 +215,14 @@ def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
         "test": "USPTO_50k_test.csv",
     }
     splits: tuple[str, ...] = ("train", "valid", "test")
-    dirs = ["with_mapping", "without_mapping"]
-    columns: list[str] = [
-        "reaction_smarts_with_atom_mapping",
-        "reaction_smarts_without_atom_mapping",
-    ]
+    # Historically there were two different reaction template sets, one with atom mapping and one without
+    # We will use the one with atom mapping, but keep the code for the other one for reference / just in case
+    # dirs = ["with_mapping", "without_mapping"]
+    # columns: list[str] = [
+    # "reaction_smarts_with_atom_mapping",
+    # "reaction_smarts_without_atom_mapping",
+    # ]
+    column: str = "reaction_smarts_with_atom_mapping"
 
     # Read raw data, rename/append columns
     df: dict[str, pd.DataFrame] = dict()
@@ -186,54 +232,59 @@ def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
         columns={
             "id": "USPTO-50k_id",
             "prod_smiles": "product_smiles",
-            "reaction_smarts": "reaction_smarts_with_atom_mapping",
+            "reaction_smarts": column,
         },
         inplace=True,
     )
-    df["all"]["reaction_smarts_without_atom_mapping"] = remove_atom_mapping(
-        df["all"]["reaction_smarts_with_atom_mapping"]
-    )
+    # df["all"]["reaction_smarts_without_atom_mapping"] = remove_atom_mapping(
+    #     df["all"]["reaction_smarts_with_atom_mapping"]
+    # )
 
     # Prepare "known" reactions from validation and test set (can include duplicates)
     df["known"] = df["all"][df["all"]["split"].isin(["valid", "test"])].copy()
 
     # Prepare train, validation, and test set and save in corresponding files
-    for sub_dir, column in zip(dirs, columns):
-        (prep_dir / sub_dir).mkdir(parents=True, exist_ok=True)
-        file_name = prep_dir / sub_dir / files["known"]
-        df["known"].to_csv(file_name, header=True, index=False)
-        print(
-            f"Save {len(df['known'])} known reactions (including duplicates) to {sub_dir}/{file_name.name} ..."
+    # for sub_dir, column in zip(dirs, columns):
+    # (prep_dir / sub_dir).mkdir(parents=True, exist_ok=True)
+    # file_name = prep_dir / sub_dir / files["known"]
+    file_name = prep_dir / files["known"]
+    df["known"].to_csv(file_name, header=True, index=False)
+    logger.debug(
+        # f"Save {len(df['known'])} known reactions (including duplicates) to {sub_dir}/{file_name.name}..."
+        f"Save {len(df['known'])} known reactions (including duplicates) to {file_name.name}..."
+    )
+    for split in splits:
+        # file_name = prep_dir / sub_dir / files[split]
+        file_name = prep_dir / files[split]
+        # df[split] = df["all"][df["all"]["split"] == split][[column]].copy()
+        df[split] = df["all"][df["all"]["split"] == split][[column]].copy()
+        # Remove duplicates
+        len_before = len(df[split])
+        df[split].drop_duplicates(inplace=True)
+        len_after = len(df[split])
+        logger.debug(
+            f"Remove {len_before - len_after} duplicates from {split} set, {len_after} reactions left..."
         )
-        for split in splits:
-            file_name = prep_dir / sub_dir / files[split]
-            df[split] = df["all"][df["all"]["split"] == split][[column]].copy()
-            # Remove duplicates
+        if split == "train":
+            # Remove entries that are also in the "known" set
             len_before = len(df[split])
-            df[split].drop_duplicates(inplace=True)
+            df[split] = df[split][
+                # ~df[split][column].isin(df["known"][column])
+                ~df[split][column].isin(df["known"][column])
+            ].copy()
             len_after = len(df[split])
-            print(
-                f"Remove {len_before - len_after} duplicates from {split} set, {len_after} reactions left ..."
+            logger.debug(
+                f"Remove {len_before - len_after} reactions from train set that are also in the "
+                f"validation and/or test set, {len_after} rows left..."
             )
-            if split == "train":
-                # Remove entries that are also in the "known" set
-                len_before = len(df[split])
-                df[split] = df[split][
-                    ~df[split][column].isin(df["known"][column])
-                ].copy()
-                len_after = len(df[split])
-                print(
-                    f"Remove {len_before - len_after} reactions from train set that are also in the "
-                    f"validation and/or test set, {len_after} rows left ..."
-                )
-            print(f"Save {split} reactions to {sub_dir}/{file_name.name} ...")
-            df[split].to_csv(file_name, header=False, index=False)
+        # logger.debug(f"Save {split} reactions to {sub_dir}/{file_name.name}...")
+        logger.debug(f"Save {split} reactions to {file_name.name} ...")
+        df[split].to_csv(file_name, header=False, index=False)
 
         # Make sure that train set is not included in known set
         train_known_intersection = set(df["known"][column].values) & set(
             df["train"].iloc[:, 0].values
         )
-        # print(len(train_known_intersection))
         assert (
             len(train_known_intersection) == 0
         ), "Train set includes reactions from validation and/or test set!"
@@ -310,6 +361,7 @@ def prepare_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> None:
 
 
 def main() -> None:
+
     parser = argparse.ArgumentParser(
         description="Prepare data for training of the Hugging Face model."
     )
@@ -335,11 +387,24 @@ def main() -> None:
         action="store_true",
         help="enforce downloading the dataset(s), default: '%(default)s'.",
     )
-    # parser.add_argument('-p', '--preprocess', default=True, action='store_true', help="preprocess the dataset(s)")
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        dest="log_level",
+        action="append_const",
+        const=-1,
+    )
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        dest="log_level",
+        action="append_const",
+        const=1,
+    )
 
     args = parser.parse_args()
-
-    configure_logging()
+    log_level: int = determine_log_level(args.log_level)
+    configure_logging(log_level)
 
     if "all" in args.dataset:
         datasets = sorted(set(VALID_DATASETS) - {"all"})
