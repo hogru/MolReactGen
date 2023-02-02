@@ -167,10 +167,11 @@ class Counter:
 
 
 def determine_log_level(
-    adjustments: Iterable[int] = (),
+    adjustments: Optional[Iterable[int]] = None,
     default_log_level: int = DEFAULT_LOG_LEVEL,
     log_levels: Iterable[int] = LOG_LEVELS,
 ) -> int:
+    adjustments = () if adjustments is None else adjustments
     log_levels = sorted(list(log_levels))
     log_level_idx: int = log_levels.index(default_log_level)
     # For each "-q" and "-v" flag, adjust the logging verbosity accordingly
@@ -298,10 +299,9 @@ def configure_logging(
     # Intercept logging messages from other libraries
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
-    logger.info(
+    logger.debug(
         f"Logging with log level {log_level} to file {log_file} with rotation {rotation} and retention {retention}"
     )
-    logger.debug("Logging configured")
 
 
 ###############################################################################

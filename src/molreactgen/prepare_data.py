@@ -359,6 +359,7 @@ def prepare_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> None:
         return prepare_fn(raw_dir, prep_dir)
 
 
+@logger.catch
 def main() -> None:
 
     parser = argparse.ArgumentParser(
@@ -392,6 +393,7 @@ def main() -> None:
         dest="log_level",
         action="append_const",
         const=-1,
+        help="increase verbosity from default.",
     )
     parser.add_argument(
         "--quiet",
@@ -399,6 +401,7 @@ def main() -> None:
         dest="log_level",
         action="append_const",
         const=1,
+        help="decrease verbosity from default.",
     )
 
     args = parser.parse_args()
