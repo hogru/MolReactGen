@@ -7,13 +7,12 @@ Student ID: K08608294
 """
 
 import argparse
-
-# from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import pandas as pd  # type: ignore
+import transformers  # type: ignore
 from loguru import logger
 from rdchiral.main import (  # type: ignore
     rdchiralReactants,
@@ -30,29 +29,36 @@ from rich.progress import (
     TextColumn,
     TimeRemainingColumn,
 )
-from transformers import (  # type: ignore
+from transformers import (
     AutoModelForCausalLM,
+    PreTrainedModel,
     PreTrainedTokenizerFast,
     pipeline,
 )
 
-from molreactgen.helpers import Counter, configure_logging
+from molreactgen.helpers import (
+    Counter,
+    configure_logging,
+    determine_log_level,
+    guess_project_root_dir,
+)
 from molreactgen.molecule import Molecule, Reaction
+from molreactgen.tokenizer import BOS_TOKEN, EOS_TOKEN
 
 # Global variables, defaults
-VALID_GENERATION_MODES = [
+PROJECT_ROOT_DIR: Path = guess_project_root_dir()
+GENERATED_DATA_DIR: Path = (
+    PROJECT_ROOT_DIR / "data" / "generated" / f"{datetime.now():%Y-%m-%d_%H-%M}"
+)
+GENERATED_DATA_DIR.mkdir(exist_ok=False, parents=True)
+DEFAULT_OUTPUT_FILE_PATH = GENERATED_DATA_DIR / "generated.csv"
+
+VALID_GENERATION_MODES = (
     "smiles",
     "smarts",
-]  # TODO Type hinting with Literal?!
-# TODO replace fixed path with guess_project_root_dir()
-DEFAULT_OUTPUT_FILE_PATH = (
-    f"../../data/generated/{datetime.now():%Y-%m-%d_%H-%M}_generated.csv"
 )
 DEFAULT_NUM_TO_GENERATE: int = 1000
 MIN_NUM_TO_GENERATE: int = 20
-# TODO make dependant on generation mode
-# DEFAULT_SMILES_MAX_LENGTH: int = 128
-# DEFAULT_SMARTS_MAX_LENGTH: int = 896
 DEFAULT_TOP_P: float = 0.95  # not used yet
 DEFAULT_NUM_BEAMS: int = 5  # not used yet
 DEFAULT_EARLY_STOPPING: bool = True  # not used yet
@@ -62,30 +68,15 @@ CSV_ID_SPLITTER = " | "
 def load_existing_molecules(
     file_path: Path,
 ) -> list[Molecule]:
-
     df: pd.DataFrame = pd.read_csv(file_path, header=None)
     molecules: list[Molecule] = [Molecule(row) for row in df[0]]
-
     return molecules
 
 
 def load_existing_reaction_templates(
     file_path: Path,
 ) -> list[Reaction]:
-    # df_all: pd.DataFrame = pd.DataFrame()
-    # for file_path in existing_smarts_file_paths:
-    #     df: pd.DataFrame = pd.read_csv(file_path, header=None)
-    #     df_all = pd.concat([df_all, df], ignore_index=True)
-    # df_all.columns = [
-    #     "existing_reaction_smarts"
-    # ]
-
     df: pd.DataFrame = pd.read_csv(file_path, header=0)
-    # reaction_templates: list[str] = df[
-    #     "reaction_smarts_with_atom_mapping"
-    # ].tolist()
-    # reactions: set[Reaction] = {Reaction(s) for s in reaction_templates}
-
     reactions: list[Reaction] = [
         Reaction(
             reaction_smarts=row["reaction_smarts_with_atom_mapping"],
@@ -98,13 +89,159 @@ def load_existing_reaction_templates(
     return reactions
 
 
+def _is_finetuned_model(
+    tokenizer: PreTrainedTokenizerFast,
+    *,
+    from_scratch_bos_token: str = BOS_TOKEN,
+    from_scratch_eos_token: str = EOS_TOKEN,
+) -> bool:
+    if not isinstance(tokenizer, PreTrainedTokenizerFast):
+        raise TypeError(
+            f"tokenizer must be a PreTrainedTokenizerFast, but is {type(tokenizer)}"
+        )
+
+    if (
+        tokenizer.bos_token == from_scratch_bos_token
+        and tokenizer.eos_token == from_scratch_eos_token
+        and tokenizer.bos_token_id < 256
+        and tokenizer.eos_token_id < 256
+    ):
+        return False
+
+    elif (
+        tokenizer.bos_token != from_scratch_bos_token
+        and tokenizer.eos_token != from_scratch_eos_token
+        and tokenizer.bos_token_id > 255
+        and tokenizer.eos_token_id > 255
+    ):
+        return True
+
+    else:
+        raise RuntimeError(
+            f"Cannot determine if model is fine-tuned or not. "
+            f"Tokenizer BOS token (id): {tokenizer.bos_token} ({tokenizer.bos_token_id}), "
+            f"Tokenizer EOS token (id): {tokenizer.eos_token} ({tokenizer.eos_token_id}), "
+            f"From-scratch BOS token: {from_scratch_bos_token}, "
+            f"From-scratch EOS token: {from_scratch_eos_token}"
+        )
+
+
+def _load_model_and_tokenizer(
+    model_file_path: Path,
+) -> tuple[AutoModelForCausalLM, PreTrainedTokenizerFast]:
+    model_file_path = Path(model_file_path).resolve()
+    logger.debug(f"Loading model from {model_file_path}...")
+    model = AutoModelForCausalLM.from_pretrained(model_file_path)
+    logger.debug(f"Loading tokenizer from {model_file_path}...")
+    # TODO How can I find out which tokenizer to use?
+    # from scratch: PreTrainedTokenizerFst
+    # fine-tuned: GPT2Tokenizer
+    # I know fine-tuning status after loading the tokenizer, but not before
+    # Warning from HF
+    # The tokenizer class you load from this checkpoint is not the same type as the class this function is called from.
+    # It may result in unexpected tokenization.
+    # The tokenizer class you load from this checkpoint is 'GPT2Tokenizer'.
+    # The class this function is called from is 'PreTrainedTokenizerFast'.
+    tokenizer = PreTrainedTokenizerFast.from_pretrained(model_file_path)
+    fine_tuned: bool = _is_finetuned_model(tokenizer)
+    fine_tuned_str: str = "fine-tuned" if fine_tuned else "trained from scratch"
+    logger.debug(f"Model assumed to be {fine_tuned_str}")
+
+    return model, tokenizer
+
+
+def _create_generation_pipeline(
+    model: AutoModelForCausalLM, tokenizer: PreTrainedTokenizerFast
+) -> transformers.Pipeline:
+    if not isinstance(
+        model, PreTrainedModel
+    ):  # would like to check for AutoModelForCausalLM, but that doesn't work
+        raise TypeError(
+            f"model must be a PreTrainedModel, but is {type(model)}"
+        )
+    if not isinstance(tokenizer, PreTrainedTokenizerFast):
+        raise TypeError(
+            f"tokenizer must be a PreTrainedTokenizerFast, but is {type(tokenizer)}"
+        )
+
+    pipe: transformers.Pipeline = pipeline(
+        "text-generation", model=model, tokenizer=tokenizer  # , device=device
+    )
+
+    return pipe
+
+
+def _determine_max_length(
+    model: AutoModelForCausalLM, max_length: Optional[int] = None
+) -> int:
+    if not isinstance(
+        model, PreTrainedModel
+    ):  # would like to check for AutoModelForCausalLM, but that doesn't work
+        raise TypeError(
+            f"model must be a PreTrainedModel, but is {type(model)}"
+        )
+
+    if max_length is None:
+        max_length = model.config.n_positions
+        logger.debug(f"Using max_length={max_length} from model config")
+    else:
+        logger.debug(f"Using max_length={max_length} from argument")
+        if max_length > model.config.n_positions:
+            max_length = model.config.n_positions
+            logger.warning(
+                f"max_length={max_length} is larger than model config allows, "
+                f"setting it to {model.config.n_positions}"
+            )
+
+    return max_length
+
+
+def _determine_num_to_generate_in_pipeline(num_to_generate: int) -> int:
+    num_to_generate_in_pipeline: int = min(
+        max(MIN_NUM_TO_GENERATE, num_to_generate // 100),
+        MIN_NUM_TO_GENERATE * 10,
+    )
+    logger.debug(f"Generating {num_to_generate_in_pipeline} items at a time")
+    return num_to_generate_in_pipeline
+
+
+def _determine_max_num_tries(num_to_generate: int) -> int:
+    return max(int(num_to_generate) // 100, 10)
+
+
+def _determine_prompt(
+    tokenizer: PreTrainedTokenizerFast, finetuned: bool
+) -> str:
+    prompt: str
+    if finetuned:
+        prompt = BOS_TOKEN
+    else:
+        prompt = tokenizer.bos_token
+
+    return prompt
+
+
+def _determine_stopping_criteria(
+    tokenizer: PreTrainedTokenizerFast, finetuned: bool
+) -> Union[int, list[int]]:
+    stopping_criteria: Union[int, list[int]]
+    if finetuned:
+        stopping_criteria = [
+            tokenizer.convert_tokens_to_ids(EOS_TOKEN),
+            tokenizer.eos_token_id,
+        ]
+    else:
+        stopping_criteria = tokenizer.eos_token_id
+
+    return stopping_criteria
+
+
 def generate_smiles(
     model_file_path: Path,
     existing_file_path: Path,
     num_to_generate: int,
     max_length: Optional[int] = None,
 ) -> tuple[Counter, pd.DataFrame]:
-
     # Validate arguments
     model_file_path = Path(model_file_path).resolve()
     existing_file_path = Path(existing_file_path).resolve()
@@ -137,38 +274,27 @@ def generate_smiles(
     smiles["all_existing"] = set(existing_molecules)
     assert all(bool(s.canonical_smiles) for s in smiles["all_existing"])
 
-    # Load model including tokenizer
-    logger.info("Loading model...")
-    model = AutoModelForCausalLM.from_pretrained(model_file_path)
-    logger.info("Loading tokenizer...")
-    tokenizer = PreTrainedTokenizerFast.from_pretrained(model_file_path)
-
-    # Create generation pipeline
-    logger.info("Preparing generation...")
-    if max_length is None:
-        max_length = model.config.n_positions
-        logger.info(f"Using max_length={max_length} from model config")
-    else:
-        logger.info(f"Using max_length={max_length} from command line")
-        if max_length > model.config.n_positions:
-            max_length = model.config.n_positions
-            logger.warning(
-                f"max_length={max_length} is larger than model config allows, setting it to {model.config.n_positions}"
-            )
-
-    num_tries: int = 0
-    max_num_tries: int = max(num_to_generate // 100, 10)
-    num_to_generate_in_pipeline: int = min(
-        max(MIN_NUM_TO_GENERATE, num_to_generate // 100),
-        MIN_NUM_TO_GENERATE * 10,
+    # Create text generation pipeline
+    logger.info("Loading model and tokenizer...")
+    model, tokenizer = _load_model_and_tokenizer(model_file_path)
+    finetuned = _is_finetuned_model(tokenizer)
+    logger.info("Creating text generation pipeline...")
+    pipe = _create_generation_pipeline(model, tokenizer)
+    logger.info("Setting up generation parameters...")
+    max_length = _determine_max_length(model, max_length)
+    max_num_tries = _determine_max_num_tries(num_to_generate)
+    num_to_generate_in_pipeline = _determine_num_to_generate_in_pipeline(
+        num_to_generate
     )
-    logger.info(f"Generating {num_to_generate_in_pipeline} molecules at a time")
-    prompt = tokenizer.bos_token
-    pipe = pipeline(
-        "text-generation", model=model, tokenizer=tokenizer  # , device=device
+    prompt = _determine_prompt(tokenizer, finetuned)
+    stopping_criteria = _determine_stopping_criteria(tokenizer, finetuned)
+    logger.info(
+        f"Starting generation... ({num_to_generate_in_pipeline} molecules at a time, "
+        f"with a maximum sequence length of {max_length})"
     )
 
     # Generate molecules
+    num_tries = 0
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -181,7 +307,6 @@ def generate_smiles(
         TimeRemainingColumn(elapsed_when_finished=True),
         refresh_per_second=2,
     ) as progress:
-
         task = progress.add_task(
             "Generating molecules...",
             total=num_to_generate,
@@ -189,7 +314,8 @@ def generate_smiles(
             unique=0.0,
             novel=0.0,
         )
-
+        # Currently no batching, might add it later, but check this first:
+        # https://huggingface.co/docs/transformers/main_classes/pipelines#pipeline-batching
         while len(smiles["all_novel"]) < num_to_generate:
             generated = pipe(
                 prompt,
@@ -197,6 +323,7 @@ def generate_smiles(
                 max_new_tokens=max_length,
                 return_full_text=True,
                 pad_token_id=tokenizer.pad_token_id,
+                eos_token_id=stopping_criteria,
                 do_sample=True,
                 # top_p=top_p,
                 # num_beams=num_beams,
@@ -242,12 +369,12 @@ def generate_smiles(
             )
 
     # Some final checks
-    logger.info("Perform final plausibility checks...")
+    logger.debug("Performing final plausibility checks...")
     assert len(smiles["all_valid"]) >= len(smiles["all_novel"])
     assert len(smiles["all_novel"]) >= num_to_generate
 
     # Generate output
-    logger.info("Generating output...")
+    logger.debug("Generating output...")
     column_smiles = [s.canonical_smiles for s in smiles["all_novel"]]
     df = pd.DataFrame(
         {
@@ -358,40 +485,27 @@ def generate_smarts(
     smarts["all_existing"] = set(existing_reactions)
     assert all(bool(s.reaction_smarts) for s in smarts["all_existing"])
 
-    # Load model including tokenizer
-    logger.info("Loading model...")
-    model = AutoModelForCausalLM.from_pretrained(model_file_path)
-    logger.info("Loading tokenizer...")
-    tokenizer = PreTrainedTokenizerFast.from_pretrained(model_file_path)
-
-    # Create generation pipeline
-    logger.info("Preparing generation...")
-    if max_length is None:
-        max_length = model.config.n_positions
-        logger.info(f"Using max_length={max_length} from model config")
-    else:
-        logger.info(f"Using max_length={max_length} from command line")
-        if max_length > model.config.n_positions:
-            max_length = model.config.n_positions
-            logger.warning(
-                f"max_length={max_length} is larger than model config allows, setting it to {model.config.n_positions}"
-            )
-
-    num_tries: int = 0
-    max_num_tries: int = max(num_to_generate // 100, 10)
-    num_to_generate_in_pipeline: int = min(
-        max(MIN_NUM_TO_GENERATE, num_to_generate // 100),
-        MIN_NUM_TO_GENERATE * 10,
+    # Create text generation pipeline
+    logger.info("Loading model and tokenizer...")
+    model, tokenizer = _load_model_and_tokenizer(model_file_path)
+    finetuned = _is_finetuned_model(tokenizer)
+    logger.info("Creating text generation pipeline...")
+    pipe = _create_generation_pipeline(model, tokenizer)
+    logger.info("Setting up generation parameters...")
+    max_length = _determine_max_length(model, max_length)
+    max_num_tries = _determine_max_num_tries(num_to_generate)
+    num_to_generate_in_pipeline = _determine_num_to_generate_in_pipeline(
+        num_to_generate
     )
+    prompt = _determine_prompt(tokenizer, finetuned)
+    stopping_criteria = _determine_stopping_criteria(tokenizer, finetuned)
     logger.info(
-        f"Generating {num_to_generate_in_pipeline} reaction templates at a time"
-    )
-    prompt = tokenizer.bos_token
-    pipe = pipeline(
-        "text-generation", model=model, tokenizer=tokenizer  # , device=device
+        f"Starting generation... ({num_to_generate_in_pipeline} reaction templates at a time, "
+        f"with a maximum sequence length of {max_length})"
     )
 
     # Generate reaction templates
+    num_tries = 0
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -403,7 +517,6 @@ def generate_smarts(
         TimeRemainingColumn(elapsed_when_finished=True),
         refresh_per_second=2,
     ) as progress:
-
         task = progress.add_task(
             "Generating reaction templates...",
             total=num_to_generate,
@@ -418,6 +531,7 @@ def generate_smarts(
                 max_new_tokens=max_length,
                 return_full_text=True,
                 pad_token_id=tokenizer.pad_token_id,
+                eos_token_id=stopping_criteria,
                 do_sample=True,
                 # top_p=top_p,
                 # num_beams=num_beams,
@@ -466,7 +580,6 @@ def generate_smarts(
         TimeRemainingColumn(elapsed_when_finished=True),
         refresh_per_second=2,
     ) as progress:
-
         task = progress.add_task(
             "Checking chemical feasibility...", total=len(smarts["all_valid"])
         )
@@ -543,7 +656,7 @@ def generate_smarts(
     assert len(smarts["all_known"]) <= len(smarts["all_feasible"])
 
     # Generate output
-    logger.info("Generating output...")
+    logger.debug("Generating output...")
     column_smarts = [s.reaction_smarts for s in smarts["all_feasible"]]
     column_known = [
         (s.in_val_set or s.in_test_set) for s in smarts["all_feasible"]
@@ -622,6 +735,22 @@ def main() -> None:
         type=int,
         help="maximum length of generated molecules or reaction templates, default: the model's sequence length.",
     )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        dest="log_level",
+        action="append_const",
+        const=-1,
+        help="increase verbosity from default.",
+    )
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        dest="log_level",
+        action="append_const",
+        const=1,
+        help="decrease verbosity from default.",
+    )
 
     # TODO add more arguments for beam search, e.g.
     # TOP_P: float = 0.95  # not used yet
@@ -629,7 +758,8 @@ def main() -> None:
     # EARLY_STOPPING: bool = True  # not used yet
 
     args = parser.parse_args()
-    configure_logging()
+    log_level: int = determine_log_level(args.log_level)
+    configure_logging(log_level)
 
     # Prepare and check (global) variables
     if args.mode == "smiles":
@@ -686,9 +816,16 @@ def main() -> None:
     logger.info(f"Absolute fractions: {counter.get_absolute_fraction()}")
     logger.info(f"Relative fractions: {counter.get_relative_fraction()}")
 
+    # TODO save statistics to file
+    # plus the file path to the model
+    # plus the file path to the known items
+    # plus the hash codes
+
     # Save generated items
-    logger.info(f"Saving generated {items_name} to {output_file_path.name}")
+    logger.info(f"Saving generated {items_name} to {output_file_path}")
     df.to_csv(output_file_path, index=False)
+
+    # TODO save a symlink to the model in the output directory
 
 
 if __name__ == "__main__":
