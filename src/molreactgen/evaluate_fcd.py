@@ -8,8 +8,9 @@ Student ID: K08608294
 import argparse
 import pickle
 from collections.abc import Mapping, Sequence
-from datetime import datetime
-from importlib import reload
+
+# from datetime import datetime
+# from importlib import reload
 from math import exp
 from pathlib import Path
 from typing import Optional, TypeVar
@@ -21,17 +22,24 @@ from codetiming import Timer
 from humanfriendly import format_timespan  # type: ignore
 from loguru import logger
 
-import molreactgen.config
-import molreactgen.helpers
-import molreactgen.molecule
-
-reload(molreactgen.config)
-reload(molreactgen.helpers)
-reload(molreactgen.molecule)
-
-from fcd_torch.fcd_torch.fcd import FCD  # type: ignore
-from molreactgen.helpers import configure_logging, get_device, get_num_workers
+from fcd_torch.fcd_torch.fcd import FCD
+from molreactgen.helpers import (
+    configure_logging,
+    determine_log_level,
+    get_device,
+    get_num_workers,
+    guess_project_root_dir,
+)
 from molreactgen.molecule import canonicalize_molecules
+
+# import molreactgen.config
+# import molreactgen.helpers
+# import molreactgen.molecule
+#
+# reload(molreactgen.config)
+# reload(molreactgen.helpers)
+# reload(molreactgen.molecule)
+
 
 # try:
 #     # noinspection PyUnresolvedReferences
@@ -46,13 +54,16 @@ T = TypeVar("T", bound=npt.NBitBase)
 
 
 # Global variables, defaults
+PROJECT_ROOT_DIR: Path = guess_project_root_dir()
+DEFAULT_OUTPUT_FILE_SUFFIX = "_evaluation.csv"
+# DEFAULT_OUTPUT_FILE_PATH = (
+#     f"../../data/generated/{datetime.now():%Y-%m-%d_%H-%M}_evaluation.csv"
+# )
+
 VALID_EVALUATION_MODES = [
     "reference",
     "stats",
-]  # TODO Type hinting with Literal?!
-DEFAULT_OUTPUT_FILE_PATH = (
-    f"../../data/generated/{datetime.now():%Y-%m-%d_%H-%M}_evaluation.csv"
-)
+]
 
 
 def read_molecules_from_file(file: Path) -> list[str]:
@@ -268,16 +279,14 @@ def evaluate_molecules(
         basic_stats = {}
 
     # Get reference stats
+    # TODO mypy complains "Missing type parameters for generic type "floating"
+    reference_stats: dict[str, "np.floating"]
     if mode == "reference":
         logger.info("Calculating reference stats from reference molecules...")
-        reference_stats: dict[str, "np.floating"] = get_reference_stats(
-            reference_file_path, None
-        )
+        reference_stats = get_reference_stats(reference_file_path, None)
     elif mode == "stats":
         logger.info("Loading pre-computed reference stats...")
-        reference_stats: dict[str, "np.floating"] = get_reference_stats(
-            None, stats_file_path
-        )
+        reference_stats = get_reference_stats(None, stats_file_path)
     else:
         raise ValueError(f"Invalid evaluation mode {mode}")
 
@@ -305,7 +314,6 @@ def main() -> None:
     parser.add_argument(
         "mode",
         type=str.lower,
-        required=True,
         choices=VALID_EVALUATION_MODES,
         help="the evaluation mode.",
     )
@@ -336,14 +344,35 @@ def main() -> None:
         "-o",
         "--output",
         type=Path,
-        default=Path(DEFAULT_OUTPUT_FILE_PATH),
-        help="file path for the generated molecules or reaction templates, default: '%(default)s'.",
+        required=False,
+        default=None,
+        help=f"file path for the evaluation statistic, "
+        f"default: the file name of the generated molecules with suffix {DEFAULT_OUTPUT_FILE_SUFFIX}.",
     )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        dest="log_level",
+        action="append_const",
+        const=-1,
+        help="increase verbosity from default.",
+    )
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        dest="log_level",
+        action="append_const",
+        const=1,
+        help="decrease verbosity from default.",
+    )
+
     args = parser.parse_args()
 
-    # Prepare logging
-    configure_logging()
-    logger.log("HEADING", "Evaluating molecules...")
+    # Configure logging
+    log_level: int = determine_log_level(args.log_level)
+    configure_logging(log_level)
+
+    logger.heading("Evaluating molecules...")  # type: ignore
 
     # Prepare and check (global) variables
     generated_file_path = Path(args.generated).resolve()
@@ -392,9 +421,13 @@ def main() -> None:
             "Reference molecules file path must be provided in 'reference' mode"
         )
 
-    output_file_path = Path(args.output).resolve()
-    logger.debug(f"Output file path: '{output_file_path}'")
-    output_file_path.parent.mkdir(parents=True, exist_ok=True)
+    if args.output is None:
+        # TODO determine output file path from generated file path
+        pass
+    else:
+        output_file_path = Path(args.output).resolve()
+        logger.debug(f"Output file path: '{output_file_path}'")
+        output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Start timer
     with Timer(
