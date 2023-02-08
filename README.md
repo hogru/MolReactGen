@@ -21,9 +21,10 @@ python -m pip install -e .
 
 ## Main files
 
-- `prepare_data.py` downloads and massages the datasets (download not implemented yet)
+- `prepare_data.py` downloads and massages the datasets
+- `tokenizer.py` provides access to the tokenizers
 - `train.py` trains the model on a given dataset, configured via `yaml` files in the `conf` directory
 - `generate.py` generates SMILES or SMARTS
 - `evaluate_fcd.py` calculates the Fréchet ChemNet Distance (FCD) between the generated molecules and a reference set of molecules (e.g. the GuacaMol dataset)
 - `molecule.py` covers helpers for the chemical space of the task
-- `helpers.py` is a set of misc helpers/utils
+- `helpers.py` is a set of misc helpers/utils (logging etc.)

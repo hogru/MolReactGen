@@ -9,7 +9,7 @@ Student ID: K08608294
 import argparse
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union
+from typing import Iterable, Optional, Union
 
 import pandas as pd  # type: ignore
 import transformers  # type: ignore
@@ -31,6 +31,7 @@ from rich.progress import (
 )
 from transformers import (
     AutoModelForCausalLM,
+    AutoTokenizer,
     PreTrainedModel,
     PreTrainedTokenizerFast,
     pipeline,
@@ -43,7 +44,7 @@ from molreactgen.helpers import (
     guess_project_root_dir,
 )
 from molreactgen.molecule import Molecule, Reaction
-from molreactgen.tokenizer import BOS_TOKEN, EOS_TOKEN
+from molreactgen.tokenizer import BOS_TOKEN, EOS_TOKEN, PAD_TOKEN
 
 # Global variables, defaults
 PROJECT_ROOT_DIR: Path = guess_project_root_dir()
@@ -142,7 +143,8 @@ def _load_model_and_tokenizer(
     # It may result in unexpected tokenization.
     # The tokenizer class you load from this checkpoint is 'GPT2Tokenizer'.
     # The class this function is called from is 'PreTrainedTokenizerFast'.
-    tokenizer = PreTrainedTokenizerFast.from_pretrained(model_file_path)
+    # tokenizer = PreTrainedTokenizerFast.from_pretrained(model_file_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_file_path)
     fine_tuned: bool = _is_finetuned_model(tokenizer)
     fine_tuned_str: str = "fine-tuned" if fine_tuned else "trained from scratch"
     logger.debug(f"Model assumed to be {fine_tuned_str}")
@@ -181,17 +183,32 @@ def _determine_max_length(
             f"model must be a PreTrainedModel, but is {type(model)}"
         )
 
-    if max_length is None:
-        max_length = model.config.n_positions
+    try:
+        model_max_length = int(model.config.n_positions)
+    except (AttributeError, TypeError):
+        model_max_length = None
+        logger.warning(
+            "Cannot determine the model's maximum input sequence length"
+        )
+        if max_length is None:
+            raise ValueError(
+                "Cannot determine maximum input sequence length, "
+                "since max_length is also None"
+            )
+
+    if max_length is None and model_max_length is not None:
+        max_length = model_max_length
         logger.debug(f"Using max_length={max_length} from model config")
-    else:
+    elif max_length is not None:
         logger.debug(f"Using max_length={max_length} from argument")
-        if max_length > model.config.n_positions:
-            max_length = model.config.n_positions
+        if model_max_length is not None and max_length > model_max_length:
+            max_length = model_max_length
             logger.warning(
                 f"max_length={max_length} is larger than model config allows, "
-                f"setting it to {model.config.n_positions}"
+                f"setting it to {model_max_length}"
             )
+    else:
+        raise RuntimeError("Unexpected error")
 
     return max_length
 
@@ -226,26 +243,56 @@ def _determine_stopping_criteria(
 ) -> Union[int, list[int]]:
     stopping_criteria: Union[int, list[int]]
     if finetuned:
-        stopping_criteria = [
-            tokenizer.convert_tokens_to_ids(EOS_TOKEN),
-            tokenizer.eos_token_id,
-        ]
+        # TODO this would be correct but does not work due to a bug in transformers, see:
+        # https://github.com/huggingface/transformers/pull/21461
+        # Change once the bug is fixed
+        # stopping_criteria = [
+        #     tokenizer.convert_tokens_to_ids(EOS_TOKEN),
+        #     tokenizer.eos_token_id,
+        # ]
+        stopping_criteria = tokenizer.convert_tokens_to_ids(EOS_TOKEN)
     else:
         stopping_criteria = tokenizer.eos_token_id
 
     return stopping_criteria
 
 
+# def generate_smiles(
+#     model_file_path: Path,
+#     existing_file_path: Path,
+#     num_to_generate: int,
+#     max_length: Optional[int] = None,
+# ) -> tuple[Counter, pd.DataFrame]:
 def generate_smiles(
-    model_file_path: Path,
+    *,
+    pipe: transformers.Pipeline,
+    prompt: str,
+    stopping_criteria: Union[int, Iterable[int]],
+    pad_token_id: int,
     existing_file_path: Path,
     num_to_generate: int,
+    num_to_generate_in_pipeline: int,
+    max_num_tries: int,
     max_length: Optional[int] = None,
 ) -> tuple[Counter, pd.DataFrame]:
+
     # Validate arguments
-    model_file_path = Path(model_file_path).resolve()
+    # model_file_path = Path(model_file_path).resolve()
+    if not isinstance(pipe, transformers.Pipeline):
+        raise TypeError(
+            f"pipe must be a transformers.pipelines.Pipeline, but is {type(pipe)}"
+        )
+    prompt = str(prompt)
+    if not isinstance(stopping_criteria, (int, list)):
+        raise TypeError(
+            f"stopping_criteria must be an int or an Iterable of int, but is {type(stopping_criteria)}"
+        )
+    assert int(pad_token_id) >= 0
     existing_file_path = Path(existing_file_path).resolve()
     assert int(num_to_generate) > 0
+    assert int(num_to_generate_in_pipeline) > 0
+    assert num_to_generate_in_pipeline <= num_to_generate
+    assert int(max_num_tries) > 0
     if max_length is not None:
         assert int(max_length) > 0
 
@@ -274,26 +321,11 @@ def generate_smiles(
     smiles["all_existing"] = set(existing_molecules)
     assert all(bool(s.canonical_smiles) for s in smiles["all_existing"])
 
-    # Create text generation pipeline
-    logger.info("Loading model and tokenizer...")
-    model, tokenizer = _load_model_and_tokenizer(model_file_path)
-    finetuned = _is_finetuned_model(tokenizer)
-    logger.info("Creating text generation pipeline...")
-    pipe = _create_generation_pipeline(model, tokenizer)
-    logger.info("Setting up generation parameters...")
-    max_length = _determine_max_length(model, max_length)
-    max_num_tries = _determine_max_num_tries(num_to_generate)
-    num_to_generate_in_pipeline = _determine_num_to_generate_in_pipeline(
-        num_to_generate
-    )
-    prompt = _determine_prompt(tokenizer, finetuned)
-    stopping_criteria = _determine_stopping_criteria(tokenizer, finetuned)
+    # Generate molecules
     logger.info(
         f"Starting generation... ({num_to_generate_in_pipeline} molecules at a time, "
         f"with a maximum sequence length of {max_length})"
     )
-
-    # Generate molecules
     num_tries = 0
     with Progress(
         SpinnerColumn(),
@@ -322,7 +354,7 @@ def generate_smiles(
                 num_return_sequences=num_to_generate_in_pipeline,
                 max_new_tokens=max_length,
                 return_full_text=True,
-                pad_token_id=tokenizer.pad_token_id,
+                pad_token_id=pad_token_id,
                 eos_token_id=stopping_criteria,
                 do_sample=True,
                 # top_p=top_p,
@@ -332,7 +364,10 @@ def generate_smiles(
             )
 
             generated = {
-                s["generated_text"].replace(prompt, "").replace(" ", "")
+                s["generated_text"]
+                .replace(prompt, "")
+                .replace(PAD_TOKEN, "")
+                .replace(EOS_TOKEN, "")
                 for s in generated
             }
             smiles["pl_generated"] = {Molecule(s) for s in generated}
@@ -385,10 +420,22 @@ def generate_smiles(
     return counter, df
 
 
+# def generate_smarts(
+#     model_file_path: Path,
+#     existing_file_path: Path,
+#     num_to_generate: int,
+#     max_length: Optional[int] = None,
+# ) -> tuple[Counter, pd.DataFrame]:
 def generate_smarts(
-    model_file_path: Path,
+    *,
+    pipe: transformers.Pipeline,
+    prompt: str,
+    stopping_criteria: Union[int, Iterable[int]],
+    pad_token_id: int,
     existing_file_path: Path,
     num_to_generate: int,
+    num_to_generate_in_pipeline: int,
+    max_num_tries: int,
     max_length: Optional[int] = None,
 ) -> tuple[Counter, pd.DataFrame]:
     def get_reactions_with_feasible_products(
@@ -442,9 +489,22 @@ def generate_smarts(
     #     pass
 
     # Validate arguments
-    model_file_path = Path(model_file_path).resolve()
+    # model_file_path = Path(model_file_path).resolve()
+    if not isinstance(pipe, transformers.Pipeline):
+        raise TypeError(
+            f"pipe must be a transformers.pipelines.Pipeline, but is {type(pipe)}"
+        )
+    prompt = str(prompt)
+    if not isinstance(stopping_criteria, (int, list)):
+        raise TypeError(
+            f"stopping_criteria must be an int or an Iterable of int, but is {type(stopping_criteria)}"
+        )
+    assert int(pad_token_id) >= 0
     existing_file_path = Path(existing_file_path).resolve()
     assert int(num_to_generate) > 0
+    assert int(num_to_generate_in_pipeline) > 0
+    assert num_to_generate_in_pipeline <= num_to_generate
+    assert int(max_num_tries) > 0
     if max_length is not None:
         assert int(max_length) > 0
 
@@ -485,26 +545,11 @@ def generate_smarts(
     smarts["all_existing"] = set(existing_reactions)
     assert all(bool(s.reaction_smarts) for s in smarts["all_existing"])
 
-    # Create text generation pipeline
-    logger.info("Loading model and tokenizer...")
-    model, tokenizer = _load_model_and_tokenizer(model_file_path)
-    finetuned = _is_finetuned_model(tokenizer)
-    logger.info("Creating text generation pipeline...")
-    pipe = _create_generation_pipeline(model, tokenizer)
-    logger.info("Setting up generation parameters...")
-    max_length = _determine_max_length(model, max_length)
-    max_num_tries = _determine_max_num_tries(num_to_generate)
-    num_to_generate_in_pipeline = _determine_num_to_generate_in_pipeline(
-        num_to_generate
-    )
-    prompt = _determine_prompt(tokenizer, finetuned)
-    stopping_criteria = _determine_stopping_criteria(tokenizer, finetuned)
+    # Generate reaction templates
     logger.info(
         f"Starting generation... ({num_to_generate_in_pipeline} reaction templates at a time, "
         f"with a maximum sequence length of {max_length})"
     )
-
-    # Generate reaction templates
     num_tries = 0
     with Progress(
         SpinnerColumn(),
@@ -530,7 +575,7 @@ def generate_smarts(
                 num_return_sequences=num_to_generate_in_pipeline,
                 max_new_tokens=max_length,
                 return_full_text=True,
-                pad_token_id=tokenizer.pad_token_id,
+                pad_token_id=pad_token_id,
                 eos_token_id=stopping_criteria,
                 do_sample=True,
                 # top_p=top_p,
@@ -540,7 +585,10 @@ def generate_smarts(
             )
 
             generated = {
-                s["generated_text"].replace(prompt, "").replace(" ", "")
+                s["generated_text"]
+                .replace(prompt, "")
+                .replace(PAD_TOKEN, "")
+                .replace(EOS_TOKEN, "")
                 for s in generated
             }
             smarts["pl_generated"] = {Reaction(s) for s in generated}
@@ -758,6 +806,8 @@ def main() -> None:
     # EARLY_STOPPING: bool = True  # not used yet
 
     args = parser.parse_args()
+
+    # Configure logging
     log_level: int = determine_log_level(args.log_level)
     configure_logging(log_level)
 
@@ -794,20 +844,51 @@ def main() -> None:
     max_length = args.length
     logger.debug(f"Maximum length of generated {items_name}: {max_length}")
 
+    # Create text generation pipeline
+    logger.info("Loading model and tokenizer...")
+    model, tokenizer = _load_model_and_tokenizer(model_file_path)
+    finetuned = _is_finetuned_model(tokenizer)
+    logger.info("Creating text generation pipeline...")
+    pipe = _create_generation_pipeline(model, tokenizer)
+    logger.info("Setting up generation parameters...")
+    max_length = _determine_max_length(model, max_length)
+    max_num_tries = _determine_max_num_tries(num_to_generate)
+    num_to_generate_in_pipeline = _determine_num_to_generate_in_pipeline(
+        num_to_generate
+    )
+    prompt = _determine_prompt(tokenizer, finetuned)
+    stopping_criteria = _determine_stopping_criteria(tokenizer, finetuned)
+
     if args.mode == "smiles":
         counter, df = generate_smiles(
-            model_file_path,
-            known_file_path,
-            num_to_generate,
-            max_length,
+            pipe=pipe,
+            prompt=prompt,
+            stopping_criteria=stopping_criteria,
+            pad_token_id=tokenizer.pad_token_id,
+            existing_file_path=known_file_path,
+            num_to_generate=num_to_generate,
+            num_to_generate_in_pipeline=num_to_generate_in_pipeline,
+            max_num_tries=max_num_tries,
+            max_length=max_length,
         )
+        #     model_file_path,
+        #     known_file_path,
+        #     num_to_generate,
+        #     max_length,
+        # )
     elif args.mode == "smarts":
         counter, df = generate_smarts(
-            model_file_path,
-            known_file_path,
-            num_to_generate,
-            max_length,
+            pipe=pipe,
+            prompt=prompt,
+            stopping_criteria=stopping_criteria,
+            pad_token_id=tokenizer.pad_token_id,
+            existing_file_path=known_file_path,
+            num_to_generate=num_to_generate,
+            num_to_generate_in_pipeline=num_to_generate_in_pipeline,
+            max_num_tries=max_num_tries,
+            max_length=max_length,
         )
+
     else:
         raise ValueError(f"Invalid generation mode: {args.mode}")
 
