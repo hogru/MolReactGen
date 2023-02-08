@@ -9,10 +9,9 @@ Student ID: K08608294
 import argparse
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Optional, Union
+from typing import Optional, Union
 
 import pandas as pd  # type: ignore
-import transformers  # type: ignore
 from loguru import logger
 from rdchiral.main import (  # type: ignore
     rdchiralReactants,
@@ -29,9 +28,11 @@ from rich.progress import (
     TextColumn,
     TimeRemainingColumn,
 )
-from transformers import (
+from transformers import (  # type: ignore
     AutoModelForCausalLM,
     AutoTokenizer,
+    GenerationConfig,
+    Pipeline,
     PreTrainedModel,
     PreTrainedTokenizerFast,
     pipeline,
@@ -53,6 +54,7 @@ GENERATED_DATA_DIR: Path = (
 )
 GENERATED_DATA_DIR.mkdir(exist_ok=False, parents=True)
 DEFAULT_OUTPUT_FILE_PATH = GENERATED_DATA_DIR / "generated.csv"
+DEFAULT_GENERATION_CONFIG_FILE_NAME = "generation_config.json"
 
 VALID_GENERATION_MODES = (
     "smiles",
@@ -60,9 +62,11 @@ VALID_GENERATION_MODES = (
 )
 DEFAULT_NUM_TO_GENERATE: int = 1000
 MIN_NUM_TO_GENERATE: int = 20
-DEFAULT_TOP_P: float = 0.95  # not used yet
-DEFAULT_NUM_BEAMS: int = 5  # not used yet
-DEFAULT_EARLY_STOPPING: bool = True  # not used yet
+DEFAULT_NUM_BEAMS: int = 1
+DEFAULT_TEMPERATURE: float = 1.0
+# DEFAULT_NUM_BEAM_GROUPS: int = 1
+# DEFAULT_DIVERSITY_PENALTY: float = 0.2
+# DEFAULT_EARLY_STOPPING: bool = True  # not used yet
 CSV_ID_SPLITTER = " | "
 
 
@@ -127,34 +131,29 @@ def _is_finetuned_model(
         )
 
 
-def _load_model_and_tokenizer(
+def _load_model(
     model_file_path: Path,
-) -> tuple[AutoModelForCausalLM, PreTrainedTokenizerFast]:
+) -> AutoModelForCausalLM:
     model_file_path = Path(model_file_path).resolve()
     logger.debug(f"Loading model from {model_file_path}...")
     model = AutoModelForCausalLM.from_pretrained(model_file_path)
-    logger.debug(f"Loading tokenizer from {model_file_path}...")
-    # TODO How can I find out which tokenizer to use?
-    # from scratch: PreTrainedTokenizerFst
-    # fine-tuned: GPT2Tokenizer
-    # I know fine-tuning status after loading the tokenizer, but not before
-    # Warning from HF
-    # The tokenizer class you load from this checkpoint is not the same type as the class this function is called from.
-    # It may result in unexpected tokenization.
-    # The tokenizer class you load from this checkpoint is 'GPT2Tokenizer'.
-    # The class this function is called from is 'PreTrainedTokenizerFast'.
-    # tokenizer = PreTrainedTokenizerFast.from_pretrained(model_file_path)
-    tokenizer = AutoTokenizer.from_pretrained(model_file_path)
-    fine_tuned: bool = _is_finetuned_model(tokenizer)
-    fine_tuned_str: str = "fine-tuned" if fine_tuned else "trained from scratch"
-    logger.debug(f"Model assumed to be {fine_tuned_str}")
 
-    return model, tokenizer
+    return model
+
+
+def _load_tokenizer(
+    tokenizer_file_path: Path,
+) -> PreTrainedTokenizerFast:
+    tokenizer_file_path = Path(tokenizer_file_path).resolve()
+    logger.debug(f"Loading tokenizer from {tokenizer_file_path}...")
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_file_path)
+
+    return tokenizer
 
 
 def _create_generation_pipeline(
     model: AutoModelForCausalLM, tokenizer: PreTrainedTokenizerFast
-) -> transformers.Pipeline:
+) -> Pipeline:
     if not isinstance(
         model, PreTrainedModel
     ):  # would like to check for AutoModelForCausalLM, but that doesn't work
@@ -166,7 +165,7 @@ def _create_generation_pipeline(
             f"tokenizer must be a PreTrainedTokenizerFast, but is {type(tokenizer)}"
         )
 
-    pipe: transformers.Pipeline = pipeline(
+    pipe: Pipeline = pipeline(
         "text-generation", model=model, tokenizer=tokenizer  # , device=device
     )
 
@@ -200,7 +199,9 @@ def _determine_max_length(
         max_length = model_max_length
         logger.debug(f"Using max_length={max_length} from model config")
     elif max_length is not None:
-        logger.debug(f"Using max_length={max_length} from argument")
+        logger.debug(
+            f"Using max_length={max_length} from command line argument"
+        )
         if model_max_length is not None and max_length > model_max_length:
             max_length = model_max_length
             logger.warning(
@@ -213,12 +214,16 @@ def _determine_max_length(
     return max_length
 
 
-def _determine_num_to_generate_in_pipeline(num_to_generate: int) -> int:
+def _determine_num_to_generate_in_pipeline(
+    num_to_generate: int, item_name: str = "items"
+) -> int:
     num_to_generate_in_pipeline: int = min(
         max(MIN_NUM_TO_GENERATE, num_to_generate // 100),
         MIN_NUM_TO_GENERATE * 10,
     )
-    logger.debug(f"Generating {num_to_generate_in_pipeline} items at a time")
+    logger.debug(
+        f"Generating {num_to_generate_in_pipeline} {item_name} at a time"
+    )
     return num_to_generate_in_pipeline
 
 
@@ -243,9 +248,9 @@ def _determine_stopping_criteria(
 ) -> Union[int, list[int]]:
     stopping_criteria: Union[int, list[int]]
     if finetuned:
-        # TODO this would be correct but does not work due to a bug in transformers, see:
+        # This would be correct but does not work due to a bug in transformers, see:
         # https://github.com/huggingface/transformers/pull/21461
-        # Change once the bug is fixed
+        # TODO Change once the HF bug is fixed
         # stopping_criteria = [
         #     tokenizer.convert_tokens_to_ids(EOS_TOKEN),
         #     tokenizer.eos_token_id,
@@ -257,49 +262,100 @@ def _determine_stopping_criteria(
     return stopping_criteria
 
 
-# def generate_smiles(
-#     model_file_path: Path,
-#     existing_file_path: Path,
-#     num_to_generate: int,
-#     max_length: Optional[int] = None,
-# ) -> tuple[Counter, pd.DataFrame]:
+def get_generation_config(
+    model_file_path: Path,
+    *,
+    num_to_generate: int = DEFAULT_NUM_TO_GENERATE,
+    max_length: Optional[int] = None,
+    num_beams: Optional[int] = 1,
+    # num_beam_groups: Optional[int] = 1,
+    temperature: Optional[float] = 1.0,
+) -> GenerationConfig:
+    model = _load_model(model_file_path)
+    tokenizer = _load_tokenizer(model_file_path)
+    fine_tuned: bool = _is_finetuned_model(tokenizer)
+    fine_tuned_str: str = "fine-tuned" if fine_tuned else "trained from scratch"
+    logger.debug(f"Model assumed to be {fine_tuned_str}")
+    max_length = _determine_max_length(model, max_length)
+    stopping_criteria = _determine_stopping_criteria(tokenizer, fine_tuned)
+    num_to_generate_in_pipeline = _determine_num_to_generate_in_pipeline(
+        num_to_generate
+    )
+    if num_beams > 1:
+        early_stopping = True
+    else:
+        early_stopping = False
+
+    # if num_beam_groups > 1:
+    #     do_sample = False
+    #     diversity_penalty = DEFAULT_DIVERSITY_PENALTY
+    # else:
+    #     do_sample = True
+    #     diversity_penalty = 0.0
+
+    do_sample = True
+
+    if (model_file_path / DEFAULT_GENERATION_CONFIG_FILE_NAME).is_file():
+        generation_config, unused_kwargs = GenerationConfig.from_pretrained(
+            model_file_path,
+            do_sample=do_sample,
+            num_return_sequences=num_to_generate_in_pipeline,
+            max_new_tokens=max_length,
+            pad_token_id=tokenizer.pad_token_id,
+            eos_token_id=stopping_criteria,
+            num_beams=num_beams,
+            # num_beam_groups=num_beam_groups,
+            # diversity_penalty=diversity_penalty,
+            early_stopping=early_stopping,
+            temperature=temperature,
+            length_penalty=0.0,  # does neither promote nor penalize long sequences
+            return_unused_kwargs=True,
+        )
+        if len(unused_kwargs) > 0:
+            logger.warning(
+                f"Unused kwargs for GenerationConfig: {list(unused_kwargs)}"
+            )
+
+    else:
+        generation_config = GenerationConfig(
+            do_sample=True,
+            num_return_sequences=num_to_generate_in_pipeline,
+            max_new_tokens=max_length,
+            pad_token_id=tokenizer.pad_token_id,
+            eos_token_id=stopping_criteria,
+            num_beams=num_beams,
+            temperature=temperature,
+            length_penalty=0.0,  # does neither promote nor penalize long sequences
+        )
+
+    generation_config.save_pretrained(model_file_path)
+
+    return generation_config
+
+
 def generate_smiles(
     *,
-    pipe: transformers.Pipeline,
+    config: GenerationConfig,
+    pipe: Pipeline,
     prompt: str,
-    stopping_criteria: Union[int, Iterable[int]],
-    pad_token_id: int,
     existing_file_path: Path,
     num_to_generate: int,
-    num_to_generate_in_pipeline: int,
     max_num_tries: int,
-    max_length: Optional[int] = None,
 ) -> tuple[Counter, pd.DataFrame]:
 
     # Validate arguments
-    # model_file_path = Path(model_file_path).resolve()
-    if not isinstance(pipe, transformers.Pipeline):
+    if not isinstance(config, GenerationConfig):
         raise TypeError(
-            f"pipe must be a transformers.pipelines.Pipeline, but is {type(pipe)}"
+            f"config must be a GenerationConfig, but is {type(config)}"
+        )
+    if not isinstance(pipe, Pipeline):
+        raise TypeError(
+            f"pipe must be a transformers.Pipeline, but is {type(pipe)}"
         )
     prompt = str(prompt)
-    if not isinstance(stopping_criteria, (int, list)):
-        raise TypeError(
-            f"stopping_criteria must be an int or an Iterable of int, but is {type(stopping_criteria)}"
-        )
-    assert int(pad_token_id) >= 0
     existing_file_path = Path(existing_file_path).resolve()
     assert int(num_to_generate) > 0
-    assert int(num_to_generate_in_pipeline) > 0
-    assert num_to_generate_in_pipeline <= num_to_generate
     assert int(max_num_tries) > 0
-    if max_length is not None:
-        assert int(max_length) > 0
-
-    # TODO add those arguments to the function definition
-    # assert 0.0 <= float(top_p) <= 1.0
-    # assert int(num_beams) > 0
-    # early_stopping = bool(early_stopping)
 
     # Setup variables
     smiles: dict[str, set[Molecule]] = {
@@ -323,8 +379,8 @@ def generate_smiles(
 
     # Generate molecules
     logger.info(
-        f"Starting generation... ({num_to_generate_in_pipeline} molecules at a time, "
-        f"with a maximum sequence length of {max_length})"
+        f"Starting generation... ({config.num_return_sequences} molecules at a time, "
+        f"with a maximum sequence length of {config.max_new_tokens})"
     )
     num_tries = 0
     with Progress(
@@ -351,16 +407,7 @@ def generate_smiles(
         while len(smiles["all_novel"]) < num_to_generate:
             generated = pipe(
                 prompt,
-                num_return_sequences=num_to_generate_in_pipeline,
-                max_new_tokens=max_length,
                 return_full_text=True,
-                pad_token_id=pad_token_id,
-                eos_token_id=stopping_criteria,
-                do_sample=True,
-                # top_p=top_p,
-                # num_beams=num_beams,
-                # early_stopping=early_stopping,
-                # skip_special_tokens=True
             )
 
             generated = {
@@ -398,9 +445,15 @@ def generate_smiles(
             progress.update(
                 task,
                 advance=novel_counter,
-                valid=valid_counter / num_to_generate_in_pipeline,
-                unique=unique_counter / valid_counter,
-                novel=novel_counter / unique_counter,
+                valid=valid_counter / generated_counter
+                if generated_counter > 0
+                else 0.0,
+                unique=unique_counter / valid_counter
+                if valid_counter > 0
+                else 0.0,
+                novel=novel_counter / unique_counter
+                if unique_counter > 0
+                else 0.0,
             )
 
     # Some final checks
@@ -420,23 +473,14 @@ def generate_smiles(
     return counter, df
 
 
-# def generate_smarts(
-#     model_file_path: Path,
-#     existing_file_path: Path,
-#     num_to_generate: int,
-#     max_length: Optional[int] = None,
-# ) -> tuple[Counter, pd.DataFrame]:
 def generate_smarts(
     *,
-    pipe: transformers.Pipeline,
+    config: GenerationConfig,
+    pipe: Pipeline,
     prompt: str,
-    stopping_criteria: Union[int, Iterable[int]],
-    pad_token_id: int,
     existing_file_path: Path,
     num_to_generate: int,
-    num_to_generate_in_pipeline: int,
     max_num_tries: int,
-    max_length: Optional[int] = None,
 ) -> tuple[Counter, pd.DataFrame]:
     def get_reactions_with_feasible_products(
         _reaction: Reaction,
@@ -485,33 +529,19 @@ def generate_smarts(
         else:
             return []
 
-    # def save_reaction_info(_reaction: Reaction, _feasible_reactions: Sequence[Reaction]) -> None:
-    #     pass
-
     # Validate arguments
-    # model_file_path = Path(model_file_path).resolve()
-    if not isinstance(pipe, transformers.Pipeline):
+    if not isinstance(config, GenerationConfig):
         raise TypeError(
-            f"pipe must be a transformers.pipelines.Pipeline, but is {type(pipe)}"
+            f"config must be a GenerationConfig, but is {type(config)}"
+        )
+    if not isinstance(pipe, Pipeline):
+        raise TypeError(
+            f"pipe must be a transformers.Pipeline, but is {type(pipe)}"
         )
     prompt = str(prompt)
-    if not isinstance(stopping_criteria, (int, list)):
-        raise TypeError(
-            f"stopping_criteria must be an int or an Iterable of int, but is {type(stopping_criteria)}"
-        )
-    assert int(pad_token_id) >= 0
     existing_file_path = Path(existing_file_path).resolve()
     assert int(num_to_generate) > 0
-    assert int(num_to_generate_in_pipeline) > 0
-    assert num_to_generate_in_pipeline <= num_to_generate
     assert int(max_num_tries) > 0
-    if max_length is not None:
-        assert int(max_length) > 0
-
-    # TODO add those arguments to the function definition
-    # assert 0.0 <= float(top_p) <= 1.0
-    # assert int(num_beams) > 0
-    # early_stopping = bool(early_stopping)
 
     # Setup variables
     smarts: dict[str, set[Reaction]] = {
@@ -547,8 +577,8 @@ def generate_smarts(
 
     # Generate reaction templates
     logger.info(
-        f"Starting generation... ({num_to_generate_in_pipeline} reaction templates at a time, "
-        f"with a maximum sequence length of {max_length})"
+        f"Starting generation... ({config.num_return_sequences} reaction templates at a time, "
+        f"with a maximum sequence length of {config.max_new_tokens})"
     )
     num_tries = 0
     with Progress(
@@ -572,16 +602,7 @@ def generate_smarts(
         while len(smarts["all_valid"]) < num_to_generate:
             generated = pipe(
                 prompt,
-                num_return_sequences=num_to_generate_in_pipeline,
-                max_new_tokens=max_length,
                 return_full_text=True,
-                pad_token_id=pad_token_id,
-                eos_token_id=stopping_criteria,
-                do_sample=True,
-                # top_p=top_p,
-                # num_beams=num_beams,
-                # early_stopping=early_stopping,
-                # skip_special_tokens=True
             )
 
             generated = {
@@ -614,8 +635,12 @@ def generate_smarts(
             progress.update(
                 task,
                 advance=unique_counter,
-                valid=valid_counter / num_to_generate_in_pipeline,
-                unique=unique_counter / valid_counter,
+                valid=valid_counter / generated_counter
+                if generated_counter > 0
+                else 0.0,
+                unique=unique_counter / valid_counter
+                if valid_counter > 0
+                else 0.0,
             )
 
     # Check for chemical feasibility
@@ -750,12 +775,19 @@ def main() -> None:
         help="the generation mode.",
     )
     parser.add_argument(
-        "-m",
-        "--model",
-        type=Path,
-        required=True,
-        help="directory path to the trained model.",
+        "-b",
+        "--num_beams",
+        type=int,
+        default=DEFAULT_NUM_BEAMS,
+        help="the number of beams for beam search generation, default: '%(default)s' (no beam search).",
     )
+    # parser.add_argument(
+    #     "-g",
+    #     "--num_beam_groups",
+    #     type=int,
+    #     default=DEFAULT_NUM_BEAM_GROUPS,
+    #     help="The number of groups to divide beams into, default: '%(default)s'.",
+    # )
     parser.add_argument(
         "-k",
         "--known",
@@ -764,11 +796,17 @@ def main() -> None:
         help="file path to the known molecules or reaction templates (must be prepared by prepare_data.py).",
     )
     parser.add_argument(
-        "-o",
-        "--output",
+        "-l",
+        "--length",
+        type=int,
+        help="maximum length of generated molecules or reaction templates, default: the model's sequence length.",
+    )
+    parser.add_argument(
+        "-m",
+        "--model",
         type=Path,
-        default=Path(DEFAULT_OUTPUT_FILE_PATH),
-        help="file path for the generated molecules or reaction templates, default: '%(default)s'.",
+        required=True,
+        help="directory path to the trained model.",
     )
     parser.add_argument(
         "-n",
@@ -778,32 +816,35 @@ def main() -> None:
         help="number of molecules or reaction templates to generate, default: '%(default)s'.",
     )
     parser.add_argument(
-        "-l",
-        "--length",
-        type=int,
-        help="maximum length of generated molecules or reaction templates, default: the model's sequence length.",
+        "-o",
+        "--output",
+        type=Path,
+        default=Path(DEFAULT_OUTPUT_FILE_PATH),
+        help="file path for the generated molecules or reaction templates, default: '%(default)s'.",
     )
     parser.add_argument(
-        "--verbose",
+        "-t",
+        "--temperature",
+        type=float,
+        default=DEFAULT_TEMPERATURE,
+        help="the value used to change the token probabilities, default: '%(default)s'.",
+    )
+    parser.add_argument(
         "-v",
+        "--verbose",
         dest="log_level",
         action="append_const",
         const=-1,
         help="increase verbosity from default.",
     )
     parser.add_argument(
-        "--quiet",
         "-q",
+        "--quiet",
         dest="log_level",
         action="append_const",
         const=1,
         help="decrease verbosity from default.",
     )
-
-    # TODO add more arguments for beam search, e.g.
-    # TOP_P: float = 0.95  # not used yet
-    # NUM_BEAMS: int = 5  # not used yet
-    # EARLY_STOPPING: bool = True  # not used yet
 
     args = parser.parse_args()
 
@@ -822,21 +863,21 @@ def main() -> None:
         raise ValueError(f"Invalid generation mode: {args.mode}")
 
     model_file_path = Path(args.model).resolve()
-    logger.debug(f"Model file path: '{model_file_path}'")
+    logger.debug(f"Model file path: {model_file_path}")
     if not model_file_path.is_dir():
         raise FileNotFoundError(
             f"Model in {model_file_path.as_posix()} not found"
         )
 
     known_file_path = Path(args.known).resolve()
-    logger.debug(f"Known file path: '{known_file_path}'")
+    logger.debug(f"Known file path: {known_file_path}")
     if not known_file_path.is_file():
         raise FileNotFoundError(
             f"Known items in {known_file_path.as_posix()} not found"
         )
 
     output_file_path = Path(args.output).resolve()
-    logger.debug(f"Output file path: '{output_file_path}'")
+    logger.debug(f"Output file path: {output_file_path}")
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
     num_to_generate = args.num
@@ -844,32 +885,59 @@ def main() -> None:
     max_length = args.length
     logger.debug(f"Maximum length of generated {items_name}: {max_length}")
 
+    num_beams = args.num_beams
+    logger.debug(f"Number of beams: {num_beams}")
+    if num_beams < 1:
+        raise ValueError(
+            f"Number of beams must be greater than 0, not {num_beams}"
+        )
+
+    # num_beam_groups = args.num_beam_groups
+    # logger.debug(f"Number of beam groups: {num_beam_groups}")
+    # if num_beam_groups > num_beams:
+    #     logger.warning(f"Number of beam groups ({num_beam_groups}) is greater than number of beams ({num_beams}). "
+    #                    f"Setting number of beam groups to number of beams.")
+    #     num_beam_groups = num_beams
+
+    temperature = args.temperature
+    logger.debug(f"Temperature: {temperature}")
+    if temperature <= 0:
+        raise ValueError(
+            f"Temperature must be greater than 0, not {temperature}"
+        )
+
     # Create text generation pipeline
-    logger.info("Loading model and tokenizer...")
-    model, tokenizer = _load_model_and_tokenizer(model_file_path)
-    finetuned = _is_finetuned_model(tokenizer)
+    logger.info("Setting up generation configuration...")
+    generation_config = get_generation_config(
+        model_file_path,
+        num_to_generate=num_to_generate,
+        max_length=max_length,
+        num_beams=num_beams,
+        # num_beam_groups=num_beam_groups,
+        temperature=temperature,
+    )
+
+    logger.info("Loading model (with updated generation config)...")
+    model = _load_model(model_file_path)
+
+    logger.info("Loading tokenizer...")
+    tokenizer = _load_tokenizer(model_file_path)
+    fine_tuned = _is_finetuned_model(tokenizer)
+
     logger.info("Creating text generation pipeline...")
     pipe = _create_generation_pipeline(model, tokenizer)
-    logger.info("Setting up generation parameters...")
-    max_length = _determine_max_length(model, max_length)
+
+    prompt = _determine_prompt(tokenizer, fine_tuned)
     max_num_tries = _determine_max_num_tries(num_to_generate)
-    num_to_generate_in_pipeline = _determine_num_to_generate_in_pipeline(
-        num_to_generate
-    )
-    prompt = _determine_prompt(tokenizer, finetuned)
-    stopping_criteria = _determine_stopping_criteria(tokenizer, finetuned)
 
     if args.mode == "smiles":
         counter, df = generate_smiles(
+            config=generation_config,
             pipe=pipe,
             prompt=prompt,
-            stopping_criteria=stopping_criteria,
-            pad_token_id=tokenizer.pad_token_id,
             existing_file_path=known_file_path,
             num_to_generate=num_to_generate,
-            num_to_generate_in_pipeline=num_to_generate_in_pipeline,
             max_num_tries=max_num_tries,
-            max_length=max_length,
         )
         #     model_file_path,
         #     known_file_path,
@@ -878,15 +946,12 @@ def main() -> None:
         # )
     elif args.mode == "smarts":
         counter, df = generate_smarts(
+            config=generation_config,
             pipe=pipe,
             prompt=prompt,
-            stopping_criteria=stopping_criteria,
-            pad_token_id=tokenizer.pad_token_id,
             existing_file_path=known_file_path,
             num_to_generate=num_to_generate,
-            num_to_generate_in_pipeline=num_to_generate_in_pipeline,
             max_num_tries=max_num_tries,
-            max_length=max_length,
         )
 
     else:
