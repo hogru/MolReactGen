@@ -55,6 +55,7 @@ GENERATED_DATA_DIR: Path = (
 GENERATED_DATA_DIR.mkdir(exist_ok=False, parents=True)
 DEFAULT_OUTPUT_FILE_PATH = GENERATED_DATA_DIR / "generated.csv"
 DEFAULT_GENERATION_CONFIG_FILE_NAME = "generation_config.json"
+CSV_ID_SPLITTER = " | "
 
 VALID_GENERATION_MODES = (
     "smiles",
@@ -64,10 +65,6 @@ DEFAULT_NUM_TO_GENERATE: int = 1000
 MIN_NUM_TO_GENERATE: int = 20
 DEFAULT_NUM_BEAMS: int = 1
 DEFAULT_TEMPERATURE: float = 1.0
-# DEFAULT_NUM_BEAM_GROUPS: int = 1
-# DEFAULT_DIVERSITY_PENALTY: float = 0.2
-# DEFAULT_EARLY_STOPPING: bool = True  # not used yet
-CSV_ID_SPLITTER = " | "
 
 
 def load_existing_molecules(
@@ -92,6 +89,24 @@ def load_existing_reaction_templates(
         for (_, row) in df.iterrows()
     ]
     return reactions
+
+
+def _load_model(
+    model_file_path: Path,
+) -> AutoModelForCausalLM:
+    model_file_path = Path(model_file_path).resolve()
+    logger.debug(f"Loading model from {model_file_path}...")
+    model = AutoModelForCausalLM.from_pretrained(model_file_path)
+    return model
+
+
+def _load_tokenizer(
+    tokenizer_file_path: Path,
+) -> PreTrainedTokenizerFast:
+    tokenizer_file_path = Path(tokenizer_file_path).resolve()
+    logger.debug(f"Loading tokenizer from {tokenizer_file_path}...")
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_file_path)
+    return tokenizer
 
 
 def _is_finetuned_model(
@@ -131,47 +146,6 @@ def _is_finetuned_model(
         )
 
 
-def _load_model(
-    model_file_path: Path,
-) -> AutoModelForCausalLM:
-    model_file_path = Path(model_file_path).resolve()
-    logger.debug(f"Loading model from {model_file_path}...")
-    model = AutoModelForCausalLM.from_pretrained(model_file_path)
-
-    return model
-
-
-def _load_tokenizer(
-    tokenizer_file_path: Path,
-) -> PreTrainedTokenizerFast:
-    tokenizer_file_path = Path(tokenizer_file_path).resolve()
-    logger.debug(f"Loading tokenizer from {tokenizer_file_path}...")
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_file_path)
-
-    return tokenizer
-
-
-def _create_generation_pipeline(
-    model: AutoModelForCausalLM, tokenizer: PreTrainedTokenizerFast
-) -> Pipeline:
-    if not isinstance(
-        model, PreTrainedModel
-    ):  # would like to check for AutoModelForCausalLM, but that doesn't work
-        raise TypeError(
-            f"model must be a PreTrainedModel, but is {type(model)}"
-        )
-    if not isinstance(tokenizer, PreTrainedTokenizerFast):
-        raise TypeError(
-            f"tokenizer must be a PreTrainedTokenizerFast, but is {type(tokenizer)}"
-        )
-
-    pipe: Pipeline = pipeline(
-        "text-generation", model=model, tokenizer=tokenizer  # , device=device
-    )
-
-    return pipe
-
-
 def _determine_max_length(
     model: AutoModelForCausalLM, max_length: Optional[int] = None
 ) -> int:
@@ -179,7 +153,7 @@ def _determine_max_length(
         model, PreTrainedModel
     ):  # would like to check for AutoModelForCausalLM, but that doesn't work
         raise TypeError(
-            f"model must be a PreTrainedModel, but is {type(model)}"
+            f"model must be an AutoModelForCausalLM, but is {type(model)}"
         )
 
     try:
@@ -214,40 +188,11 @@ def _determine_max_length(
     return max_length
 
 
-def _determine_num_to_generate_in_pipeline(
-    num_to_generate: int, item_name: str = "items"
-) -> int:
-    num_to_generate_in_pipeline: int = min(
-        max(MIN_NUM_TO_GENERATE, num_to_generate // 100),
-        MIN_NUM_TO_GENERATE * 10,
-    )
-    logger.debug(
-        f"Generating {num_to_generate_in_pipeline} {item_name} at a time"
-    )
-    return num_to_generate_in_pipeline
-
-
-def _determine_max_num_tries(num_to_generate: int) -> int:
-    return max(int(num_to_generate) // 100, 10)
-
-
-def _determine_prompt(
-    tokenizer: PreTrainedTokenizerFast, finetuned: bool
-) -> str:
-    prompt: str
-    if finetuned:
-        prompt = BOS_TOKEN
-    else:
-        prompt = tokenizer.bos_token
-
-    return prompt
-
-
 def _determine_stopping_criteria(
-    tokenizer: PreTrainedTokenizerFast, finetuned: bool
+    tokenizer: PreTrainedTokenizerFast, fine_tuned: bool
 ) -> Union[int, list[int]]:
     stopping_criteria: Union[int, list[int]]
-    if finetuned:
+    if fine_tuned:
         # This would be correct but does not work due to a bug in transformers, see:
         # https://github.com/huggingface/transformers/pull/21461
         # TODO Change once the HF bug is fixed
@@ -262,19 +207,66 @@ def _determine_stopping_criteria(
     return stopping_criteria
 
 
-def get_generation_config(
+def _determine_num_to_generate_in_pipeline(
+    num_to_generate: int, item_name: str = "items"
+) -> int:
+    num_to_generate_in_pipeline: int = min(
+        max(MIN_NUM_TO_GENERATE, num_to_generate // 100),
+        MIN_NUM_TO_GENERATE * 10,
+    )
+    logger.debug(
+        f"Generating {num_to_generate_in_pipeline} {item_name} at a time"
+    )
+    return num_to_generate_in_pipeline
+
+
+def _create_generation_pipeline(
+    model: AutoModelForCausalLM, tokenizer: PreTrainedTokenizerFast
+) -> Pipeline:
+    if not isinstance(
+        model, PreTrainedModel
+    ):  # would like to check for AutoModelForCausalLM, but that doesn't work
+        raise TypeError(
+            f"model must be an AutoModelForCausalLM, but is {type(model)}"
+        )
+    if not isinstance(tokenizer, PreTrainedTokenizerFast):
+        raise TypeError(
+            f"tokenizer must be a PreTrainedTokenizerFast, but is {type(tokenizer)}"
+        )
+
+    pipe: Pipeline = pipeline(
+        "text-generation", model=model, tokenizer=tokenizer  # ,device=device
+    )
+    return pipe
+
+
+def _determine_max_num_tries(num_to_generate: int) -> int:
+    return max(int(num_to_generate) // 100, 10)
+
+
+def _determine_prompt(
+    tokenizer: PreTrainedTokenizerFast, fine_tuned: bool
+) -> str:
+    if fine_tuned:
+        prompt = BOS_TOKEN
+    else:
+        prompt = tokenizer.bos_token
+
+    return prompt
+
+
+def create_and_save_generation_config(
     model_file_path: Path,
     *,
     num_to_generate: int = DEFAULT_NUM_TO_GENERATE,
     max_length: Optional[int] = None,
-    num_beams: Optional[int] = 1,
-    # num_beam_groups: Optional[int] = 1,
-    temperature: Optional[float] = 1.0,
+    num_beams: int = 1,
+    temperature: float = 1.0,
 ) -> GenerationConfig:
     model = _load_model(model_file_path)
     tokenizer = _load_tokenizer(model_file_path)
-    fine_tuned: bool = _is_finetuned_model(tokenizer)
-    fine_tuned_str: str = "fine-tuned" if fine_tuned else "trained from scratch"
+    fine_tuned = _is_finetuned_model(tokenizer)
+    fine_tuned_str = "fine-tuned" if fine_tuned else "trained from scratch"
     logger.debug(f"Model assumed to be {fine_tuned_str}")
     max_length = _determine_max_length(model, max_length)
     stopping_criteria = _determine_stopping_criteria(tokenizer, fine_tuned)
@@ -285,14 +277,6 @@ def get_generation_config(
         early_stopping = True
     else:
         early_stopping = False
-
-    # if num_beam_groups > 1:
-    #     do_sample = False
-    #     diversity_penalty = DEFAULT_DIVERSITY_PENALTY
-    # else:
-    #     do_sample = True
-    #     diversity_penalty = 0.0
-
     do_sample = True
 
     if (model_file_path / DEFAULT_GENERATION_CONFIG_FILE_NAME).is_file():
@@ -304,8 +288,6 @@ def get_generation_config(
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=stopping_criteria,
             num_beams=num_beams,
-            # num_beam_groups=num_beam_groups,
-            # diversity_penalty=diversity_penalty,
             early_stopping=early_stopping,
             temperature=temperature,
             length_penalty=0.0,  # does neither promote nor penalize long sequences
@@ -318,18 +300,18 @@ def get_generation_config(
 
     else:
         generation_config = GenerationConfig(
-            do_sample=True,
+            do_sample=do_sample,
             num_return_sequences=num_to_generate_in_pipeline,
             max_new_tokens=max_length,
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=stopping_criteria,
             num_beams=num_beams,
+            early_stopping=early_stopping,
             temperature=temperature,
             length_penalty=0.0,  # does neither promote nor penalize long sequences
         )
 
     generation_config.save_pretrained(model_file_path)
-
     return generation_config
 
 
@@ -469,7 +451,6 @@ def generate_smiles(
             "smiles": column_smiles,
         }
     )
-
     return counter, df
 
 
@@ -491,6 +472,7 @@ def generate_smarts(
             for r in existing_reactions
             if _reaction.is_similar_to(r, "canonical")
         ]
+
         # If there are similar reactions, see if the reaction smarts itself is syntactically valid
         if len(_similar_reactions) > 0:
             rdBase.DisableLog("rdApp.error")
@@ -535,9 +517,7 @@ def generate_smarts(
             f"config must be a GenerationConfig, but is {type(config)}"
         )
     if not isinstance(pipe, Pipeline):
-        raise TypeError(
-            f"pipe must be a transformers.Pipeline, but is {type(pipe)}"
-        )
+        raise TypeError(f"pipe must be a Pipeline, but is {type(pipe)}")
     prompt = str(prompt)
     existing_file_path = Path(existing_file_path).resolve()
     assert int(num_to_generate) > 0
@@ -568,7 +548,6 @@ def generate_smarts(
 
     # Load existing reaction templates
     logger.info("Loading known reaction templates...")
-    # existing_smarts: set[str] = load_existing_smarts(existing_file_path)
     existing_reactions: list[Reaction] = load_existing_reaction_templates(
         existing_file_path
     )
@@ -689,7 +668,6 @@ def generate_smarts(
                         if s == reaction
                     ]
                 )
-
             progress.update(task, advance=1)
 
     counter.increment("feasible", len(smarts["all_feasible"]))
@@ -713,7 +691,7 @@ def generate_smarts(
     )
 
     # Some final checks
-    logger.info("Perform final plausibility checks...")
+    logger.info("Performing final plausibility checks...")
     assert len(smarts["all_valid"]) == len(smarts["all_known"]) + len(
         smarts["all_new"]
     )
@@ -758,7 +736,6 @@ def generate_smarts(
             # "works_with": column_works_with,
         }
     )
-
     return counter, df
 
 
@@ -781,13 +758,6 @@ def main() -> None:
         default=DEFAULT_NUM_BEAMS,
         help="the number of beams for beam search generation, default: '%(default)s' (no beam search).",
     )
-    # parser.add_argument(
-    #     "-g",
-    #     "--num_beam_groups",
-    #     type=int,
-    #     default=DEFAULT_NUM_BEAM_GROUPS,
-    #     help="The number of groups to divide beams into, default: '%(default)s'.",
-    # )
     parser.add_argument(
         "-k",
         "--known",
@@ -820,7 +790,7 @@ def main() -> None:
         "--output",
         type=Path,
         default=Path(DEFAULT_OUTPUT_FILE_PATH),
-        help="file path for the generated molecules or reaction templates, default: '%(default)s'.",
+        help="file path for the generated molecules or reaction templates, default (for this instance): '%(default)s'.",
     )
     parser.add_argument(
         "-t",
@@ -892,13 +862,6 @@ def main() -> None:
             f"Number of beams must be greater than 0, not {num_beams}"
         )
 
-    # num_beam_groups = args.num_beam_groups
-    # logger.debug(f"Number of beam groups: {num_beam_groups}")
-    # if num_beam_groups > num_beams:
-    #     logger.warning(f"Number of beam groups ({num_beam_groups}) is greater than number of beams ({num_beams}). "
-    #                    f"Setting number of beam groups to number of beams.")
-    #     num_beam_groups = num_beams
-
     temperature = args.temperature
     logger.debug(f"Temperature: {temperature}")
     if temperature <= 0:
@@ -908,12 +871,11 @@ def main() -> None:
 
     # Create text generation pipeline
     logger.info("Setting up generation configuration...")
-    generation_config = get_generation_config(
+    generation_config = create_and_save_generation_config(
         model_file_path,
         num_to_generate=num_to_generate,
         max_length=max_length,
         num_beams=num_beams,
-        # num_beam_groups=num_beam_groups,
         temperature=temperature,
     )
 
@@ -939,11 +901,7 @@ def main() -> None:
             num_to_generate=num_to_generate,
             max_num_tries=max_num_tries,
         )
-        #     model_file_path,
-        #     known_file_path,
-        #     num_to_generate,
-        #     max_length,
-        # )
+
     elif args.mode == "smarts":
         counter, df = generate_smarts(
             config=generation_config,
