@@ -41,6 +41,7 @@ from transformers import (  # type: ignore
 from molreactgen.helpers import (
     Tally,
     configure_logging,
+    create_file_link,
     determine_log_level,
     guess_project_root_dir,
     save_commandline_arguments,
@@ -57,13 +58,20 @@ GENERATED_DATA_DIR.mkdir(exist_ok=False, parents=True)
 ARGUMENTS_FILE_PATH = GENERATED_DATA_DIR / "generate_cl_args.json"
 DEFAULT_OUTPUT_FILE_PATH = GENERATED_DATA_DIR / "generated.csv"
 DEFAULT_GENERATION_CONFIG_FILE_NAME = "generation_config.json"
+CSV_STATS_FILE_NAME = GENERATED_DATA_DIR / "generation_stats.csv"
+JSON_STATS_FILE_NAME = GENERATED_DATA_DIR / "generation_stats.json"
+MODEL_LINK_DIR_NAME = GENERATED_DATA_DIR / "link_to_model"
+KNOWN_LINK_FILE_NAME = GENERATED_DATA_DIR / "link_to_known.csv"
+LATEST_LINK_FILE_NAME = (
+    GENERATED_DATA_DIR.parent / "link_to_latest_generated.csv"
+)
 CSV_ID_SPLITTER = " | "
 
 VALID_GENERATION_MODES = (
     "smiles",
     "smarts",
 )
-DEFAULT_NUM_TO_GENERATE: int = 1000
+DEFAULT_NUM_TO_GENERATE: int = 100
 MIN_NUM_TO_GENERATE: int = 20
 DEFAULT_NUM_BEAMS: int = 1
 DEFAULT_TEMPERATURE: float = 1.0
@@ -918,21 +926,23 @@ def main() -> None:
     else:
         raise ValueError(f"Invalid generation mode: {args.mode}")
 
+    # Display and save statistics
     logger.info("Generation statistics")
     logger.info(f"Absolute numbers:   {counter.get_count()}")
     logger.info(f"Absolute fractions: {counter.get_absolute_fraction()}")
     logger.info(f"Relative fractions: {counter.get_relative_fraction()}")
 
-    # TODO save statistics to file
-    # plus the file path to the model
-    # plus the file path to the known items
-    # plus the hash codes
+    counter.save_to_file(CSV_STATS_FILE_NAME, file_format="csv")
+    counter.save_to_file(JSON_STATS_FILE_NAME, file_format="json")
 
     # Save generated items
     logger.info(f"Saving generated {items_name} to {output_file_path}")
     df.to_csv(output_file_path, index=False)
 
-    # TODO save a symlink to the model in the output directory
+    # Create symlinks for better traceability and convenience
+    create_file_link(MODEL_LINK_DIR_NAME, model_file_path)
+    create_file_link(KNOWN_LINK_FILE_NAME, known_file_path)
+    create_file_link(LATEST_LINK_FILE_NAME, output_file_path)
 
 
 if __name__ == "__main__":
