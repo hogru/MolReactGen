@@ -39,7 +39,7 @@ from transformers import (  # type: ignore
 )
 
 from molreactgen.helpers import (
-    Counter,
+    Tally,
     configure_logging,
     determine_log_level,
     guess_project_root_dir,
@@ -323,7 +323,7 @@ def generate_smiles(
     existing_file_path: Path,
     num_to_generate: int,
     max_num_tries: int,
-) -> tuple[Counter, pd.DataFrame]:
+) -> tuple[Tally, pd.DataFrame]:
 
     # Validate arguments
     if not isinstance(config, GenerationConfig):
@@ -349,7 +349,7 @@ def generate_smiles(
         "pl_unique": set(),
         "pl_novel": set(),
     }
-    counter = Counter(["generated", "valid", "unique", "novel"])
+    counter = Tally(["generated", "valid", "unique", "novel"])
 
     # Load existing molecules
     logger.info("Loading known molecules...")
@@ -462,7 +462,7 @@ def generate_smarts(
     existing_file_path: Path,
     num_to_generate: int,
     max_num_tries: int,
-) -> tuple[Counter, pd.DataFrame]:
+) -> tuple[Tally, pd.DataFrame]:
     def get_reactions_with_feasible_products(
         _reaction: Reaction,
     ) -> list[Reaction]:
@@ -534,7 +534,7 @@ def generate_smarts(
         "pl_valid": set(),
         "pl_unique": set(),
     }
-    counter = Counter(
+    counter = Tally(
         [
             "generated",
             "valid",

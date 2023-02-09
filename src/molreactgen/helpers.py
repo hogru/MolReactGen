@@ -37,12 +37,11 @@ SIGNS_FOR_ROOT_DIR = (".git", "pyproject.toml", "setup.py", "setup.cfg")
 
 
 ###############################################################################
-# Counter, used during generation                                             #
+# Tally, used during generation                                             #
 ###############################################################################
 
 
-# TODO Refactor Counter class
-class Counter:
+class Tally:
     def __init__(self, counters: Union[Sequence[str], str]) -> None:
         if not isinstance(counters, Iterable):
             counters = [counters]
@@ -74,7 +73,7 @@ class Counter:
         if counter in self._counters:
             self._counters[counter] += increment
         else:
-            raise AttributeError(f"Counter {counter} not found")
+            raise AttributeError(f"Tally {counter} not found")
 
     @overload
     def get_count(self) -> dict[str, int]:
@@ -93,7 +92,7 @@ class Counter:
         elif counter in self._counters:
             counts = self._counters[counter]
         else:
-            raise AttributeError(f"Counter {counter} not found")
+            raise AttributeError(f"Tally {counter} not found")
 
         return counts
 
@@ -122,7 +121,7 @@ class Counter:
             else:
                 fractions = self._counters[counter] / base_value
         else:
-            raise AttributeError(f"Counter {counter} not found")
+            raise AttributeError(f"Tally {counter} not found")
 
         return fractions
 
@@ -158,9 +157,29 @@ class Counter:
             else:
                 fractions = count_values[idx] / count_values_one_up[idx]
         else:
-            raise AttributeError(f"Counter {counter} not found")
+            raise AttributeError(f"Tally {counter} not found")
 
         return fractions
+
+    # TODO implement this
+    def _save_to_csv(self, file_path: PathLike) -> None:
+        pass
+
+    # TODO implement this
+    def _save_to_json(self, file_path: PathLike) -> None:
+        pass
+
+    # TODO implement this
+    def save_to_file(
+        self, file_path: PathLike, file_format: str = "json"
+    ) -> None:
+        file_path = Path(file_path).resolve()
+        if file_format.upper() == "CSV":
+            self._save_to_csv(file_path)
+        elif file_format.upper() == "JSON":
+            self._save_to_json(file_path)
+        else:
+            raise ValueError(f"Unknown format {file_format}")
 
 
 ###############################################################################
@@ -223,7 +242,6 @@ def configure_logging(
     rotation: str = "1 day",
     retention: str = "7 days",
 ) -> None:
-
     # This is the default format used by loguru
     # default_console_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | " \
     #                          "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - " \

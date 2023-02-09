@@ -372,7 +372,7 @@ def get_modified_vocab(
 
     if not isinstance(modified_freq, Counter):
         raise TypeError(
-            f"modified_freq must of type Counter, but is {type(modified_freq)}"
+            f"modified_freq must of type Tally, but is {type(modified_freq)}"
         )
 
     vocab_original: dict[str, int] = tokenizer_original.get_vocab()
