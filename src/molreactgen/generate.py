@@ -43,6 +43,7 @@ from molreactgen.helpers import (
     configure_logging,
     determine_log_level,
     guess_project_root_dir,
+    save_commandline_arguments,
 )
 from molreactgen.molecule import Molecule, Reaction
 from molreactgen.tokenizer import BOS_TOKEN, EOS_TOKEN, PAD_TOKEN
@@ -53,6 +54,7 @@ GENERATED_DATA_DIR: Path = (
     PROJECT_ROOT_DIR / "data" / "generated" / f"{datetime.now():%Y-%m-%d_%H-%M}"
 )
 GENERATED_DATA_DIR.mkdir(exist_ok=False, parents=True)
+ARGUMENTS_FILE_PATH = GENERATED_DATA_DIR / "generate_cl_args.json"
 DEFAULT_OUTPUT_FILE_PATH = GENERATED_DATA_DIR / "generated.csv"
 DEFAULT_GENERATION_CONFIG_FILE_NAME = "generation_config.json"
 CSV_ID_SPLITTER = " | "
@@ -821,6 +823,7 @@ def main() -> None:
     # Configure logging
     log_level: int = determine_log_level(args.log_level)
     configure_logging(log_level)
+    save_commandline_arguments(args, ARGUMENTS_FILE_PATH, ("log_level",))
 
     # Prepare and check (global) variables
     if args.mode == "smiles":

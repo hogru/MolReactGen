@@ -29,6 +29,7 @@ from molreactgen.helpers import (
     get_device,
     get_num_workers,
     guess_project_root_dir,
+    save_commandline_arguments,
 )
 from molreactgen.molecule import canonicalize_molecules
 
@@ -56,6 +57,7 @@ T = TypeVar("T", bound=npt.NBitBase)
 # Global variables, defaults
 PROJECT_ROOT_DIR: Path = guess_project_root_dir()
 DEFAULT_OUTPUT_FILE_SUFFIX = "_evaluation.csv"
+ARGUMENTS_FILE_NAME = "evaluate_cl_args.json"
 # DEFAULT_OUTPUT_FILE_PATH = (
 #     f"../../data/generated/{datetime.now():%Y-%m-%d_%H-%M}_evaluation.csv"
 # )
@@ -371,6 +373,9 @@ def main() -> None:
     # Configure logging
     log_level: int = determine_log_level(args.log_level)
     configure_logging(log_level)
+    save_commandline_arguments(
+        args, Path(args.generated).parent / ARGUMENTS_FILE_NAME, ("log_level",)
+    )
 
     logger.heading("Evaluating molecules...")  # type: ignore
 
