@@ -7,14 +7,16 @@ Student ID: K08608294
 """
 
 
+import argparse
 import hashlib
 import inspect
+import json
 import logging
 import os
 import sys
 import warnings
 from functools import partialmethod
-from pathlib import Path
+from pathlib import Path, PosixPath
 from types import FrameType
 from typing import Any, Generator, Iterable, Optional, Sequence, Union, overload
 
@@ -365,29 +367,44 @@ def get_hash_code(
     return int(hash_fn.hexdigest(), 16)
 
 
-# Not used anymore
-# def create_file_link(
-#     link_file_path: PathLike, target_file_path: PathLike, hardlink: bool = False
-# ) -> bool:
-#     link_file_path = Path(link_file_path)
-#     target_file_path = Path(target_file_path).resolve()
-#     link_file_path.unlink(missing_ok=True)
-#     if hardlink:
-#         # deprecated in 3.10, use link_file_path.hardlink_to(target_file_path) instead
-#         target_file_path.link_to(link_file_path)
-#     else:  # symlink
-#         link_file_path.symlink_to(target_file_path)
-#
-#     return True
+class ArgsEncoder(json.JSONEncoder):
+    def default(self, x):
+        if isinstance(x, PosixPath):
+            return x.as_posix()
+        else:
+            return super().default(x)
 
 
-# Just replace with .resolve()?!
-# def get_original_file_path(link_file_path: PathLike) -> Path:
-#     link_file_path = Path(link_file_path)
-#     if link_file_path.is_symlink():
-#         return Path(link_file_path.readlink())
-#     else:
-#         return Path(link_file_path)
+def save_commandline_arguments(
+    args: argparse.Namespace,
+    file_path: PathLike,
+    keys_to_remove: Optional[Iterable[str]] = None,
+) -> None:
+    """Save commandline arguments to a file."""
+    dict_to_save = dict(args.__dict__)
+    if keys_to_remove is not None:
+        for key in keys_to_remove:
+            dict_to_save.pop(key, None)
+    file_path = Path(file_path).resolve()
+    logger.debug(f"Saving commandline arguments to {file_path}...")
+    with open(file_path, "w") as f:
+        json.dump(dict_to_save, f, cls=ArgsEncoder, indent=4, sort_keys=True)
+
+
+def create_file_link(
+    link_file_path: PathLike,
+    target_file_path: PathLike,
+    hard_link: bool = False,
+):
+    link_file_path = Path(link_file_path)
+    target_file_path = Path(target_file_path).resolve()
+    link_file_path.unlink(missing_ok=True)
+
+    if hard_link:
+        # deprecated in 3.10, use link_file_path.hardlink_to(target_file_path) instead
+        target_file_path.link_to(link_file_path)
+    else:  # symlink
+        link_file_path.symlink_to(target_file_path)
 
 
 ###############################################################################
@@ -429,16 +446,3 @@ def get_device_type() -> str:
         torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"
     )
     return device_type
-
-
-# Not used anymore
-# def try_gpu(i=0):
-#     if torch.cuda.device_count() >= i + 1:
-#         return torch.device(f'cuda:{i}')
-#     return torch.device('cpu')
-#
-#
-# def try_all_gpus():
-#     devices = [torch.device(f'cuda:{i}') for i in range(torch.cuda.device_count())]
-#     return devices if devices else [torch.device('cpu')]
-#
