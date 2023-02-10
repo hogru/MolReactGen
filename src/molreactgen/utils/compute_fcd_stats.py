@@ -9,7 +9,7 @@ Student ID: K08608294
 import argparse
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from codetiming import Timer
 from humanfriendly import format_timespan  # type: ignore
@@ -21,7 +21,7 @@ from molreactgen.evaluate_fcd import (
 )
 from molreactgen.molecule import canonicalize_molecules
 
-DEFAULT_FCD_STATS_FILE: str = "./fcd_stats.pkl"
+DEFAULT_FCD_STATS_FILE: Final = "./fcd_stats.pkl"
 
 
 def main() -> None:

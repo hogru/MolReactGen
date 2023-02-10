@@ -8,7 +8,7 @@ Student ID: K08608294
 import argparse
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union
+from typing import Final, Optional, Union
 
 import pandas as pd  # type: ignore
 from loguru import logger
@@ -54,27 +54,31 @@ GENERATED_DATA_DIR: Path = (
     PROJECT_ROOT_DIR / "data" / "generated" / f"{datetime.now():%Y-%m-%d_%H-%M}"
 )
 GENERATED_DATA_DIR.mkdir(exist_ok=False, parents=True)
-ARGUMENTS_FILE_PATH = GENERATED_DATA_DIR / "generate_cl_args.json"
-DEFAULT_SMILES_OUTPUT_FILE_PATH = GENERATED_DATA_DIR / "generated_smiles.csv"
-DEFAULT_SMARTS_OUTPUT_FILE_PATH = GENERATED_DATA_DIR / "generated_smarts.csv"
-DEFAULT_GENERATION_CONFIG_FILE_NAME = "generation_config.json"
-CSV_STATS_FILE_NAME = GENERATED_DATA_DIR / "generation_stats.csv"
-JSON_STATS_FILE_NAME = GENERATED_DATA_DIR / "generation_stats.json"
-MODEL_LINK_DIR_NAME = GENERATED_DATA_DIR / "link_to_model"
-KNOWN_LINK_FILE_NAME = GENERATED_DATA_DIR / "link_to_known.csv"
-LATEST_LINK_FILE_NAME = (
+ARGUMENTS_FILE_PATH: Final = GENERATED_DATA_DIR / "generate_cl_args.json"
+DEFAULT_SMILES_OUTPUT_FILE_PATH: Final = (
+    GENERATED_DATA_DIR / "generated_smiles.csv"
+)
+DEFAULT_SMARTS_OUTPUT_FILE_PATH: Final = (
+    GENERATED_DATA_DIR / "generated_smarts.csv"
+)
+DEFAULT_GENERATION_CONFIG_FILE_NAME: Final = "generation_config.json"
+CSV_STATS_FILE_NAME: Final = GENERATED_DATA_DIR / "generation_stats.csv"
+JSON_STATS_FILE_NAME: Final = GENERATED_DATA_DIR / "generation_stats.json"
+MODEL_LINK_DIR_NAME: Final = GENERATED_DATA_DIR / "link_to_model"
+KNOWN_LINK_FILE_NAME: Final = GENERATED_DATA_DIR / "link_to_known.csv"
+LATEST_LINK_FILE_NAME: Final = (
     GENERATED_DATA_DIR.parent / "link_to_latest_generated.csv"
 )
-CSV_ID_SPLITTER = " | "
+CSV_ID_SPLITTER: Final = " | "
 
-VALID_GENERATION_MODES = (
+VALID_GENERATION_MODES: Final = (
     "smiles",
     "smarts",
 )
-DEFAULT_NUM_TO_GENERATE: int = 100
-MIN_NUM_TO_GENERATE: int = 20
-DEFAULT_NUM_BEAMS: int = 1
-DEFAULT_TEMPERATURE: float = 1.0
+DEFAULT_NUM_TO_GENERATE: Final = 100
+MIN_NUM_TO_GENERATE: Final = 20
+DEFAULT_NUM_BEAMS: Final = 1
+DEFAULT_TEMPERATURE: Final = 1.0
 
 
 def load_existing_molecules(

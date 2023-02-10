@@ -2,6 +2,7 @@
 import argparse
 from collections.abc import Callable
 from pathlib import Path
+from typing import Final
 
 import pandas as pd  # type: ignore
 import pooch  # type: ignore
@@ -25,10 +26,10 @@ try:
 except ImportError:
     progressbar = False
 
-PROJECT_ROOT_DIR: Path = guess_project_root_dir()
-RAW_DATA_DIR: Path = PROJECT_ROOT_DIR / "data" / "raw"
-PREP_DATA_DIR: Path = PROJECT_ROOT_DIR / "data" / "prep"
-GZIP_FILE_EXTENSIONS = (".xz", ".gz", ".bz2")
+PROJECT_ROOT_DIR: Final = guess_project_root_dir()
+RAW_DATA_DIR: Final = PROJECT_ROOT_DIR / "data" / "raw"
+PREP_DATA_DIR: Final = PROJECT_ROOT_DIR / "data" / "prep"
+GZIP_FILE_EXTENSIONS: Final = (".xz", ".gz", ".bz2")
 
 VALID_DATASETS: tuple[str, ...] = (
     "all",

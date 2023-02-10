@@ -10,8 +10,9 @@ import logging
 import re
 import tempfile
 from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Final, Optional, Sequence, Union
 
 # Most of Hugging Face has poor type hints, trying to avoid mypy errors
 import transformers  # type: ignore
@@ -28,16 +29,16 @@ from tokenizers.trainers import (  # type: ignore
 from transformers import BatchEncoding, PreTrainedTokenizerFast
 
 # Tokenizer related
-DATASET_COLUMN_NAME = "items"
-DELETED_TOKEN_PREFIX = "§§§_"
-BOS_TOKEN: str = "^"
-EOS_TOKEN: str = "_"
-PAD_TOKEN: str = " "
-UNK_TOKEN: str = "§"
-ADD_TOKEN: str = "°"  # Not sure if needed at all; might be used to map special model tokens to like CLS, SEP etc.
-MODEL_MAX_LENGTH = 1024
+DATASET_COLUMN_NAME: Final = "items"
+DELETED_TOKEN_PREFIX: Final = "§§§_"
+BOS_TOKEN: Final = "^"
+EOS_TOKEN: Final = "_"
+PAD_TOKEN: Final = " "
+UNK_TOKEN: Final = "§"
+ADD_TOKEN: Final = "°"  # Not sure if needed at all; might be used to map special model tokens to like CLS, SEP etc.
+MODEL_MAX_LENGTH: Final = 1024
 
-REGEX_INPUT = {
+REGEX_INPUT: Final = {
     # everything within brackets becomes a single token; might play with that, alternative below
     "bracket": r"\[[^\]]+]",
     # "bracket": r"\[|\]",
@@ -83,9 +84,9 @@ REGEX_INPUT = {
 }
 
 # replace() is just a safety net against double "|" in the RegEx
-REGEX_PATTERN_SMARTS = "|".join(REGEX_INPUT.values()).replace("||", "|")
-REGEX_PATTERN_ATOM = REGEX_PATTERN_SMARTS.replace(r"\[[^\]]+]", r"\[|\]")
-MIN_VOCAB_SIZE_UNIGRAM = 100
+REGEX_PATTERN_SMARTS: Final = "|".join(REGEX_INPUT.values()).replace("||", "|")
+REGEX_PATTERN_ATOM: Final = REGEX_PATTERN_SMARTS.replace(r"\[[^\]]+]", r"\[|\]")
+MIN_VOCAB_SIZE_UNIGRAM: Final = 100
 
 
 logger = logging.getLogger(__name__)
@@ -317,7 +318,7 @@ def get_tokenizer(
 # there is no Sequence of post processors
 # Add BOS and EOS to the data instead
 def enclose_function(
-    batch: dict[str, list[str]],  # list[Union[str, Sequence[str]]]],
+    batch: Mapping[str, list[str]],  # list[Union[str, Sequence[str]]]],
     start_token: str,
     end_token: str,
 ) -> dict[str, list[str]]:
@@ -328,7 +329,7 @@ def enclose_function(
 
 
 def tokenize_function(
-    batch: dict[str, list[Union[str, Sequence[str]]]],
+    batch: Mapping[str, list[Union[str, Sequence[str]]]],
     tokenizer: transformers.PreTrainedTokenizerFast,
 ) -> BatchEncoding:
     # since this will be pickled to avoid _LazyModule error in Hasher force logger loading before tokenize_function

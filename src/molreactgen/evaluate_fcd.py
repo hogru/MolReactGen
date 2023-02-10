@@ -11,7 +11,7 @@ import pickle
 from collections.abc import Mapping, Sequence
 from math import exp
 from pathlib import Path
-from typing import Optional, TypeVar
+from typing import Final, Optional, TypeVar
 
 import numpy as np
 import numpy.typing as npt
@@ -36,10 +36,10 @@ T = TypeVar("T", bound=npt.NBitBase)
 
 # Global variables, defaults
 PROJECT_ROOT_DIR: Path = guess_project_root_dir()
-DEFAULT_OUTPUT_FILE_SUFFIX = "_evaluation.csv"
-ARGUMENTS_FILE_NAME = "evaluate_cl_args.json"
+DEFAULT_OUTPUT_FILE_SUFFIX: Final = "_evaluation.csv"
+ARGUMENTS_FILE_NAME: Final = "evaluate_cl_args.json"
 
-VALID_EVALUATION_MODES = [
+VALID_EVALUATION_MODES: Final = [
     "reference",
     "stats",
 ]

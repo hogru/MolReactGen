@@ -5,6 +5,7 @@ Causal language modeling (CLM) with a transformer decoder model
 Author: Stephan Holzgruber
 Student ID: K08608294
 """
+import logging
 import re
 from collections.abc import (  # Callable,; Iterator,; MutableMapping,
     Iterable,
@@ -17,6 +18,9 @@ from typing import Any, Literal, Optional, Union, overload
 from rdkit import Chem, rdBase  # type: ignore
 
 from molreactgen.helpers import get_num_workers
+
+logger = logging.getLogger(__name__)
+
 
 # TODO This could/should be refactored in the following ways:
 # - allow canonicalize_template() to take a list of templates and call canonicalize_molecules() internally

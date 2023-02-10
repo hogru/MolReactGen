@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Final, Optional, Union
 
 # Most of Hugging Face has poor type hints, trying to avoid mypy errors
 import datasets
@@ -76,7 +76,7 @@ from molreactgen.tokenizer import (
 ###############################################################################
 
 # Check Hugging Face versions (only)
-hint: str = "To fix: Install package requirements with poetry install"
+hint = "To fix: Install package requirements with poetry install"
 check_min_version("4.24.0")
 require_version("datasets>=1.8.0", hint)
 require_version("evaluate>=0.3.0", hint)
@@ -99,11 +99,11 @@ os.environ["WANDB_LOG_MODEL"] = "true"
 ###############################################################################
 
 # Data related
-HUB_MODEL_ID = "hogru/MolReactGen"
+HUB_MODEL_ID: Final = "hogru/MolReactGen"
 
 # Model related
-MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
-MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+MODEL_CONFIG_CLASSES: Final = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
+MODEL_TYPES: Final = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
 # Dataclasses for command line arguments
