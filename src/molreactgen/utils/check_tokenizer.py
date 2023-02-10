@@ -6,17 +6,12 @@ Author: Stephan Holzgruber
 Student ID: K08608294
 """
 import argparse
-from importlib import reload
 from pathlib import Path
 
+import pandas as pd  # type: ignore
 import transformers  # type: ignore
 
-import molreactgen.train
-
-reload(molreactgen.train)
-import pandas as pd  # type: ignore
-
-from molreactgen.train import get_tokenizer
+from molreactgen.tokenizer import get_tokenizer
 
 VALID_PRE_TOKENIZERS: tuple[str, ...] = (
     "char",

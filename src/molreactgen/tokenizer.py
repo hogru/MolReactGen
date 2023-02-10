@@ -5,7 +5,6 @@ Causal language modeling (CLM) with a transformer decoder model
 Author: Stephan Holzgruber
 Student ID: K08608294
 """
-
 import json
 import logging
 import re
