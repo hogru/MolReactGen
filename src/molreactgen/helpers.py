@@ -5,8 +5,6 @@ Causal language modeling (CLM) with a transformer decoder model
 Author: Stephan Holzgruber
 Student ID: K08608294
 """
-
-
 import argparse
 import hashlib
 import inspect
@@ -16,14 +14,13 @@ import os
 import sys
 import warnings
 from functools import partialmethod
+from os import PathLike
 from pathlib import Path, PosixPath
 from types import FrameType
 from typing import Any, Generator, Iterable, Optional, Sequence, Union, overload
 
 import torch
 from loguru import logger
-
-from molreactgen.config import PathLike
 
 LOG_LEVELS = (
     logging.DEBUG,
@@ -162,16 +159,16 @@ class Tally:
         return fractions
 
     # TODO implement this
-    def _save_to_csv(self, file_path: PathLike) -> None:
+    def _save_to_csv(self, file_path: PathLike[str]) -> None:
         pass
 
     # TODO implement this
-    def _save_to_json(self, file_path: PathLike) -> None:
+    def _save_to_json(self, file_path: PathLike[str]) -> None:
         pass
 
     # TODO implement this
     def save_to_file(
-        self, file_path: PathLike, file_format: str = "json"
+        self, file_path: PathLike[str], file_format: str = "json"
     ) -> None:
         file_path = Path(file_path).resolve()
         if file_format.upper() == "CSV":
@@ -237,8 +234,8 @@ def configure_logging(
     console_format: Optional[str] = None,
     file_format: Optional[str] = None,
     file_log_level: Optional[int] = None,
-    log_dir: Optional[PathLike] = None,
-    log_file: Optional[PathLike] = None,
+    log_dir: Optional[PathLike[str]] = None,
+    log_file: Optional[PathLike[str]] = None,
     rotation: str = "1 day",
     retention: str = "7 days",
 ) -> None:
@@ -320,7 +317,7 @@ def configure_logging(
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
     logger.debug(
-        f"Logging with log level {log_level} to file {log_file} with rotation {rotation} and retention {retention}"
+        f"Logging with log level {log_level} to {log_file} with rotation {rotation} and retention {retention}"
     )
 
 
@@ -330,7 +327,7 @@ def configure_logging(
 
 
 def guess_project_root_dir(
-    caller_file_path: Optional[PathLike] = None,
+    caller_file_path: Optional[PathLike[str]] = None,
     signs_for_root_dir: Iterable[str] = SIGNS_FOR_ROOT_DIR,
 ) -> Path:
     """Guess the root directory of the project."""
@@ -386,7 +383,7 @@ def get_hash_code(
 
 
 class ArgsEncoder(json.JSONEncoder):
-    def default(self, x):
+    def default(self, x: Any) -> Any:
         if isinstance(x, PosixPath):
             return x.as_posix()
         else:
@@ -395,7 +392,7 @@ class ArgsEncoder(json.JSONEncoder):
 
 def save_commandline_arguments(
     args: argparse.Namespace,
-    file_path: PathLike,
+    file_path: PathLike[str],
     keys_to_remove: Optional[Iterable[str]] = None,
 ) -> None:
     """Save commandline arguments to a file."""
@@ -404,25 +401,27 @@ def save_commandline_arguments(
         for key in keys_to_remove:
             dict_to_save.pop(key, None)
     file_path = Path(file_path).resolve()
-    logger.debug(f"Saving commandline arguments to {file_path}...")
+    logger.debug(f"Saving command-line arguments to {file_path}...")
     with open(file_path, "w") as f:
         json.dump(dict_to_save, f, cls=ArgsEncoder, indent=4, sort_keys=True)
 
 
 def create_file_link(
-    link_file_path: PathLike,
-    target_file_path: PathLike,
+    from_file_path: PathLike[str],
+    to_file_path: PathLike[str],
     hard_link: bool = False,
-):
-    link_file_path = Path(link_file_path)
-    target_file_path = Path(target_file_path).resolve()
-    link_file_path.unlink(missing_ok=True)
+) -> None:
+    from_file_path = Path(from_file_path)
+    to_file_path = Path(to_file_path).resolve()
+    if not to_file_path.exists():
+        raise FileNotFoundError(f"File {to_file_path} does not exist")
+    from_file_path.unlink(missing_ok=True)
 
     if hard_link:
-        # deprecated in 3.10, use link_file_path.hardlink_to(target_file_path) instead
-        target_file_path.link_to(link_file_path)
+        # deprecated in 3.10, use from_file_path.hardlink_to(to_file_path) instead
+        to_file_path.link_to(from_file_path)
     else:  # symlink
-        link_file_path.symlink_to(target_file_path)
+        from_file_path.symlink_to(to_file_path)
 
 
 ###############################################################################

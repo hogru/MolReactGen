@@ -5,41 +5,18 @@ Causal language modeling (CLM) with a transformer decoder model
 Author: Stephan Holzgruber
 Student ID: K08608294
 """
-
-
-# import operator
-# import pickle
 import re
-
-# import reprlib
 from collections.abc import (  # Callable,; Iterator,; MutableMapping,
     Iterable,
     Sequence,
 )
 from functools import cached_property, partial
-
-# from importlib import reload
 from multiprocessing import Pool
-
-# from pathlib import Path
-# from statistics import mean, median
 from typing import Any, Literal, Optional, Union, overload
 
-# from loguru import logger
 from rdkit import Chem, rdBase  # type: ignore
 
-# reload(molgen.config)
-# reload(molgen.helpers)
-# reload(molgen.tokenizer)
-# from molgen.config import PathLike
 from molreactgen.helpers import get_num_workers
-
-# import molgen.config
-# import molgen.helpers
-# import molgen.tokenizer
-
-
-# from molgen.tokenizer import Tokenizer, __tokenizer_version__
 
 # TODO This could/should be refactored in the following ways:
 # - allow canonicalize_template() to take a list of templates and call canonicalize_molecules() internally
@@ -355,6 +332,9 @@ class Molecule:
             self.notation: str = "SMILES"
         else:
             raise ValueError(f"{notation} is not a valid molecule notation")
+
+        self.unique: bool = False
+        self.novel: bool = False
 
     @property
     def smiles(self) -> str:

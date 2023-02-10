@@ -5,7 +5,6 @@ Causal language modeling (CLM) with a transformer decoder model
 Author: Stephan Holzgruber
 Student ID: K08608294
 """
-
 import argparse
 from datetime import datetime
 from pathlib import Path
@@ -56,7 +55,8 @@ GENERATED_DATA_DIR: Path = (
 )
 GENERATED_DATA_DIR.mkdir(exist_ok=False, parents=True)
 ARGUMENTS_FILE_PATH = GENERATED_DATA_DIR / "generate_cl_args.json"
-DEFAULT_OUTPUT_FILE_PATH = GENERATED_DATA_DIR / "generated.csv"
+DEFAULT_SMILES_OUTPUT_FILE_PATH = GENERATED_DATA_DIR / "generated_smiles.csv"
+DEFAULT_SMARTS_OUTPUT_FILE_PATH = GENERATED_DATA_DIR / "generated_smarts.csv"
 DEFAULT_GENERATION_CONFIG_FILE_NAME = "generation_config.json"
 CSV_STATS_FILE_NAME = GENERATED_DATA_DIR / "generation_stats.csv"
 JSON_STATS_FILE_NAME = GENERATED_DATA_DIR / "generation_stats.json"
@@ -278,6 +278,8 @@ def create_and_save_generation_config(
     fine_tuned = _is_finetuned_model(tokenizer)
     fine_tuned_str = "fine-tuned" if fine_tuned else "trained from scratch"
     logger.debug(f"Model assumed to be {fine_tuned_str}")
+    # At least one atom plus the EOS token(s)
+    min_length = 2 if fine_tuned else 1
     max_length = _determine_max_length(model, max_length)
     stopping_criteria = _determine_stopping_criteria(tokenizer, fine_tuned)
     num_to_generate_in_pipeline = _determine_num_to_generate_in_pipeline(
@@ -294,6 +296,7 @@ def create_and_save_generation_config(
             model_file_path,
             do_sample=do_sample,
             num_return_sequences=num_to_generate_in_pipeline,
+            min_new_tokens=min_length,
             max_new_tokens=max_length,
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=stopping_criteria,
@@ -312,6 +315,7 @@ def create_and_save_generation_config(
         generation_config = GenerationConfig(
             do_sample=do_sample,
             num_return_sequences=num_to_generate_in_pipeline,
+            min_new_tokens=min_length,
             max_new_tokens=max_length,
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=stopping_criteria,
@@ -333,8 +337,7 @@ def generate_smiles(
     existing_file_path: Path,
     num_to_generate: int,
     max_num_tries: int,
-) -> tuple[Tally, pd.DataFrame]:
-
+) -> tuple[Tally, pd.DataFrame, pd.DataFrame]:
     # Validate arguments
     if not isinstance(config, GenerationConfig):
         raise TypeError(
@@ -350,6 +353,9 @@ def generate_smiles(
     assert int(max_num_tries) > 0
 
     # Setup variables
+    all_smiles: list[
+        Molecule
+    ] = []  # need a list instead of a set for master list
     smiles: dict[str, set[Molecule]] = {
         "all_existing": set(),
         "all_valid": set(),
@@ -409,7 +415,12 @@ def generate_smiles(
                 .replace(EOS_TOKEN, "")
                 for s in generated
             }
-            smiles["pl_generated"] = {Molecule(s) for s in generated}
+            # I ask for at least one new token in the generation config, but
+            # the pipeline still returns empty strings sometimes; therefore the if len(s) > 0
+            smiles["pl_generated"] = {
+                Molecule(s) for s in generated if len(s) > 0
+            }
+            all_smiles.extend(smiles["pl_generated"])
             smiles["pl_valid"] = {s for s in smiles["pl_generated"] if s.valid}
 
             smiles["pl_unique"] = smiles["pl_valid"] - smiles["all_valid"]
@@ -450,18 +461,43 @@ def generate_smiles(
 
     # Some final checks
     logger.debug("Performing final plausibility checks...")
+    assert len(all_smiles) >= len(smiles["all_valid"])
     assert len(smiles["all_valid"]) >= len(smiles["all_novel"])
     assert len(smiles["all_novel"]) >= num_to_generate
 
     # Generate output
     logger.debug("Generating output...")
+    # That is a bit redundant but came later and I did not want to change the generation code too much
+    for s in all_smiles:
+        s.unique = all_smiles.count(s) == 1
+        s.novel = s not in smiles["all_existing"]
+
+    # Generate the "simple" output
+    # TODO Might replace with full output later (once I know how to "correctly" evaluate)
     column_smiles = [s.canonical_smiles for s in smiles["all_novel"]]
-    df = pd.DataFrame(
+    df_small = pd.DataFrame(
         {
             "smiles": column_smiles,
         }
     )
-    return counter, df
+
+    # Generate the full output
+    column_smiles = [s.smiles for s in all_smiles]
+    column_canonical_smiles = [s.canonical_smiles for s in all_smiles]
+    column_valid = [s.valid for s in all_smiles]
+    column_unique = [s.unique for s in all_smiles]
+    column_novel = [s.novel for s in all_smiles]
+    df_full = pd.DataFrame(
+        {
+            "smiles": column_smiles,
+            "canonical_smiles": column_canonical_smiles,
+            "valid": column_valid,
+            "unique": column_unique,
+            "novel": column_novel,
+        }
+    )
+
+    return counter, df_small, df_full
 
 
 def generate_smarts(
@@ -472,7 +508,7 @@ def generate_smarts(
     existing_file_path: Path,
     num_to_generate: int,
     max_num_tries: int,
-) -> tuple[Tally, pd.DataFrame]:
+) -> tuple[Tally, pd.DataFrame, pd.DataFrame]:
     def get_reactions_with_feasible_products(
         _reaction: Reaction,
     ) -> list[Reaction]:
@@ -746,7 +782,9 @@ def generate_smarts(
             # "works_with": column_works_with,
         }
     )
-    return counter, df
+
+    # At the moment the two outputs are identical, we might change that later
+    return counter, df, df
 
 
 @logger.catch
@@ -793,14 +831,18 @@ def main() -> None:
         "--num",
         type=int,
         default=DEFAULT_NUM_TO_GENERATE,
-        help="number of molecules or reaction templates to generate, default: '%(default)s'.",
+        help="minimum number of molecules or reaction templates to generate, default: '%(default)s'.",
     )
     parser.add_argument(
         "-o",
         "--output",
         type=Path,
-        default=Path(DEFAULT_OUTPUT_FILE_PATH),
-        help="file path for the generated molecules or reaction templates, default (for this instance): '%(default)s'.",
+        # default=Path(DEFAULT_OUTPUT_FILE_PATH),
+        default=None,
+        # help="file path for the generated molecules or reaction templates,
+        # default (for this instance): '%(default)s'.",
+        help=f"file path for the generated molecules or reaction templates, default: "
+        f"'{GENERATED_DATA_DIR}/generated_*.csv'.",
     )
     parser.add_argument(
         "-t",
@@ -857,14 +899,44 @@ def main() -> None:
             f"Known items in {known_file_path.as_posix()} not found"
         )
 
-    output_file_path = Path(args.output).resolve()
-    logger.debug(f"Output file path: {output_file_path}")
-    output_file_path.parent.mkdir(parents=True, exist_ok=True)
+    if args.output is None:
+        if args.mode == "smiles":
+            output_file_path_short = (
+                GENERATED_DATA_DIR / "generated_smiles_novel_only.csv"
+            )
+            output_file_path_full = GENERATED_DATA_DIR / "generated_smiles.csv"
+        else:
+            output_file_path_short = (
+                GENERATED_DATA_DIR
+                / "generated_reaction_templates_redundant.csv"
+            )
+            output_file_path_full = (
+                GENERATED_DATA_DIR / "generated_reaction_templates.csv"
+            )
+    else:
+        output_file_path_full = Path(args.output).resolve()
+        if args.mode == "smiles":
+            output_file_path_short = output_file_path_full.with_stem(
+                output_file_path_full.stem + "_novel_only"
+            )
+        else:
+            output_file_path_short = output_file_path_full.with_stem(
+                output_file_path_full.stem + "_redundant"
+            )
+
+    logger.debug(f"Output file path: {output_file_path_full}")
+    logger.debug(f"Secondary output file path: {output_file_path_short}")
+
+    output_file_path_short.parent.mkdir(parents=True, exist_ok=True)
+    output_file_path_full.parent.mkdir(parents=True, exist_ok=True)
 
     num_to_generate = args.num
-    logger.debug(f"Number of {items_name} to generate: {num_to_generate}")
+    # logger.debug(f"Number of {items_name} to generate: {num_to_generate}")
     max_length = args.length
-    logger.debug(f"Maximum length of generated {items_name}: {max_length}")
+    # logger.debug(f"Maximum length of generated {items_name}: {max_length}")
+    logger.info(
+        f"Generate ≥ {num_to_generate} {items_name} with a length ≤ {max_length}"
+    )
 
     num_beams = args.num_beams
     logger.debug(f"Number of beams: {num_beams}")
@@ -904,7 +976,7 @@ def main() -> None:
     max_num_tries = _determine_max_num_tries(num_to_generate)
 
     if args.mode == "smiles":
-        counter, df = generate_smiles(
+        counter, df_short, df_full = generate_smiles(
             config=generation_config,
             pipe=pipe,
             prompt=prompt,
@@ -914,7 +986,7 @@ def main() -> None:
         )
 
     elif args.mode == "smarts":
-        counter, df = generate_smarts(
+        counter, df_short, df_full = generate_smarts(
             config=generation_config,
             pipe=pipe,
             prompt=prompt,
@@ -936,13 +1008,17 @@ def main() -> None:
     counter.save_to_file(JSON_STATS_FILE_NAME, file_format="json")
 
     # Save generated items
-    logger.info(f"Saving generated {items_name} to {output_file_path}")
-    df.to_csv(output_file_path, index=False)
+    logger.info(
+        f"Saving generated {items_name} to {output_file_path_short} "
+        f"and {output_file_path_full}..."
+    )
+    df_short.to_csv(output_file_path_short, index=False)
+    df_full.to_csv(output_file_path_full, index=False)
 
     # Create symlinks for better traceability and convenience
     create_file_link(MODEL_LINK_DIR_NAME, model_file_path)
     create_file_link(KNOWN_LINK_FILE_NAME, known_file_path)
-    create_file_link(LATEST_LINK_FILE_NAME, output_file_path)
+    create_file_link(LATEST_LINK_FILE_NAME, output_file_path_full)
 
 
 if __name__ == "__main__":

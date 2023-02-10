@@ -6,11 +6,9 @@ Author: Stephan Holzgruber
 Student ID: K08608294
 """
 import argparse
+import json
 import pickle
 from collections.abc import Mapping, Sequence
-
-# from datetime import datetime
-# from importlib import reload
 from math import exp
 from pathlib import Path
 from typing import Optional, TypeVar
@@ -22,6 +20,7 @@ from codetiming import Timer
 from humanfriendly import format_timespan  # type: ignore
 from loguru import logger
 
+# TODO add type hints to my fork of fcd_torch
 from fcd_torch.fcd_torch.fcd import FCD
 from molreactgen.helpers import (
     configure_logging,
@@ -33,34 +32,12 @@ from molreactgen.helpers import (
 )
 from molreactgen.molecule import canonicalize_molecules
 
-# import molreactgen.config
-# import molreactgen.helpers
-# import molreactgen.molecule
-#
-# reload(molreactgen.config)
-# reload(molreactgen.helpers)
-# reload(molreactgen.molecule)
-
-
-# try:
-#     # noinspection PyUnresolvedReferences
-#     import fcd
-#     FCD_AVAILABLE = True
-# except ImportError:
-#     FCD_AVAILABLE = False
-#     from molgen.fcd_torch.fcd_torch import FCD  # type: ignore
-
-
 T = TypeVar("T", bound=npt.NBitBase)
-
 
 # Global variables, defaults
 PROJECT_ROOT_DIR: Path = guess_project_root_dir()
 DEFAULT_OUTPUT_FILE_SUFFIX = "_evaluation.csv"
 ARGUMENTS_FILE_NAME = "evaluate_cl_args.json"
-# DEFAULT_OUTPUT_FILE_PATH = (
-#     f"../../data/generated/{datetime.now():%Y-%m-%d_%H-%M}_evaluation.csv"
-# )
 
 VALID_EVALUATION_MODES = [
     "reference",
@@ -68,7 +45,10 @@ VALID_EVALUATION_MODES = [
 ]
 
 
-def read_molecules_from_file(file: Path) -> list[str]:
+def read_molecules_from_file(
+    file: Path, num_molecules: Optional[int] = None
+) -> list[str]:
+    # Cope with different column names
     molecules_df: pd.DataFrame
     try:
         molecules_df = pd.read_csv(file, usecols=["canonical_smiles"])
@@ -80,6 +60,15 @@ def read_molecules_from_file(file: Path) -> list[str]:
 
     molecules: list[str] = molecules_df.dropna().values.squeeze()
 
+    # If num_molecules is provided, only return the first num_molecules
+    if num_molecules is not None:
+        if num_molecules > len(molecules):
+            raise ValueError(
+                f"The number of molecules to be evaluated ({num_molecules:,d}) is greater than "
+                f"the number of generated molecules ({len(molecules)})"
+            )
+        molecules = molecules[:num_molecules]
+
     return molecules
 
 
@@ -87,22 +76,8 @@ def get_stats_from_molecules(
     molecules: Sequence[str],
     canonicalize: bool = True,
 ) -> dict[str, "np.floating[T]"]:
-    # if FCD_AVAILABLE:
-    #     if canonicalize:
-    #         molecules = canonicalize_molecules(molecules)
-    #     model = fcd.load_ref_model()
-    #     activations = fcd.get_predictions(model, molecules)
-    #     mu = np.mean(activations, axis=0)
-    #     sigma = np.cov(activations.T)
-    #     stats = {"mu": mu, "sigma": sigma}
-    #
-    # else:
-    #     fcd_fn = _get_fcd_instance(canonicalize=canonicalize)
-    #     stats = fcd_fn.precalc(molecules)
-
     fcd_fn = _get_fcd_instance(canonicalize=canonicalize)
     stats: dict[str, "np.floating[T]"] = fcd_fn.precalc(molecules)
-
     return stats
 
 
@@ -127,7 +102,6 @@ def get_stats_from_file(file: Path) -> dict[str, "np.floating[T]"]:
 def get_basic_stats(
     mols_generated: Sequence[str], mols_reference: Sequence[str]
 ) -> tuple[float, float, float]:
-
     mols_canonical = canonicalize_molecules(
         mols_generated, strict=False, double_check=True
     )
@@ -139,15 +113,15 @@ def get_basic_stats(
     uniqueness = len(mols_unique) / len_mols_generated
     novelty = len(mols_novel) / len_mols_generated
 
-    return validity, uniqueness, novelty  # TODO might replace with dict
+    return validity, uniqueness, novelty
 
 
 def get_reference_stats(
     molecule_file_path: Optional[Path] = None,
     stats_file_path: Optional[Path] = None,
 ) -> dict[str, "np.floating[T]"]:
-
     stats: dict[str, "np.floating[T]"]
+
     if molecule_file_path is not None and stats_file_path is None:
         molecules = read_molecules_from_file(molecule_file_path)
         stats = get_stats_from_molecules(molecules)
@@ -169,50 +143,22 @@ def _get_fcd_instance(canonicalize: bool = True) -> "FCD":
     fcd_fn = FCD(
         canonize=canonicalize, n_jobs=num_workers, device=device, pbar=True
     )
-
     return fcd_fn
 
 
 def _get_fcd_from_molecules(
     mols_generated: Sequence[str], mols_reference: Sequence[str]
 ) -> float:
-    # if FCD_AVAILABLE:
-    #     model = fcd.load_ref_model()
-    #     fcd_value = fcd.get_fcd(model, mols_generated, mols_reference)
-    #
-    # else:
-    #     fcd_fn: FCD = _get_fcd_instance()
-    #     fcd_value: float = fcd_fn(gen=mols_generated, ref=mols_reference)
-
     fcd_fn: FCD = _get_fcd_instance()
     fcd_value: float = fcd_fn(gen=mols_generated, ref=mols_reference)
-
     return fcd_value
 
 
 def _get_fcd_from_stats(
     molecules: Sequence[str], stats: Mapping[str, "np.floating[T]"]
 ) -> float:
-    # if FCD_AVAILABLE:
-    #     model = fcd.load_ref_model()
-    #     activations = fcd.get_predictions(model, molecules)
-    #     mu = np.mean(activations, axis=0)
-    #     sigma = np.cov(activations.T)
-    #
-    #     fcd_value = fcd.calculate_frechet_distance(
-    #         mu1=mu,
-    #         mu2=stats["mu"],
-    #         sigma1=sigma,
-    #         sigma2=stats["sigma"],
-    #     )
-    #
-    # else:
-    #     fcd_fn: FCD = _get_fcd_instance()
-    #     fcd_value: float = fcd_fn(gen=molecules, pref=stats)
-
     fcd_fn: FCD = _get_fcd_instance()
     fcd_value: float = fcd_fn(gen=molecules, pref=stats)
-
     return fcd_value
 
 
@@ -222,6 +168,7 @@ def get_fcd(
     mols_reference: Optional[Sequence[str]] = None,
     reference_stats: Optional[Mapping[str, "np.floating[T]"]] = None,
 ) -> float:
+
     if mols_reference is not None and reference_stats is None:
         fcd_value = _get_fcd_from_molecules(mols_generated, mols_reference)
     elif reference_stats is not None:
@@ -247,6 +194,7 @@ def evaluate_molecules(
     generated_file_path: Path,
     reference_file_path: Optional[Path] = None,
     stats_file_path: Optional[Path] = None,
+    num_molecules: Optional[int] = None,
 ) -> dict[str, float]:
 
     if mode not in VALID_EVALUATION_MODES:
@@ -260,8 +208,15 @@ def evaluate_molecules(
         pass
 
     # Load generated molecules
-    logger.info("Loading generated molecules...")
-    mols_generated = read_molecules_from_file(generated_file_path)
+    if num_molecules is None:
+        num_molecules_str = "all"
+    else:
+        num_molecules_str = f"first {num_molecules:,d}"
+
+    logger.info(f"Loading {num_molecules_str} generated molecules...")
+    mols_generated = read_molecules_from_file(
+        generated_file_path, num_molecules
+    )
 
     # Calculate basic stats; compare generated and reference molecules (if available)
     if reference_file_path is not None:
@@ -281,8 +236,8 @@ def evaluate_molecules(
         basic_stats = {}
 
     # Get reference stats
-    # TODO mypy complains "Missing type parameters for generic type "floating"
-    reference_stats: dict[str, "np.floating"]
+    reference_stats: dict[str, "np.floating[T]"]
+
     if mode == "reference":
         logger.info("Calculating reference stats from reference molecules...")
         reference_stats = get_reference_stats(reference_file_path, None)
@@ -327,6 +282,23 @@ def main() -> None:
         help="file path to the generated molecules.",
     )
     parser.add_argument(
+        "-n",
+        "--num_molecules",
+        type=int,
+        required=False,
+        default=None,
+        help="number of molecules to evaluate from generated molecules, default: all molecules.",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        required=False,
+        default=None,
+        help=f"file path for the evaluation statistic, "
+        f"default: the file name of the generated molecules with suffix {DEFAULT_OUTPUT_FILE_SUFFIX}.",
+    )
+    parser.add_argument(
         "-r",
         "--reference",
         type=Path,
@@ -341,15 +313,6 @@ def main() -> None:
         required=False,
         default=None,
         help="file path to pre-calculated FCD statistics of reference molecules.",
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        type=Path,
-        required=False,
-        default=None,
-        help=f"file path for the evaluation statistic, "
-        f"default: the file name of the generated molecules with suffix {DEFAULT_OUTPUT_FILE_SUFFIX}.",
     )
     parser.add_argument(
         "--verbose",
@@ -426,9 +389,17 @@ def main() -> None:
             "Reference molecules file path must be provided in 'reference' mode"
         )
 
+    if args.num_molecules is not None and args.num_molecules <= 0:
+        raise ValueError(
+            f"Number of molecules to evaluate must be greater than 0, "
+            f"got {args.num_molecules}"
+        )
+
     if args.output is None:
-        # TODO determine output file path from generated file path
-        pass
+        output_file_path = generated_file_path.with_name(
+            generated_file_path.stem + "_evaluated.json"
+        )
+
     else:
         output_file_path = Path(args.output).resolve()
         logger.debug(f"Output file path: '{output_file_path}'")
@@ -447,13 +418,17 @@ def main() -> None:
             generated_file_path=generated_file_path,
             reference_file_path=reference_file_path,
             stats_file_path=stats_file_path,
+            num_molecules=args.num_molecules,
         )
 
-        # Display and save stats to file
+        # Display and save evaluation stats to file
+        logger.info("Evaluation statistics:")
         for k, v in stats.items():
             logger.info(f"{k}: {v:.4f}")
 
-        # TODO Save output to file
+        logger.info(f"Saving evaluation statistics to {output_file_path}")
+        with open(output_file_path, "w") as f:
+            json.dump(stats, f, indent=4)
 
 
 if __name__ == "__main__":
