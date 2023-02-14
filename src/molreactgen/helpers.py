@@ -39,11 +39,19 @@ SIGNS_FOR_ROOT_DIR = (".git", "pyproject.toml", "setup.py", "setup.cfg")
 
 
 class Tally:
+    base_name = "__base__"
+    valid_file_formats: dict[str, tuple[str, ...]] = {
+        # "CSV": (".CSV",),
+        "JSON": (".JSON",),
+    }
+
     def __init__(self, counters: Union[Sequence[str], str]) -> None:
-        if not isinstance(counters, Iterable):
+        if isinstance(counters, str) or not isinstance(counters, Iterable):
             counters = [counters]
 
         counters = [str(c) for c in counters]
+        if any(c == self.base_name for c in counters):
+            raise ValueError(f"counter name {self.base_name} is reserved")
 
         if len(counters) != len(set(counters)):
             raise ValueError("counters must be unique")
@@ -55,13 +63,13 @@ class Tally:
         self._idx_to_key: dict[int, str] = {
             i: str(k) for i, k in enumerate(counters)
         }
-        counters_one_up = ["_base"]
+        counters_one_up = [self.base_name]
         counters_one_up.extend(counters[:-1])
         assert len(counters) == len(counters_one_up)
-        self._counter_one_up: dict[str, str] = {
-            str(counter): str(one_up)
-            for counter, one_up in zip(counters, counters_one_up)
-        }
+        # self._counter_one_up: dict[str, str] = {
+        #     str(counter): str(one_up)
+        #     for counter, one_up in zip(counters, counters_one_up)
+        # }
 
     def _get_value_from_idx(self, idx: int) -> int:
         return self._counters[self._idx_to_key[idx]]
@@ -73,46 +81,88 @@ class Tally:
             raise AttributeError(f"Tally {counter} not found")
 
     @overload
-    def get_count(self) -> dict[str, int]:
+    def get_count(
+        self,
+        counter: Optional[Any] = None,
+        *,
+        format_specifier: Optional[str] = None,
+    ) -> Union[dict[str, int], dict[str, str]]:
         ...
 
     @overload
-    def get_count(self, counter: str) -> int:
+    def get_count(
+        self, counter: Sequence[str], *, format_specifier: Optional[str] = None
+    ) -> Union[dict[str, int], dict[str, str], int, str]:
         ...
 
+    # @overload
+    # def get_count(
+    #     self, counter: str, *, format_specifier: Optional[str] = None
+    # ) -> Union[int, str]:
+    #     ...
+
     def get_count(
-        self, counter: Optional[str] = None
-    ) -> Union[dict[str, int], int]:
+        self,
+        counter: Optional[Union[Sequence[str], str]] = None,
+        *,
+        format_specifier: Optional[str] = None,
+    ) -> Union[dict[str, int], dict[str, str], int, str]:
         counts: Union[dict[str, int], int]
         if counter is None:
             counts = self._counters
+        elif not isinstance(counter, str) and isinstance(counter, Iterable):
+            for k in counter:
+                if k not in self._counters:
+                    raise AttributeError(f"Tally {k} not found")
+            counts = {k: self._counters[k] for k in counter}
         elif counter in self._counters:
             counts = self._counters[counter]
         else:
             raise AttributeError(f"Tally {counter} not found")
 
-        return counts
+        if format_specifier is not None and isinstance(format_specifier, str):
+            counts_formatted: Union[dict[str, str], str]
+            if isinstance(counts, dict):
+                counts_formatted = {
+                    k: format(v, format_specifier) for k, v in counts.items()
+                }
+            else:
+                counts_formatted = format(counts, format_specifier)
+            return counts_formatted
+
+        else:
+            return counts
 
     @overload
-    def get_absolute_fraction(self) -> dict[str, float]:
+    def get_absolute_fraction(
+        self,
+        counter: Optional[Any] = None,
+        *,
+        format_specifier: Optional[str] = None,
+    ) -> Union[dict[str, float], dict[str, str]]:
         ...
 
     @overload
-    def get_absolute_fraction(self, counter: str) -> float:
+    def get_absolute_fraction(
+        self, counter: Sequence[str], *, format_specifier: Optional[str] = None
+    ) -> Union[dict[str, float], dict[str, str], float, str]:
         ...
 
     def get_absolute_fraction(
-        self, counter: Optional[str] = None
-    ) -> Union[dict[str, float], float]:
-        counts = self.get_count()
+        self,
+        counter: Optional[Union[Sequence[str], str]] = None,
+        *,
+        format_specifier: Optional[str] = None,
+    ) -> Union[dict[str, float], dict[str, str], float, str]:
+        counts = self.get_count(counter)
         base_value = self._get_value_from_idx(0)
         fractions: Union[dict[str, float], float]
-        if counter is None:
+        if isinstance(counts, dict):  # counter is None:
             if base_value == 0:
                 fractions = {k: float("nan") for k in counts}
             else:
-                fractions = {k: v / base_value for k, v in counts.items()}
-        elif counter in self._counters:
+                fractions = {k: int(v) / base_value for k, v in counts.items()}
+        elif isinstance(counter, str) and counter in self._counters:
             if base_value == 0:
                 fractions = float("nan")
             else:
@@ -120,63 +170,124 @@ class Tally:
         else:
             raise AttributeError(f"Tally {counter} not found")
 
-        return fractions
+        if format_specifier is not None and isinstance(format_specifier, str):
+            fractions_formatted: Union[dict[str, str], str]
+            if isinstance(fractions, dict):
+                fractions_formatted = {
+                    k: format(v, format_specifier) for k, v in fractions.items()
+                }
+            else:
+                fractions_formatted = format(fractions, format_specifier)
+            return fractions_formatted
+
+        else:
+            return fractions
 
     @overload
-    def get_relative_fraction(self) -> dict[str, float]:
+    def get_relative_fraction(
+        self, *, format_specifier: Optional[str] = None
+    ) -> Union[dict[str, float], dict[str, str]]:
         ...
 
     @overload
-    def get_relative_fraction(self, counter: str) -> float:
+    def get_relative_fraction(
+        self, counter: str, *, format_specifier: Optional[str] = None
+    ) -> Union[float, str]:
         ...
 
     def get_relative_fraction(
-        self, counter: Optional[str] = None
-    ) -> Union[dict[str, float], float]:
+        self,
+        counter: Optional[str] = None,
+        *,
+        format_specifier: Optional[str] = None,
+    ) -> Union[dict[str, float], dict[str, str], float, str]:
         counts = self.get_count()
         count_names = list(counts.keys())
         count_values = list(counts.values())
-        count_names_one_up = ["_base"]
+        count_names_one_up = [self.base_name]
         count_names_one_up.extend(count_names[-1])
         count_values_one_up = [count_values[0]]
         count_values_one_up.extend(count_values[:-1])
+        # assert isinstance(counts, dict) and all(
+        #     isinstance(v, int) for v in counts.values()
+        # )
         fractions: Union[dict[str, float], float]
-        if counter is None:
+        if counter is None or (
+            not isinstance(counter, str) and isinstance(counter, Iterable)
+        ):
+            # mypy seems to determine "object" as the common base class for c / count_values
             fraction_values = [
-                c / c_one_up if c_one_up != 0 else float("nan")
+                c / c_one_up if c_one_up != 0 else float("nan")  # type: ignore
                 for c, c_one_up in zip(count_values, count_values_one_up)
             ]
             fractions = {k: v for k, v in zip(count_names, fraction_values)}
+            if not isinstance(counter, str) and isinstance(counter, Iterable):
+                fractions = {k: v for k, v in fractions.items() if k in counter}
+
         elif counter in self._counters:
             idx = self._key_to_idx[counter]
             if count_values_one_up[idx] == 0:
                 fractions = float("nan")
             else:
-                fractions = count_values[idx] / count_values_one_up[idx]
+                # mypy seems to determine "object" as the common base class for c / count_values
+                fractions = count_values[idx] / count_values_one_up[idx]  # type: ignore
         else:
             raise AttributeError(f"Tally {counter} not found")
 
-        return fractions
+        if format_specifier is not None and isinstance(format_specifier, str):
+            fractions_formatted: Union[dict[str, str], str]
+            if isinstance(fractions, dict):
+                fractions_formatted = {
+                    k: format(v, format_specifier) for k, v in fractions.items()
+                }
+            else:
+                fractions_formatted = format(fractions, format_specifier)
+            return fractions_formatted
 
-    # TODO implement this
-    def _save_to_csv(self, file_path: PathLike[str]) -> None:
-        pass
+        else:
+            return fractions
 
-    # TODO implement this
-    def _save_to_json(self, file_path: PathLike[str]) -> None:
-        pass
+    # might implement this if needed
+    # def _save_to_csv(self, file_path: Path) -> None:
+    #     pass
 
-    # TODO implement this
+    def _save_to_json(self, file_path: Path) -> None:
+        dict_to_save = {
+            "counts": self.get_count(),
+            "absolute_fractions": self.get_absolute_fraction(),
+            "relative_fractions": self.get_relative_fraction(),
+        }
+        with open(file_path, "w") as f:
+            json.dump(dict_to_save, f)
+
     def save_to_file(
-        self, file_path: PathLike[str], file_format: str = "json"
+        self, file_path: PathLike[str], format_: str = "json"
     ) -> None:
         file_path = Path(file_path).resolve()
-        if file_format.upper() == "CSV":
-            self._save_to_csv(file_path)
-        elif file_format.upper() == "JSON":
+        if format_.upper() not in self.valid_file_formats:
+            raise ValueError(f"Unknown format {format_}")
+
+        file_extension = file_path.suffix
+        if (
+            file_extension.upper()
+            not in self.valid_file_formats[format_.upper()]
+        ):
+            logger.warning(
+                f"File format {format_} does not match file extension {file_extension}, saving anyway"
+            )
+
+        if format_.upper() == "JSON":
             self._save_to_json(file_path)
         else:
-            raise ValueError(f"Unknown format {file_format}")
+            raise ValueError(f"Unknown format {format_}")
+
+    def __repr__(self) -> str:
+        class_name = type(self).__name__
+        counters = list(self._counters.keys())
+        return f"{class_name}" f"({counters})"
+
+    def __str__(self) -> str:
+        return str([f"{k}: {v}" for k, v in self._counters.items()])
 
 
 ###############################################################################

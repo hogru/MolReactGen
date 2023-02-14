@@ -1005,11 +1005,14 @@ def main() -> None:
     # Display and save statistics
     logger.info("Generation statistics")
     logger.info(f"Absolute numbers:   {counter.get_count()}")
-    logger.info(f"Absolute fractions: {counter.get_absolute_fraction()}")
-    logger.info(f"Relative fractions: {counter.get_relative_fraction()}")
+    logger.info(
+        f"Absolute fractions: {counter.get_absolute_fraction(format_specifier='.4f')}"
+    )
+    logger.info(
+        f"Relative fractions: {counter.get_relative_fraction(format_specifier='.4f')}"
+    )
 
-    counter.save_to_file(CSV_STATS_FILE_NAME, file_format="csv")
-    counter.save_to_file(JSON_STATS_FILE_NAME, file_format="json")
+    counter.save_to_file(JSON_STATS_FILE_NAME, format_="json")
 
     # Save generated items
     logger.info(
