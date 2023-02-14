@@ -20,7 +20,6 @@ from codetiming import Timer
 from humanfriendly import format_timespan  # type: ignore
 from loguru import logger
 
-# TODO add type hints to my fork of fcd_torch
 from fcd_torch.fcd_torch.fcd import FCD
 from molreactgen.helpers import (
     configure_logging,
