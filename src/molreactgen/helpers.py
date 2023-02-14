@@ -14,6 +14,7 @@ import os
 import sys
 import warnings
 from functools import partialmethod
+from logging.handlers import SysLogHandler
 from os import PathLike
 from pathlib import Path, PosixPath
 from types import FrameType
@@ -344,6 +345,7 @@ def configure_logging(
     *,
     console_format: Optional[str] = None,
     file_format: Optional[str] = None,
+    syslog_format: Optional[str] = None,
     file_log_level: Optional[int] = None,
     log_dir: Optional[PathLike[str]] = None,
     log_file: Optional[PathLike[str]] = None,
@@ -359,12 +361,17 @@ def configure_logging(
         "{time:YYYY-MM-DD HH:mm:ss.SSS} | <level>{level: <8}</level> | "
         "{name}:{function}:{line} - <level>{message}</level>"
     )
+    default_syslog_format = (
+        "{time:YYYY-MM-DD HH:mm:ss.SSS} | <level>{level: <8}</level> | "
+        "{file}:{name}:{function}:{line} - <level>{message}</level>"
+    )
 
     # Allow for separate log levels for console and file logging
     console_log_level: int = int(log_level)
     file_log_level = (
         console_log_level if file_log_level is None else int(file_log_level)
     )
+    syslog_log_level = file_log_level
 
     console_format = (
         default_console_format
@@ -373,6 +380,9 @@ def configure_logging(
     )
     file_format = (
         default_file_format if file_format is None else str(file_format)
+    )
+    syslog_format = (
+        default_syslog_format if syslog_format is None else str(syslog_format)
     )
 
     # Determine log file path
@@ -420,6 +430,17 @@ def configure_logging(
         diagnose=True,
         colorize=False,
     )
+
+    # Add papertrail handler, experimental
+    # TODO make this configurable and optional
+    # TODO find out what exceptions can be raised here
+    try:
+        syslog_handler = SysLogHandler(
+            address=("logs3.papertrailapp.com", 32501)
+        )
+        logger.add(syslog_handler, level=syslog_log_level, format=syslog_format)
+    except:  # noqa: E722
+        pass
 
     # Redirect warnings to logger
     warnings.showwarning = show_warning  # type: ignore
