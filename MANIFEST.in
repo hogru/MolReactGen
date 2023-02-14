@@ -1,0 +1,5 @@
+# MANIFEST.in
+
+include data/prep/debug/csv/*.csv
+include data/prep/debug/fcd_stats/*.pkl
+include src/molreactgen/conf/*.toml
