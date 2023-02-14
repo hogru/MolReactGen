@@ -1,12 +1,14 @@
 # coding=utf-8
-# Parts of this file are based on the following huggingface example:
-# https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_clm.py
+# train.py
 """
 Auto-Regressive Molecule and Reaction Template Generator
 Causal language modeling (CLM) with a transformer decoder model
 Author: Stephan Holzgruber
 Student ID: K08608294
 """
+# Parts of this file are based on the following huggingface example:
+# https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_clm.py
+
 import json
 import math
 import os
@@ -25,6 +27,7 @@ import datasets
 import evaluate  # type: ignore
 import torch
 import transformers  # type: ignore
+import wandb
 from datasets import (  # type: ignore
     Dataset,
     DatasetDict,
@@ -56,7 +59,8 @@ from transformers.trainer_utils import get_last_checkpoint  # type: ignore
 from transformers.utils import check_min_version  # type: ignore
 from transformers.utils.versions import require_version  # type: ignore
 
-from molreactgen.helpers import configure_logging
+from molreactgen.generate import create_and_save_generation_config
+from molreactgen.helpers import configure_logging, guess_project_root_dir
 from molreactgen.tokenizer import (
     DATASET_COLUMN_NAME,
     enclose_function,
@@ -66,9 +70,8 @@ from molreactgen.tokenizer import (
     tokenize_function,
 )
 
-###############################################################################
-# Imports                                                                     #
-###############################################################################
+PROJECT_ROOT_DIR: Final = guess_project_root_dir()
+WANDB_PROJECT_NAME: Final = "MolReactGen"
 
 
 ###############################################################################
@@ -83,23 +86,21 @@ require_version("evaluate>=0.3.0", hint)
 
 # The HF datacollator seems to first call tokenizer.encode() and then tokenizer.pad()
 # It would be faster to call tokenizer.__call__() which does both in one go
-# This environment variable suppresses the warning
+# This environment variable suppresses this warning
 # Based on
 # https://discuss.huggingface.co/t/get-using-the-call-method-is-faster-warning-with-datacollatorwithpadding/23924
 os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"
 
 # Configure logging to wandb
-os.environ["WANDB_DISABLED"] = "false"
-os.environ["WANDB_PROJECT"] = "MolReactGen"
-os.environ["WANDB_LOG_MODEL"] = "true"
+# os.environ["WANDB_DISABLED"] = "false"
+# os.environ["WANDB_PROJECT"] = WANDB_PROJECT_NAME
+# os.environ["WANDB_LOG_MODEL"] = "end"
+# os.environ["WANDB_WATCH"] = "gradients"
 
 
 ###############################################################################
 # Prepare config                                                              #
 ###############################################################################
-
-# Data related
-HUB_MODEL_ID: Final = "hogru/MolReactGen"
 
 # Model related
 MODEL_CONFIG_CLASSES: Final = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
@@ -157,12 +158,6 @@ class ModelArguments:
             "help": "Where to store the pretrained models downloaded from huggingface.co"
         },
     )
-    # use_fast_tokenizer: bool = field(
-    #     default=True,
-    #     metadata={
-    #         "help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."
-    #     },
-    # )
     model_revision: str = field(
         default="main",
         metadata={
@@ -194,6 +189,7 @@ class DataArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
+    # TODO add support for datasets from the HF hub
     dataset_name: Optional[str] = field(
         default=None,
         metadata={
@@ -206,11 +202,6 @@ class DataArguments:
             "help": "The configuration name of the dataset to use (via the datasets library)."
         },
     )
-    # train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
-    # validation_file: Optional[str] = field(
-    #     default=None,
-    #     metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
-    # )
     dataset_dir: Optional[str] = field(
         default=None,
         metadata={"help": "The directory with the dataset file(s)."},
@@ -224,7 +215,7 @@ class DataArguments:
             )
         },
     )
-    max_eval_samples: Optional[int] = field(
+    max_val_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": (
@@ -233,17 +224,6 @@ class DataArguments:
             )
         },
     )
-    # block_size is not needed for our use case
-    # block_size: Optional[int] = field(
-    #     default=None,
-    #     metadata={
-    #         "help": (
-    #             "Optional input sequence length after tokenization. "
-    #             "The training dataset will be truncated in block of this size for training. "
-    #             "Default to the model max input length for single sentence inputs (take into account special tokens)."
-    #         )
-    #     },
-    # )
     overwrite_cache: bool = field(
         default=False,
         metadata={"help": "Overwrite the cached training and evaluation sets."},
@@ -266,16 +246,12 @@ class DataArguments:
             "help": "The number of processes to use for the preprocessing."
         },
     )
-    # keep_linebreaks: bool = field(
-    #     default=True, metadata={"help": "Whether to keep line breaks when using TXT files or not."}
-    # )
     pre_tokenizer: Optional[str] = field(
         default="ATOM",
         metadata={
             "help": "The pre-tokenizer  to use; one of 'char', 'atom', 'smarts'."
         },
     )
-
     algorithm: Optional[str] = field(
         default="WORDLEVEL",
         metadata={
@@ -303,13 +279,31 @@ class DataArguments:
             "help": "Whether to train a new tokenizer and map the vocabulary into a pre-trained tokenizer."
         },
     )
+    # TODO implement map_strategy, currently only linear is supported
+    map_strategy: Optional[str] = field(
+        default="linear",
+        metadata={
+            "help": "The strategy to use when mapping the vocabulary; one of 'linear', 'random'. "
+            "Only relevant when 'map_tokenizers' is set to True. Currently defaults to 'linear'."
+        },
+    )
 
     def __post_init__(self) -> None:
+        if self.dataset_name is not None:
+            raise NotImplementedError(
+                "Datasets from the HF hub are not supported yet."
+            )
+
         if self.dataset_name is None and self.dataset_dir is None:
             raise ValueError(
                 "Need either a dataset name or a dataset directory."
             )
         elif self.dataset_dir is not None:
+            self.dataset_dir = (
+                (Path(PROJECT_ROOT_DIR) / (self.dataset_dir))
+                .resolve()
+                .as_posix()
+            )
             for file in Path(self.dataset_dir).glob("*"):
                 if (
                     file.suffix.lower() not in (".csv", ".json", ".txt")
@@ -328,10 +322,18 @@ class DataArguments:
             ):
                 warnings.warn(
                     "Mapping tokenizers is currently only supported for character-level tokenization with BPE. "
-                    "The pre-tokenizer and algorithm will be set to 'char' and 'bpe' respectively."
+                    "Set the pre-tokenizer and algorithm to 'char' and 'bpe' respectively."
                 )
             self.pre_tokenizer = "CHAR"
             self.algorithm = "BPE"
+            if (
+                self.map_strategy is not None
+                and self.map_strategy.upper() != "LINEAR"
+            ):
+                warnings.warn(
+                    "Only the 'linear' mapping strategy is currently supported. Set it to 'linear'."
+                )
+                self.map_strategy = "linear"
 
 
 @dataclass
@@ -364,8 +366,8 @@ class AdditionalArguments:
 # Functions for data manipulation                                             #
 ###############################################################################
 
-# TODO implement and type check
-def load_raw_dataset_from_hub(
+# TODO implement this function
+def load_raw_dataset_from_hub(  # type: ignore # Remove once implemented
     dataset_name: str,
     *,
     dataset_config_name: Optional[str] = None,
@@ -455,24 +457,17 @@ def main() -> None:
             additional_args,
         ) = parser.parse_args_into_dataclasses()
 
-    # Setup logging
-    # logging.basicConfig(
-    #     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-    #     datefmt="%m/%d/%Y %H:%M:%S",
-    #     handlers=[logging.StreamHandler(sys.stdout)],
-    # )
+    # Configure logging
     log_level = (
         training_args.get_process_log_level()
     )  # This returns a log level depending on main process yes/no etc.
-    # logger.setLevel(
-    #     log_level
-    # )  # This conflicts with configure_logging() TODO need to think about this
     configure_logging(log_level)
     datasets.utils.logging.set_verbosity(log_level)
+    datasets.utils.logging.disable_progress_bar()  # type: ignore
     evaluate.utils.logging.set_verbosity(log_level)
     transformers.utils.logging.set_verbosity(log_level)
-    transformers.utils.logging.enable_default_handler()  # TODO with loguru, delete this line?
-    transformers.utils.logging.enable_explicit_format()  # TODO with loguru, delete this line?
+    transformers.utils.logging.enable_default_handler()
+    transformers.utils.logging.enable_explicit_format()
 
     # Log a small summary on each process
     logger.info(
@@ -560,8 +555,9 @@ def main() -> None:
         "use_auth_token": True if model_args.use_auth_token else None,
     }
 
-    need_tokenizer_from_scratch: bool = True
+    need_tokenizer_from_scratch: bool
     if data_args.map_tokenizers:
+        need_tokenizer_from_scratch = True
         logger.info("Loading pre-trained tokenizer...")
         tokenizer_pretrained: PreTrainedTokenizerFast
         if model_args.tokenizer_name:
@@ -598,6 +594,7 @@ def main() -> None:
                 model_args.model_name_or_path, **tokenizer_kwargs
             )
         else:
+            need_tokenizer_from_scratch = True
             pass
 
     if need_tokenizer_from_scratch:
@@ -620,6 +617,7 @@ def main() -> None:
         )
 
     if data_args.map_tokenizers:
+        assert need_tokenizer_from_scratch
         # Get the token frequencies by tokenizing the training data
         all_tokens: list[str] = []
         for item in data_iterator:
@@ -658,7 +656,11 @@ def main() -> None:
         # Assuming byte-level encoding here
         # Start at index 256, i.e. 0..255 used for byte-level encoding
         vocab_modified = get_modified_vocab(
-            tokenizer_pretrained, token_counter, start_idx=256, end_idx=end_idx
+            tokenizer_pretrained,
+            token_counter,
+            mapping_strategy=data_args.map_strategy,
+            start_idx=256,
+            end_idx=end_idx,
         )
 
         # Build a new gpt2 tokenizer with the modified vocabulary
@@ -690,8 +692,14 @@ def main() -> None:
                 pad_token=tokenizer_pretrained.eos_token,
             )
 
-    else:
+    elif not data_args.map_tokenizers and need_tokenizer_from_scratch:
         tokenizer = tokenizer_from_scratch
+
+    elif not data_args.map_tokenizers and not need_tokenizer_from_scratch:
+        pass
+
+    else:
+        raise RuntimeError("This should not happen, check code.")
 
     logger.info("Tokenizing datasets...")
     with training_args.main_process_first(desc="Tokenize dataset (map)"):
@@ -781,7 +789,9 @@ def main() -> None:
 
     # Detect last checkpoint
     last_checkpoint: Optional[str] = None
-    # output_dir: Path = Path(training_args.output_dir).resolve()
+    training_args.output_dir = (
+        Path(PROJECT_ROOT_DIR) / training_args.output_dir
+    ).as_posix()
     if additional_args.unique_output_subdir:
         training_args.output_dir = (
             Path(training_args.output_dir)
@@ -833,9 +843,9 @@ def main() -> None:
         if "validation" not in tokenized_datasets:
             raise ValueError("--do_eval requires a validation dataset")
         eval_dataset: Dataset = tokenized_datasets["validation"]
-        if data_args.max_eval_samples is not None:
+        if data_args.max_val_samples is not None:
             max_eval_samples: int = min(
-                len(eval_dataset), data_args.max_eval_samples
+                len(eval_dataset), data_args.max_val_samples
             )
             logger.info(f"Limit validation samples to {max_eval_samples}")
             eval_dataset = eval_dataset.select(range(max_eval_samples))
@@ -843,7 +853,6 @@ def main() -> None:
     # Configure data collator
     # Pad to multiples of 8 for NVIDIA tensor cores, see
     # https://developer.nvidia.com/blog/optimizing-gpu-performance-tensor-cores/
-
     data_collator = DataCollatorForLanguageModeling(
         tokenizer, pad_to_multiple_of=8, mlm=False
     )
@@ -898,6 +907,26 @@ def main() -> None:
     # Cosine with restarts **has** to be built manually, due to a hugging face issue, see
     # https://github.com/huggingface/transformers/issues/20552
 
+    # Configure wandb
+    if (
+        training_args.report_to is not None
+        and "wandb" in training_args.report_to
+    ):
+        os.environ["WANDB_DISABLED"] = "false"
+        os.environ["WANDB_PROJECT"] = WANDB_PROJECT_NAME
+        os.environ["WANDB_LOG_MODEL"] = "end"
+        os.environ["WANDB_WATCH"] = "gradients"
+
+        _ = wandb.init(
+            project=WANDB_PROJECT_NAME,
+            job_type="train",
+            anonymous="allow",
+        )
+    else:
+        os.environ["WANDB_DISABLED"] = "true"
+
+    # TODO configure optimizer manually, HF deprecated the support to configure it via arguments
+
     # Initialize the Trainer
     trainer = Trainer(
         model=model,
@@ -932,7 +961,7 @@ def main() -> None:
             logger.info(
                 f"Resuming training from checkpoint {training_args.output_dir}"
             )
-        logger.info("Training...")
+        logger.heading("Start training...")  # type: ignore
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         logger.info("Saving model...")
         trainer.save_model()
@@ -970,10 +999,19 @@ def main() -> None:
         trainer.log_metrics("test", metrics)
         trainer.save_metrics("test", metrics)
 
+    if wandb.run is not None:
+        wandb.finish()
+
     # -----------------------------------------------------------------------------
-    # (Prepare) to push the model/dataset to the hub
+    # (Prepare to) push the model/dataset to the hub
     # -----------------------------------------------------------------------------
 
+    # Create default generation config
+    _ = create_and_save_generation_config(
+        Path(trainer.args.output_dir), split_into_chunks=False
+    )
+
+    # Prepare metadata for the model/dataset card
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
         "tasks": "text-generation",

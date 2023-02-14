@@ -53,7 +53,6 @@ PROJECT_ROOT_DIR: Path = guess_project_root_dir()
 GENERATED_DATA_DIR: Path = (
     PROJECT_ROOT_DIR / "data" / "generated" / f"{datetime.now():%Y-%m-%d_%H-%M}"
 )
-GENERATED_DATA_DIR.mkdir(exist_ok=False, parents=True)
 ARGUMENTS_FILE_PATH: Final = GENERATED_DATA_DIR / "generate_cl_args.json"
 DEFAULT_SMILES_OUTPUT_FILE_PATH: Final = (
     GENERATED_DATA_DIR / "generated_smiles.csv"
@@ -273,6 +272,7 @@ def create_and_save_generation_config(
     model_file_path: Path,
     *,
     num_to_generate: int = DEFAULT_NUM_TO_GENERATE,
+    split_into_chunks: bool = True,
     max_length: Optional[int] = None,
     num_beams: int = 1,
     temperature: float = 1.0,
@@ -286,9 +286,12 @@ def create_and_save_generation_config(
     min_length = 2 if fine_tuned else 1
     max_length = _determine_max_length(model, max_length)
     stopping_criteria = _determine_stopping_criteria(tokenizer, fine_tuned)
-    num_to_generate_in_pipeline = _determine_num_to_generate_in_pipeline(
-        num_to_generate
-    )
+    if split_into_chunks:
+        num_to_generate_in_pipeline = _determine_num_to_generate_in_pipeline(
+            num_to_generate
+        )
+    else:
+        num_to_generate_in_pipeline = num_to_generate
     if num_beams > 1:
         early_stopping = True
     else:
@@ -882,10 +885,10 @@ def main() -> None:
     # Prepare and check (global) variables
     if args.mode == "smiles":
         items_name = "molecules"
-        logger.log("HEADING", "Generating SMILES molecules...")
+        logger.heading("Generating SMILES molecules...")  # type: ignore
     elif args.mode == "smarts":
         items_name = "reaction templates"
-        logger.log("HEADING", "Generating SMARTS reaction templates...")
+        logger.heading("Generating SMARTS reaction templates...")  # type: ignore
     else:
         raise ValueError(f"Invalid generation mode: {args.mode}")
 
@@ -931,6 +934,7 @@ def main() -> None:
     logger.debug(f"Output file path: {output_file_path_full}")
     logger.debug(f"Secondary output file path: {output_file_path_short}")
 
+    GENERATED_DATA_DIR.mkdir(exist_ok=False, parents=True)
     output_file_path_short.parent.mkdir(parents=True, exist_ok=True)
     output_file_path_full.parent.mkdir(parents=True, exist_ok=True)
 

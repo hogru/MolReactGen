@@ -361,6 +361,7 @@ def get_modified_vocab(
     tokenizer_original: PreTrainedTokenizerFast,
     modified_freq: Counter[str],
     *,
+    mapping_strategy: str = "linear",
     start_idx: int = 0,
     end_idx: Optional[int] = None,
 ) -> dict[str, int]:
@@ -393,69 +394,74 @@ def get_modified_vocab(
             f"{len(vocab_original)}, the length of tokenizer_original"
         )
 
-    # Build linear mapping from modified_freq to vocab_original
-    # The most frequent element in modified_freq gets the start_idx
-    # A (hypothetical) element with frequency zero becomes the end_idx
-    vocab_modified = vocab_original.copy()
-    mapping_d: int = end_idx
-    mapping_k: float = (end_idx - start_idx) / modified_freq.most_common(1)[0][
-        1
-    ]
-    print(f"Linear mapping: y = -{mapping_k}x + {mapping_d}")
+    if mapping_strategy.upper() == "LINEAR":
+        # Build linear mapping from modified_freq to vocab_original
+        # The most frequent element in modified_freq gets the start_idx
+        # A (hypothetical) element with frequency zero becomes the end_idx
+        vocab_modified = vocab_original.copy()
+        mapping_d: int = end_idx
+        mapping_k: float = (end_idx - start_idx) / modified_freq.most_common(1)[
+            0
+        ][1]
+        print(f"Linear mapping: y = -{mapping_k}x + {mapping_d}")
 
-    # These sets are used to
-    # (a) check that we do not double assign indices
-    # (b) all tokens have a single entry
-    # (c) assign dummy tokens to token ids to make sure that the vocab is contiguous
-    indices_used: set[int] = set()
-    indices_deleted: set[int] = set()
+        # These sets are used to
+        # (a) check that we do not double assign indices
+        # (b) all tokens have a single entry
+        # (c) assign dummy tokens to token ids to make sure that the vocab is contiguous
+        indices_used: set[int] = set()
+        indices_deleted: set[int] = set()
 
-    # Helper function that uses the linear function to map from
-    # the token token_frequency to a token in the (to be built) modified gpt2 tokenizer
-    def map_from_to(from_: int) -> int:
-        to = int(-mapping_k * from_ + mapping_d) - 1
-        while (to := to + 1) in indices_used:
-            pass
-        if not (start_idx <= to < len(vocab_original)):
-            raise RuntimeError(
-                "Cannot fit modified_freq into tokenizer_original"
+        # Helper function that uses the linear function to map from
+        # the token token_frequency to a token in the (to be built) modified gpt2 tokenizer
+        def map_from_to(from_: int) -> int:
+            to = int(-mapping_k * from_ + mapping_d) - 1
+            while (to := to + 1) in indices_used:
+                pass
+            if not (start_idx <= to < len(vocab_original)):
+                raise RuntimeError(
+                    "Cannot fit modified_freq into tokenizer_original"
+                )
+
+            indices_used.add(to)
+            return to
+
+        idx_original: Optional[int]
+        # Go over all tokens in modfied_freq and do the following
+        for token_modified, count in modified_freq.most_common(None):
+            # Delete the original entry from the vocab (if it exists) and remember its index
+            idx_original = vocab_modified.pop(token_modified, None)
+            if idx_original is not None:
+                indices_deleted.add(idx_original)
+                # print(f"Change token {token_modified} with idx {idx_original}")
+                # vocab_modified[token_modified + TOKEN_SUFFIX] = idx_original
+
+            # Map its count / frequency to the gpt2 tokenizer vocab
+            idx_new = map_from_to(count)
+
+            print(f"Token {token_modified} gets an ID of {idx_new}")
+            # Replace the original token at this index with the new token
+            token_original = tokenizer_original.convert_ids_to_tokens(idx_new)
+            vocab_modified.pop(token_original, None)
+            vocab_modified[token_modified] = idx_new
+
+        # Replace all deleted tokens with a dummy token to ensure a contiguous vocabulary
+        indices_deleted -= indices_used
+        for idx in sorted(indices_deleted):
+            print(
+                f"Overwrite original token {tokenizer_original.convert_ids_to_tokens(idx)} "
+                f"at ID {idx} with {DELETED_TOKEN_PREFIX+str(idx)}"
             )
+            vocab_modified[DELETED_TOKEN_PREFIX + str(idx)] = idx
 
-        indices_used.add(to)
-        return to
-
-    idx_original: Optional[int]
-    # Go over all tokens in modfied_freq and do the following
-    for token_modified, count in modified_freq.most_common(None):
-        # Delete the original entry from the vocab (if it exists) and remember its index
-        idx_original = vocab_modified.pop(token_modified, None)
-        if idx_original is not None:
-            indices_deleted.add(idx_original)
-            # print(f"Change token {token_modified} with idx {idx_original}")
-            # vocab_modified[token_modified + TOKEN_SUFFIX] = idx_original
-
-        # Map its count / frequency to the gpt2 tokenizer vocab
-        idx_new = map_from_to(count)
-
-        print(f"Token {token_modified} gets an ID of {idx_new}")
-        # Replace the original token at this index with the new token
-        token_original = tokenizer_original.convert_ids_to_tokens(idx_new)
-        vocab_modified.pop(token_original, None)
-        vocab_modified[token_modified] = idx_new
-
-    # Replace all deleted tokens with a dummy token to ensure a contiguous vocabulary
-    indices_deleted -= indices_used
-    for idx in sorted(indices_deleted):
-        print(
-            f"Overwrite original token {tokenizer_original.convert_ids_to_tokens(idx)} "
-            f"at ID {idx} with {DELETED_TOKEN_PREFIX+str(idx)}"
+        # Return the sorted modified vocab
+        vocab_modified = dict(
+            sorted(vocab_modified.items(), key=lambda item: item[1])
         )
-        vocab_modified[DELETED_TOKEN_PREFIX + str(idx)] = idx
 
-    # Return the sorted modified vocab
-    vocab_modified = dict(
-        sorted(vocab_modified.items(), key=lambda item: item[1])
-    )
+    else:
+        raise ValueError(f"Unknown mapping strategy {mapping_strategy}")
+
     return vocab_modified
 
 
