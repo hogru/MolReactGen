@@ -351,6 +351,7 @@ def configure_logging(
     log_file: Optional[PathLike[str]] = None,
     rotation: str = "1 day",
     retention: str = "7 days",
+    address: Optional[tuple[str, int]] = None,
 ) -> None:
     # This is the default format used by loguru
     # default_console_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | " \
@@ -432,15 +433,9 @@ def configure_logging(
     )
 
     # Add papertrail handler, experimental
-    # TODO make this configurable and optional
-    # TODO find out what exceptions can be raised here
-    try:
-        syslog_handler = SysLogHandler(
-            address=("logs3.papertrailapp.com", 32501)
-        )
+    if address is not None:
+        syslog_handler = SysLogHandler(address=address)
         logger.add(syslog_handler, level=syslog_log_level, format=syslog_format)
-    except:  # noqa: E722
-        pass
 
     # Redirect warnings to logger
     warnings.showwarning = show_warning  # type: ignore

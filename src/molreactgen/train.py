@@ -461,7 +461,8 @@ def main() -> None:
     log_level = (
         training_args.get_process_log_level()
     )  # This returns a log level depending on main process yes/no etc.
-    configure_logging(log_level)
+    # TODO make address configurable
+    configure_logging(log_level, address=("logs3.papertrailapp.com", 32501))
     datasets.utils.logging.set_verbosity(log_level)
     datasets.utils.logging.disable_progress_bar()  # type: ignore
     evaluate.utils.logging.set_verbosity(log_level)
