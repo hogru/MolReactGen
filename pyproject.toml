@@ -23,10 +23,10 @@ rdkit-pypi = "^2022.3.2"
 rich = "^13.3.0"
 scipy = "^1.10.0"
 subset = "^0.1.2"
-torch = [
-  { version = "1.13.1", platform = "darwin" },
-  { version = "^1.13.1", platform = "linux" }
-]
+torch = "^1.13.1"
+#   { version = "1.13.1", platform = "darwin" },
+#   { version = "^1.13.1", platform = "linux" }
+# ]
 torchmetrics = "^0.11.0"
 tqdm = "^4.64.0"
 wandb = "^0.13.0"
@@ -72,3 +72,22 @@ exclude = '''
 [tool.isort]
 profile = "black"
 line_length = 80
+
+[tool.bumpver]
+current_version = "1.0.0a0"
+version_pattern = "MAJOR.MINOR.PATCH[PYTAGNUM]"
+commit_message = "bump version {old_version} -> {new_version}"
+commit = true
+tag = true
+push = false
+
+[tool.bumpver.file_patterns]
+"pyproject.toml" = [
+    'current_version = "{version}"',
+    'version = "{version}"'
+]
+"README.md" = [
+    "{version}",
+    "{pep440_version}",
+]
+"src/molreactgen/__init__.py" = ["{version}"]
