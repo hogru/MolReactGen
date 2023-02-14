@@ -1,4 +1,11 @@
 # coding=utf-8
+# prepare_data.py
+"""
+Auto-Regressive Molecule and Reaction Template Generator
+Causal language modeling (CLM) with a transformer decoder model
+Author: Stephan Holzgruber
+Student ID: K08608294
+"""
 import argparse
 from collections.abc import Callable
 from pathlib import Path
@@ -18,7 +25,6 @@ from molreactgen.helpers import (
 # Determining if tqdm is installed and if so, use it for the download progressbar
 # Might experiment with a custom progressbar later
 # Sample code: https://www.fatiando.org/pooch/latest/progressbars.html#custom-progressbar
-progressbar: bool
 try:
     from tqdm import tqdm  # noqa: F401 # type: ignore
 
@@ -36,6 +42,7 @@ VALID_DATASETS: tuple[str, ...] = (
     "debug",
     "guacamol",
     "uspto50k",
+    "usptofull",
     "zinc",
 )
 
@@ -55,6 +62,7 @@ PREP_DIRS: dict[str, Path] = {
     "zinc": PREP_DATA_DIR / "zinc" / "csv",
 }
 
+# TODO add usptofull
 POOCHES: dict[str, pooch.Pooch] = {
     "debug": pooch.create(
         path=RAW_DIRS["debug"].as_posix(),
@@ -72,10 +80,6 @@ POOCHES: dict[str, pooch.Pooch] = {
         # base_url="https://figshare.com/ndownloader/files/",
         base_url="doi:10.6084/",
         registry={
-            # "13612760": "3c67ee945f351dbbdc02d9016da22efaffc32a39d882021b6f213d5cd60b6a80",
-            # "13612766": "124c4e76062bebf3a9bba9812e76fea958a108f25e114a98ddf49c394c4773bf",
-            # "13612757": "0b7e1e88e7bd07ee7fe5d2ef668e8904c763635c93654af094fa5446ff363015",
-            # "13612745": "ef19489c265c8f5672c6dc8895de0ebe20eeeb086957bd49421afd7bdf429bef",
             "m9.figshare.7322228.v2/guacamol_v1_train.smiles": "3c67ee945f351dbbdc02d9016da22efaffc32a39d882021b6f213d5cd60b6a80",
             "m9.figshare.7322243.v3/guacamol_v1_valid.smiles": "124c4e76062bebf3a9bba9812e76fea958a108f25e114a98ddf49c394c4773bf",
             "m9.figshare.7322246.v2/guacamol_v1_test.smiles": "0b7e1e88e7bd07ee7fe5d2ef668e8904c763635c93654af094fa5446ff363015",
@@ -92,35 +96,13 @@ POOCHES: dict[str, pooch.Pooch] = {
     ),
 }
 
-
 FILE_NAME_TRANSLATIONS: dict[str, str] = {
-    # "13612760": "guacamol_v1_train.csv",
-    # "13612766": "guacamol_v1_valid.csv",
-    # "13612757": "guacamol_v1_test.csv",
-    # "13612745": "guacamol_v1_all.csv",
     "m9.figshare.7322228.v2/guacamol_v1_train.smiles": "guacamol_v1_train.csv",
     "m9.figshare.7322243.v3/guacamol_v1_valid.smiles": "guacamol_v1_valid.csv",
     "m9.figshare.7322246.v2/guacamol_v1_test.smiles": "guacamol_v1_test.csv",
     "m9.figshare.7322252.v2/guacamol_v1_all.smiles": "guacamol_v1_all.csv",
-    # "USPTO_50k_MHN_prepro.csv.gz": "USPTO_50k_MHN_prepro.csv",
     "USPTO_50k_MHN_prepro.csv.gz.decomp": "USPTO_50k_MHN_prepro.csv",
 }
-
-"""
-def flatten_dir(file_name: str, action: str, pup: pooch.Pooch) -> str:
-    file_path = Path(file_name)
-    action = str(action).lower()
-
-    cache_dir = Path(pup.path)
-    download_dir = file_path.parent
-    if cache_dir != download_dir:
-        # Move file to cache dir
-        shutil.move(file_path, cache_dir)
-        file_path = cache_dir / file_path.name
-        download_dir.rmdir()
-
-    return file_path.as_posix()
-"""
 
 
 def _cleanse_and_copy_data(
@@ -192,16 +174,6 @@ def _download_uspto_50k_dataset(raw_dir: Path, enforce_download: bool) -> None:
 
 
 def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
-    # assert raw_dir.samefile(POOCHES["uspto50k"].path)
-    # prep_dir.mkdir(parents=True, exist_ok=True)
-    # for file in POOCHES["uspto50k"].registry:
-    #     file_renamed = FILE_NAME_TRANSLATIONS.get(file, file)
-    #     print(raw_dir / file)
-    #     with gzip.open(raw_dir / file, "rb") as f_in:
-    #         with open(raw_dir / file_renamed, "wb") as f_out:
-    #             print("do I get here?")
-    #             shutil.copyfileobj(f_in, f_out)
-
     # Setup file, column, split names
     raw_file = raw_dir / "USPTO_50k_MHN_prepro.csv.gz.decomp"
     if not Path(raw_file).is_file():
@@ -290,6 +262,19 @@ def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
         ), "Train set includes reactions from validation and/or test set!"
 
 
+def _prepare_uspto_full_dataset(raw_dir: Path, prep_dir: Path) -> None:
+    raise NotImplementedError(
+        "Preparation of the full USPTO dataset is not yet implemented."
+    )
+
+
+def _download_uspto_full_dataset(raw_dir: Path, enforce_download: bool) -> None:
+    # _download_pooched_dataset("uspto50k", raw_dir, enforce_download)
+    raise NotImplementedError(
+        "Download of the full USPTO dataset is not yet implemented."
+    )
+
+
 def _download_zinc_dataset(raw_dir: Path, enforce_download: bool) -> None:
     file = "zinc.tab"
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -321,6 +306,7 @@ DOWNLOAD_FNS: dict[str, Callable[[Path, bool], None]] = {
     "debug": _download_debug_dataset,
     "guacamol": _download_guacamol_dataset,
     "uspto50k": _download_uspto_50k_dataset,
+    "usptofull": _download_uspto_full_dataset,
     "zinc": _download_zinc_dataset,
 }
 
@@ -345,6 +331,7 @@ PREPARE_FNS: dict[str, Callable[[Path, Path], None]] = {
     "debug": _prepare_debug_dataset,
     "guacamol": _prepare_guacamol_dataset,
     "uspto50k": _prepare_uspto_50k_dataset,
+    "usptofull": _prepare_uspto_full_dataset,
     "zinc": _prepare_zinc_dataset,
 }
 
@@ -373,13 +360,6 @@ def main() -> None:
         default="all",
         choices=VALID_DATASETS,
         help="the dataset to prepare, default: '%(default)s' for all datasets.",
-    )
-    parser.add_argument(
-        "-d",
-        "--data_dir",
-        type=Path,
-        default=f"{PREP_DATA_DIR}",
-        help="root of the data directory, default: '%(default)s'.",
     )
     parser.add_argument(
         "-e",
@@ -413,9 +393,6 @@ def main() -> None:
         datasets = sorted(set(VALID_DATASETS) - {"all"})
     else:
         datasets = [args.dataset]
-
-    # TODO what if data_dir is set?
-    # data_dir = args.data_dir.resolve()
 
     for dataset in datasets:
         logger.heading(f"Preparing dataset {dataset}...")  # type: ignore
