@@ -54,12 +54,8 @@ GENERATED_DATA_DIR: Path = (
     PROJECT_ROOT_DIR / "data" / "generated" / f"{datetime.now():%Y-%m-%d_%H-%M}"
 )
 ARGUMENTS_FILE_PATH: Final = GENERATED_DATA_DIR / "generate_cl_args.json"
-DEFAULT_SMILES_OUTPUT_FILE_PATH: Final = (
-    GENERATED_DATA_DIR / "generated_smiles.csv"
-)
-DEFAULT_SMARTS_OUTPUT_FILE_PATH: Final = (
-    GENERATED_DATA_DIR / "generated_smarts.csv"
-)
+DEFAULT_SMILES_OUTPUT_FILE_PATH: Final = GENERATED_DATA_DIR / "generated_smiles.csv"
+DEFAULT_SMARTS_OUTPUT_FILE_PATH: Final = GENERATED_DATA_DIR / "generated_smarts.csv"
 DEFAULT_GENERATION_CONFIG_FILE_NAME: Final = "generation_config.json"
 CSV_STATS_FILE_NAME: Final = GENERATED_DATA_DIR / "generation_stats.csv"
 JSON_STATS_FILE_NAME: Final = GENERATED_DATA_DIR / "generation_stats.json"
@@ -165,17 +161,13 @@ def _determine_max_length(
     if not isinstance(
         model, PreTrainedModel
     ):  # would like to check for AutoModelForCausalLM, but that doesn't work
-        raise TypeError(
-            f"model must be an AutoModelForCausalLM, but is {type(model)}"
-        )
+        raise TypeError(f"model must be an AutoModelForCausalLM, but is {type(model)}")
 
     try:
         model_max_length = int(model.config.n_positions)
     except (AttributeError, TypeError):
         model_max_length = None
-        logger.warning(
-            "Cannot determine the model's maximum input sequence length"
-        )
+        logger.warning("Cannot determine the model's maximum input sequence length")
         if max_length is None:
             raise ValueError(
                 "Cannot determine maximum input sequence length, "
@@ -186,9 +178,7 @@ def _determine_max_length(
         max_length = model_max_length
         logger.debug(f"Using max_length={max_length} from model config")
     elif max_length is not None:
-        logger.debug(
-            f"Using max_length={max_length} from command line argument"
-        )
+        logger.debug(f"Using max_length={max_length} from command line argument")
         if model_max_length is not None and max_length > model_max_length:
             max_length = model_max_length
             logger.warning(
@@ -227,9 +217,7 @@ def _determine_num_to_generate_in_pipeline(
         max(MIN_NUM_TO_GENERATE, num_to_generate // 100),
         MIN_NUM_TO_GENERATE * 10,
     )
-    logger.debug(
-        f"Generating {num_to_generate_in_pipeline} {item_name} at a time"
-    )
+    logger.debug(f"Generating {num_to_generate_in_pipeline} {item_name} at a time")
     return num_to_generate_in_pipeline
 
 
@@ -239,9 +227,7 @@ def _create_generation_pipeline(
     if not isinstance(
         model, PreTrainedModel
     ):  # would like to check for AutoModelForCausalLM, but that doesn't work
-        raise TypeError(
-            f"model must be an AutoModelForCausalLM, but is {type(model)}"
-        )
+        raise TypeError(f"model must be an AutoModelForCausalLM, but is {type(model)}")
     if not isinstance(tokenizer, PreTrainedTokenizerFast):
         raise TypeError(
             f"tokenizer must be a PreTrainedTokenizerFast, but is {type(tokenizer)}"
@@ -257,9 +243,7 @@ def _determine_max_num_tries(num_to_generate: int) -> int:
     return max(int(num_to_generate) // 100, 10)
 
 
-def _determine_prompt(
-    tokenizer: PreTrainedTokenizerFast, fine_tuned: bool
-) -> str:
+def _determine_prompt(tokenizer: PreTrainedTokenizerFast, fine_tuned: bool) -> str:
     if fine_tuned:
         prompt = BOS_TOKEN
     else:
@@ -314,9 +298,7 @@ def create_and_save_generation_config(
             return_unused_kwargs=True,
         )
         if len(unused_kwargs) > 0:
-            logger.warning(
-                f"Unused kwargs for GenerationConfig: {list(unused_kwargs)}"
-            )
+            logger.warning(f"Unused kwargs for GenerationConfig: {list(unused_kwargs)}")
 
     else:
         generation_config = GenerationConfig(
@@ -347,22 +329,16 @@ def generate_smiles(
 ) -> tuple[Tally, pd.DataFrame, pd.DataFrame]:
     # Validate arguments
     if not isinstance(config, GenerationConfig):
-        raise TypeError(
-            f"config must be a GenerationConfig, but is {type(config)}"
-        )
+        raise TypeError(f"config must be a GenerationConfig, but is {type(config)}")
     if not isinstance(pipe, Pipeline):
-        raise TypeError(
-            f"pipe must be a transformers.Pipeline, but is {type(pipe)}"
-        )
+        raise TypeError(f"pipe must be a transformers.Pipeline, but is {type(pipe)}")
     prompt = str(prompt)
     existing_file_path = Path(existing_file_path).resolve()
     assert int(num_to_generate) > 0
     assert int(max_num_tries) > 0
 
     # Setup variables
-    all_smiles: list[
-        Molecule
-    ] = []  # need a list instead of a set for master list
+    all_smiles: list[Molecule] = []  # need a list instead of a set for master list
     smiles: dict[str, set[Molecule]] = {
         "all_existing": set(),
         "all_valid": set(),
@@ -376,9 +352,7 @@ def generate_smiles(
 
     # Load existing molecules
     logger.info("Loading known molecules...")
-    existing_molecules: list[Molecule] = load_existing_molecules(
-        existing_file_path
-    )
+    existing_molecules: list[Molecule] = load_existing_molecules(existing_file_path)
     smiles["all_existing"] = set(existing_molecules)
     assert all(bool(s.canonical_smiles) for s in smiles["all_existing"])
 
@@ -424,9 +398,7 @@ def generate_smiles(
             }
             # I ask for at least one new token in the generation config, but
             # the pipeline still returns empty strings sometimes; therefore the if len(s) > 0
-            smiles["pl_generated"] = {
-                Molecule(s) for s in generated if len(s) > 0
-            }
+            smiles["pl_generated"] = {Molecule(s) for s in generated if len(s) > 0}
             all_smiles.extend(smiles["pl_generated"])
             smiles["pl_valid"] = {s for s in smiles["pl_generated"] if s.valid}
 
@@ -458,12 +430,8 @@ def generate_smiles(
                 valid=valid_counter / generated_counter
                 if generated_counter > 0
                 else 0.0,
-                unique=unique_counter / valid_counter
-                if valid_counter > 0
-                else 0.0,
-                novel=novel_counter / unique_counter
-                if unique_counter > 0
-                else 0.0,
+                unique=unique_counter / valid_counter if valid_counter > 0 else 0.0,
+                novel=novel_counter / unique_counter if unique_counter > 0 else 0.0,
             )
 
     # Some final checks
@@ -521,9 +489,7 @@ def generate_smarts(
     ) -> list[Reaction]:
         # Determine similar reactions; similar means that the reaction smarts have the same canonical form
         _similar_reactions = [
-            r
-            for r in existing_reactions
-            if _reaction.is_similar_to(r, "canonical")
+            r for r in existing_reactions if _reaction.is_similar_to(r, "canonical")
         ]
 
         # If there are similar reactions, see if the reaction smarts itself is syntactically valid
@@ -566,9 +532,7 @@ def generate_smarts(
 
     # Validate arguments
     if not isinstance(config, GenerationConfig):
-        raise TypeError(
-            f"config must be a GenerationConfig, but is {type(config)}"
-        )
+        raise TypeError(f"config must be a GenerationConfig, but is {type(config)}")
     if not isinstance(pipe, Pipeline):
         raise TypeError(f"pipe must be a Pipeline, but is {type(pipe)}")
     prompt = str(prompt)
@@ -670,9 +634,7 @@ def generate_smarts(
                 valid=valid_counter / generated_counter
                 if generated_counter > 0
                 else 0.0,
-                unique=unique_counter / valid_counter
-                if valid_counter > 0
-                else 0.0,
+                unique=unique_counter / valid_counter if valid_counter > 0 else 0.0,
             )
 
     # Check for chemical feasibility
@@ -701,25 +663,15 @@ def generate_smarts(
                 reaction.feasible = True
                 smarts["all_feasible"].add(reaction)
                 # Gather the IDs of the reactions that work with the generated reaction
-                feasible_ids = [
-                    s.id for s in feasible_reactions if s.id is not None
-                ]
+                feasible_ids = [s.id for s in feasible_reactions if s.id is not None]
                 reaction.works_with = CSV_ID_SPLITTER.join(feasible_ids)
                 reaction.num_works_with = len(feasible_ids)
                 # Gather information about the data split of the reaction that work with the generated reaction
                 reaction.in_val_set = any(
-                    [
-                        s.split == "valid"
-                        for s in existing_reactions
-                        if s == reaction
-                    ]
+                    [s.split == "valid" for s in existing_reactions if s == reaction]
                 )
                 reaction.in_test_set = any(
-                    [
-                        s.split == "test"
-                        for s in existing_reactions
-                        if s == reaction
-                    ]
+                    [s.split == "test" for s in existing_reactions if s == reaction]
                 )
             progress.update(task, advance=1)
 
@@ -736,18 +688,12 @@ def generate_smarts(
         s for s in smarts["all_known"] if s.in_test_set
     }
     counter.increment("known", len(smarts["all_known"]))
-    counter.increment(
-        "known_from_valid_set", len(smarts["all_known_from_valid_set"])
-    )
-    counter.increment(
-        "known_from_test_set", len(smarts["all_known_from_test_set"])
-    )
+    counter.increment("known_from_valid_set", len(smarts["all_known_from_valid_set"]))
+    counter.increment("known_from_test_set", len(smarts["all_known_from_test_set"]))
 
     # Some final checks
     logger.info("Performing final plausibility checks...")
-    assert len(smarts["all_valid"]) == len(smarts["all_known"]) + len(
-        smarts["all_new"]
-    )
+    assert len(smarts["all_valid"]) == len(smarts["all_known"]) + len(smarts["all_new"])
     should_be_empty = smarts["all_known"] - smarts["all_existing"]
     if len(should_be_empty) > 0:
         logger.warning(
@@ -762,9 +708,7 @@ def generate_smarts(
     # Generate output
     logger.debug("Generating output...")
     column_smarts = [s.reaction_smarts for s in smarts["all_feasible"]]
-    column_known = [
-        (s.in_val_set or s.in_test_set) for s in smarts["all_feasible"]
-    ]
+    column_known = [(s.in_val_set or s.in_test_set) for s in smarts["all_feasible"]]
     column_valid_set = [s.in_val_set for s in smarts["all_feasible"]]
     column_test_set = [s.in_test_set for s in smarts["all_feasible"]]
     column_num_works_with = [s.num_works_with for s in smarts["all_feasible"]]
@@ -895,9 +839,7 @@ def main() -> None:
     model_file_path = Path(args.model).resolve()
     logger.debug(f"Model file path: {model_file_path}")
     if not model_file_path.is_dir():
-        raise FileNotFoundError(
-            f"Model in {model_file_path.as_posix()} not found"
-        )
+        raise FileNotFoundError(f"Model in {model_file_path.as_posix()} not found")
 
     known_file_path = Path(args.known).resolve()
     logger.debug(f"Known file path: {known_file_path}")
@@ -914,8 +856,7 @@ def main() -> None:
             output_file_path_full = GENERATED_DATA_DIR / "generated_smiles.csv"
         else:
             output_file_path_short = (
-                GENERATED_DATA_DIR
-                / "generated_reaction_templates_redundant.csv"
+                GENERATED_DATA_DIR / "generated_reaction_templates_redundant.csv"
             )
             output_file_path_full = (
                 GENERATED_DATA_DIR / "generated_reaction_templates.csv"
@@ -949,16 +890,12 @@ def main() -> None:
     num_beams = args.num_beams
     logger.debug(f"Number of beams: {num_beams}")
     if num_beams < 1:
-        raise ValueError(
-            f"Number of beams must be greater than 0, not {num_beams}"
-        )
+        raise ValueError(f"Number of beams must be greater than 0, not {num_beams}")
 
     temperature = args.temperature
     logger.debug(f"Temperature: {temperature}")
     if temperature <= 0:
-        raise ValueError(
-            f"Temperature must be greater than 0, not {temperature}"
-        )
+        raise ValueError(f"Temperature must be greater than 0, not {temperature}")
 
     # Create text generation pipeline
     logger.info("Setting up generation configuration...")

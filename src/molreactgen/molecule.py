@@ -7,10 +7,7 @@ Student ID: K08608294
 """
 import logging
 import re
-from collections.abc import (  # Callable,; Iterator,; MutableMapping,
-    Iterable,
-    Sequence,
-)
+from collections.abc import Iterable, Sequence  # Callable,; Iterator,; MutableMapping,
 from functools import cached_property, partial
 from multiprocessing import Pool
 from typing import Any, Literal, Optional, Union, overload
@@ -66,7 +63,6 @@ def canonicalize_smiles(
     strict: bool = False,
     double_check: bool = False,
 ) -> Optional[str]:
-
     return canonicalize_molecule(
         molecule,
         is_smarts=False,
@@ -84,7 +80,6 @@ def canonicalize_molecule(
     strict: bool = False,
     double_check: bool = False,
 ) -> Optional[str]:
-
     molecule = str(molecule)
     is_smarts = bool(is_smarts)
     remove_atom_mapping = bool(remove_atom_mapping)
@@ -116,7 +111,6 @@ def canonicalize_molecules(
     strict: bool = False,
     double_check: bool = False,
 ) -> list[Optional[str]]:
-
     # double_check parameter is required due to a bug in RDKit
     # see https://github.com/rdkit/rdkit/issues/5455
 
@@ -153,6 +147,7 @@ def canonicalize_molecules(
 # Taken from https://github.com/ml-jku/mhn-react/blob/main/mhnreact/molutils.py
 # Modified to work within this project
 
+
 # This let's mypy complain about
 # "Overloaded function signatures 1 and 2 overlap with incompatible return types"
 # see also https://github.com/python/mypy/issues/11001
@@ -166,9 +161,7 @@ def remove_atom_mapping(smarts: Sequence[str]) -> list[str]:
     ...
 
 
-def remove_atom_mapping(
-    smarts: Union[str, Sequence[str]]
-) -> Union[str, list[str]]:
+def remove_atom_mapping(smarts: Union[str, Sequence[str]]) -> Union[str, list[str]]:
     """Removes a number after a ':'"""
     if isinstance(smarts, str) or not isinstance(smarts, Iterable):
         smarts = [smarts]
@@ -223,7 +216,6 @@ class Reaction:
         product: Optional[str] = None,
         feasible: bool = False,
     ) -> None:
-
         self.reaction_smarts = str(reaction_smarts)
         self.split = str(split).lower() if split is not None else None
         self.id = str(id_)
@@ -242,9 +234,7 @@ class Reaction:
     @reaction_smarts.setter
     def reaction_smarts(self, value: str) -> None:
         if hasattr(self, "_reaction_smarts"):
-            raise AttributeError(
-                "reaction_smarts is already set, can not be changed"
-            )
+            raise AttributeError("reaction_smarts is already set, can not be changed")
 
         # noinspection PyAttributeOutsideInit
         self._reaction_smarts = str(value)
@@ -269,9 +259,7 @@ class Reaction:
     def invalid(self) -> bool:
         return not self.valid
 
-    def is_similar_to(
-        self, other: "Reaction", criterion: str = "atom_mapping"
-    ) -> bool:
+    def is_similar_to(self, other: "Reaction", criterion: str = "atom_mapping") -> bool:
         criterion = str(criterion).lower()
         if isinstance(other, Reaction):
             if criterion == "atom_mapping":
@@ -327,7 +315,6 @@ class Molecule:
         id_: Optional[str] = None,
         notation: str = "SMILES",
     ) -> None:
-
         self.smiles: str = str(smiles)
         self.id = id_
         # Currently only SMILES notation is supported
@@ -369,9 +356,7 @@ class Molecule:
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, Molecule):
             self_smiles = self.canonical_smiles if self.valid else self.smiles
-            other_smiles = (
-                other.canonical_smiles if other.valid else other.smiles
-            )
+            other_smiles = other.canonical_smiles if other.valid else other.smiles
             return self_smiles == other_smiles
         else:
             return NotImplemented

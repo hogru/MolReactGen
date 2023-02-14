@@ -58,12 +58,8 @@ class Tally:
             raise ValueError("counters must be unique")
 
         self._counters: dict[str, int] = {str(k): 0 for k in counters}
-        self._key_to_idx: dict[str, int] = {
-            str(k): i for i, k in enumerate(counters)
-        }
-        self._idx_to_key: dict[int, str] = {
-            i: str(k) for i, k in enumerate(counters)
-        }
+        self._key_to_idx: dict[str, int] = {str(k): i for i, k in enumerate(counters)}
+        self._idx_to_key: dict[int, str] = {i: str(k) for i, k in enumerate(counters)}
         counters_one_up = [self.base_name]
         counters_one_up.extend(counters[:-1])
         assert len(counters) == len(counters_one_up)
@@ -261,18 +257,13 @@ class Tally:
         with open(file_path, "w") as f:
             json.dump(dict_to_save, f)
 
-    def save_to_file(
-        self, file_path: PathLike[str], format_: str = "json"
-    ) -> None:
+    def save_to_file(self, file_path: PathLike[str], format_: str = "json") -> None:
         file_path = Path(file_path).resolve()
         if format_.upper() not in self.valid_file_formats:
             raise ValueError(f"Unknown format {format_}")
 
         file_extension = file_path.suffix
-        if (
-            file_extension.upper()
-            not in self.valid_file_formats[format_.upper()]
-        ):
+        if file_extension.upper() not in self.valid_file_formats[format_.upper()]:
             logger.warning(
                 f"File format {format_} does not match file extension {file_extension}, saving anyway"
             )
@@ -375,13 +366,9 @@ def configure_logging(
     syslog_log_level = file_log_level
 
     console_format = (
-        default_console_format
-        if console_format is None
-        else str(console_format)
+        default_console_format if console_format is None else str(console_format)
     )
-    file_format = (
-        default_file_format if file_format is None else str(file_format)
-    )
+    file_format = default_file_format if file_format is None else str(file_format)
     syslog_format = (
         default_syslog_format if syslog_format is None else str(syslog_format)
     )
@@ -391,9 +378,7 @@ def configure_logging(
     caller_file_path = Path(inspect.stack()[1].filename).resolve()
     if log_dir is None:
         # log_dir = Path(caller_file_path.parent) / "logs"
-        log_dir = (
-            guess_project_root_dir(caller_file_path=caller_file_path) / "logs"
-        )
+        log_dir = guess_project_root_dir(caller_file_path=caller_file_path) / "logs"
     else:
         log_dir = Path(log_dir).resolve()
     Path(log_dir).mkdir(parents=True, exist_ok=True)
@@ -465,17 +450,13 @@ def guess_project_root_dir(
     )
     directory = caller_file_path
     while (directory != directory.parent) and (directory := directory.parent):
-        if any(
-            directory.joinpath(sign).exists() for sign in signs_for_root_dir
-        ):
+        if any(directory.joinpath(sign).exists() for sign in signs_for_root_dir):
             return directory
 
     return caller_file_path.parent
 
 
-def get_hash_code(
-    file_path: Union[str, Path], algorithm: str = "sha256"
-) -> int:
+def get_hash_code(file_path: Union[str, Path], algorithm: str = "sha256") -> int:
     file_path = Path(file_path).resolve()
     if algorithm.upper() == "MD5":
         hash_fn = hashlib.md5()
@@ -586,7 +567,5 @@ def get_device_type() -> str:
         str: GPU type/name
     """
 
-    device_type = (
-        torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"
-    )
+    device_type = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"
     return device_type

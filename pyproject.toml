@@ -57,7 +57,7 @@ requires = ["poetry-core>=1.0.8"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.black]
-line-length = 80
+line-length = 88
 target-version = ['py39']
 include = '\.pyi?$'
 exclude = '''
@@ -71,12 +71,12 @@ exclude = '''
 
 [tool.isort]
 profile = "black"
-line_length = 80
+line_length = 88
 
 [tool.bumpver]
 current_version = "1.0.0a0"
 version_pattern = "MAJOR.MINOR.PATCH[PYTAGNUM]"
-commit_message = "bump version {old_version} -> {new_version}"
+commit_message = "Bump version {old_version} -> {new_version}"
 commit = true
 tag = true
 push = false

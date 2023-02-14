@@ -119,7 +119,6 @@ def get_tokenizer(
     byte_level: bool = False,
     # save_path: str = "./tokenizers/",
 ) -> PreTrainedTokenizerFast:
-
     pre_tokenizer = str(pre_tokenizer).upper()
     algorithm = str(algorithm).upper()
     vocab_size = max(
@@ -322,9 +321,7 @@ def enclose_function(
     start_token: str,
     end_token: str,
 ) -> dict[str, list[str]]:
-    enclosed = [
-        start_token + line + end_token for line in batch[DATASET_COLUMN_NAME]
-    ]
+    enclosed = [start_token + line + end_token for line in batch[DATASET_COLUMN_NAME]]
     return {DATASET_COLUMN_NAME: enclosed}
 
 
@@ -400,9 +397,7 @@ def get_modified_vocab(
         # A (hypothetical) element with frequency zero becomes the end_idx
         vocab_modified = vocab_original.copy()
         mapping_d: int = end_idx
-        mapping_k: float = (end_idx - start_idx) / modified_freq.most_common(1)[
-            0
-        ][1]
+        mapping_k: float = (end_idx - start_idx) / modified_freq.most_common(1)[0][1]
         print(f"Linear mapping: y = -{mapping_k}x + {mapping_d}")
 
         # These sets are used to
@@ -419,9 +414,7 @@ def get_modified_vocab(
             while (to := to + 1) in indices_used:
                 pass
             if not (start_idx <= to < len(vocab_original)):
-                raise RuntimeError(
-                    "Cannot fit modified_freq into tokenizer_original"
-                )
+                raise RuntimeError("Cannot fit modified_freq into tokenizer_original")
 
             indices_used.add(to)
             return to
@@ -455,9 +448,7 @@ def get_modified_vocab(
             vocab_modified[DELETED_TOKEN_PREFIX + str(idx)] = idx
 
         # Return the sorted modified vocab
-        vocab_modified = dict(
-            sorted(vocab_modified.items(), key=lambda item: item[1])
-        )
+        vocab_modified = dict(sorted(vocab_modified.items(), key=lambda item: item[1]))
 
     else:
         raise ValueError(f"Unknown mapping strategy {mapping_strategy}")

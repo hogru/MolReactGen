@@ -140,9 +140,7 @@ def get_reference_stats(
 def _get_fcd_instance(canonicalize: bool = True) -> "FCD":
     num_workers = min(get_num_workers(), 4)
     device = get_device()
-    fcd_fn = FCD(
-        canonize=canonicalize, n_jobs=num_workers, device=device, pbar=True
-    )
+    fcd_fn = FCD(canonize=canonicalize, n_jobs=num_workers, device=device, pbar=True)
     return fcd_fn
 
 
@@ -168,22 +166,17 @@ def get_fcd(
     mols_reference: Optional[Sequence[str]] = None,
     reference_stats: Optional[Mapping[str, "np.floating[T]"]] = None,
 ) -> float:
-
     if mols_reference is not None and reference_stats is None:
         fcd_value = _get_fcd_from_molecules(mols_generated, mols_reference)
     elif reference_stats is not None:
         fcd_value = _get_fcd_from_stats(mols_generated, reference_stats)
     else:
-        raise ValueError(
-            "Either mols_reference or reference_stats must be provided"
-        )
+        raise ValueError("Either mols_reference or reference_stats must be provided")
 
     return fcd_value
 
 
-def save_stats_to_file(
-    file: Path, stats: Mapping[str, "np.floating[T]"]
-) -> None:
+def save_stats_to_file(file: Path, stats: Mapping[str, "np.floating[T]"]) -> None:
     with open(file, "wb") as f:
         pickle.dump(stats, f)
 
@@ -196,7 +189,6 @@ def evaluate_molecules(
     stats_file_path: Optional[Path] = None,
     num_molecules: Optional[int] = None,
 ) -> dict[str, float]:
-
     if mode not in VALID_EVALUATION_MODES:
         raise ValueError(f"Invalid evaluation mode: {mode}")
 
@@ -214,18 +206,14 @@ def evaluate_molecules(
         num_molecules_str = f"first {num_molecules:,d}"
 
     logger.info(f"Loading {num_molecules_str} generated molecules...")
-    mols_generated = read_molecules_from_file(
-        generated_file_path, num_molecules
-    )
+    mols_generated = read_molecules_from_file(generated_file_path, num_molecules)
 
     # Calculate basic stats; compare generated and reference molecules (if available)
     if reference_file_path is not None:
         logger.info("Loading reference molecules...")
         mols_reference = read_molecules_from_file(reference_file_path)
         logger.info("Calculating basic stats...")
-        validity, uniqueness, novelty = get_basic_stats(
-            mols_generated, mols_reference
-        )
+        validity, uniqueness, novelty = get_basic_stats(mols_generated, mols_reference)
         basic_stats = {
             "Validity": validity,
             "Uniqueness": uniqueness,
@@ -375,9 +363,7 @@ def main() -> None:
             )
         if args.reference is not None:
             reference_file_path = Path(args.reference).resolve()
-            logger.debug(
-                f"Reference molecules file path: {reference_file_path}"
-            )
+            logger.debug(f"Reference molecules file path: {reference_file_path}")
             if not reference_file_path.is_file():
                 raise FileNotFoundError(
                     f"Reference molecules file '{reference_file_path}' not found"
@@ -413,7 +399,6 @@ def main() -> None:
         text=lambda secs: f"Molecules evaluated in {format_timespan(secs)}",
         logger=logger.info,
     ):
-
         # Evaluate molecules
         stats = evaluate_molecules(
             args.mode,

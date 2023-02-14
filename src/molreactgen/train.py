@@ -28,13 +28,7 @@ import evaluate  # type: ignore
 import torch
 import transformers  # type: ignore
 import wandb
-from datasets import (  # type: ignore
-    Dataset,
-    DatasetDict,
-    Features,
-    Value,
-    load_dataset,
-)
+from datasets import Dataset, DatasetDict, Features, Value, load_dataset  # type: ignore
 from loguru import logger
 from transformers import (
     CONFIG_MAPPING,
@@ -191,9 +185,7 @@ class DataArguments:
 
     dataset_name: Optional[str] = field(
         default=None,
-        metadata={
-            "help": "The name of the dataset to use (via the datasets library)."
-        },
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
         default=None,
@@ -241,9 +233,7 @@ class DataArguments:
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
-        metadata={
-            "help": "The number of processes to use for the preprocessing."
-        },
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
     pre_tokenizer: Optional[str] = field(
         default="ATOM",
@@ -289,19 +279,13 @@ class DataArguments:
 
     def __post_init__(self) -> None:
         if self.dataset_name is not None:
-            raise NotImplementedError(
-                "Datasets from the HF hub are not supported yet."
-            )
+            raise NotImplementedError("Datasets from the HF hub are not supported yet.")
 
         if self.dataset_name is None and self.dataset_dir is None:
-            raise ValueError(
-                "Need either a dataset name or a dataset directory."
-            )
+            raise ValueError("Need either a dataset name or a dataset directory.")
         elif self.dataset_dir is not None:
             self.dataset_dir = (
-                (Path(PROJECT_ROOT_DIR) / (self.dataset_dir))
-                .resolve()
-                .as_posix()
+                (Path(PROJECT_ROOT_DIR) / (self.dataset_dir)).resolve().as_posix()
             )
             for file in Path(self.dataset_dir).glob("*"):
                 if (
@@ -325,10 +309,7 @@ class DataArguments:
                 )
             self.pre_tokenizer = "CHAR"
             self.algorithm = "BPE"
-            if (
-                self.map_strategy is not None
-                and self.map_strategy.upper() != "LINEAR"
-            ):
+            if self.map_strategy is not None and self.map_strategy.upper() != "LINEAR":
                 warnings.warn(
                     "Only the 'linear' mapping strategy is currently supported. Set it to 'linear'."
                 )
@@ -365,6 +346,7 @@ class AdditionalArguments:
 # Functions for data manipulation                                             #
 ###############################################################################
 
+
 # TODO implement this function
 def load_raw_dataset_from_hub(  # type: ignore # Remove once implemented
     dataset_name: str,
@@ -397,12 +379,8 @@ def load_raw_dataset_from_dir(
             raise RuntimeError("Can't load dataset, no train split found")
         # Create random split
         dataset_shuffled: Dataset = dataset["train"].shuffle(seed=seed)
-        val_len: int = int(
-            len(dataset_shuffled) * validation_split_percentage / 100.0
-        )
-        test_len: int = int(
-            len(dataset_shuffled) * test_split_percentage / 100.0
-        )
+        val_len: int = int(len(dataset_shuffled) * validation_split_percentage / 100.0)
+        test_len: int = int(len(dataset_shuffled) * test_split_percentage / 100.0)
         train_len: int = len(dataset_shuffled) - val_len - test_len
         logger.debug(
             f"Create random split with lengths {train_len}, {val_len}, {test_len}"
@@ -424,9 +402,9 @@ def load_raw_dataset_from_dir(
 # Main training loop                                                          #
 ###############################################################################
 
+
 # @logger.catch
 def main() -> None:
-
     # -----------------------------------------------------------------------------
     # Setup
     # -----------------------------------------------------------------------------
@@ -494,9 +472,7 @@ def main() -> None:
             use_auth_token=model_args.use_auth_token,
         )
     else:
-        logger.info(
-            f"Loading dataset from directory {data_args.dataset_dir}..."
-        )
+        logger.info(f"Loading dataset from directory {data_args.dataset_dir}...")
         raw_datasets = load_raw_dataset_from_dir(
             data_args.dataset_dir,
             validation_split_percentage=data_args.validation_split_percentage,
@@ -519,18 +495,14 @@ def main() -> None:
     }
 
     if model_args.model_name_or_path:
-        logger.info(
-            f"Loading configuration from {model_args.model_name_or_path}"
-        )
+        logger.info(f"Loading configuration from {model_args.model_name_or_path}")
         config = AutoConfig.from_pretrained(
             model_args.model_name_or_path, **config_kwargs
         )
 
     elif model_args.config_name:
         logger.info(f"Loading configuration from {model_args.config_name}")
-        config = AutoConfig.from_pretrained(
-            model_args.config_name, **config_kwargs
-        )
+        config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
 
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
@@ -566,9 +538,7 @@ def main() -> None:
                 model_args.tokenizer_name, **tokenizer_kwargs
             )
         elif model_args.model_name_or_path:
-            logger.info(
-                f"Loading tokenizer from {model_args.model_name_or_path}"
-            )
+            logger.info(f"Loading tokenizer from {model_args.model_name_or_path}")
             tokenizer_pretrained = AutoTokenizer.from_pretrained(
                 model_args.model_name_or_path, **tokenizer_kwargs
             )
@@ -587,9 +557,7 @@ def main() -> None:
             )
         elif model_args.model_name_or_path:
             need_tokenizer_from_scratch = False
-            logger.info(
-                f"Loading tokenizer from {model_args.model_name_or_path}"
-            )
+            logger.info(f"Loading tokenizer from {model_args.model_name_or_path}")
             tokenizer = AutoTokenizer.from_pretrained(
                 model_args.model_name_or_path, **tokenizer_kwargs
             )
@@ -629,9 +597,7 @@ def main() -> None:
         counter_set = {t[0] for t in token_counter.most_common(None)}
         vocab_set = set(tokenizer_from_scratch.get_vocab().keys())
         delta_set = (
-            vocab_set
-            - counter_set
-            - set(tokenizer_from_scratch.all_special_tokens)
+            vocab_set - counter_set - set(tokenizer_from_scratch.all_special_tokens)
         )
         delta_counter = {k: 0 for k in delta_set}
         token_counter.update(delta_counter)
@@ -669,7 +635,6 @@ def main() -> None:
         ) as f_vocab_modified, tempfile.NamedTemporaryFile(
             mode="w", suffix=".txt"
         ) as f_merge_modified:
-
             # Write vocabulary file
             json.dump(vocab_modified, f_vocab_modified, ensure_ascii=False)
 
@@ -703,7 +668,6 @@ def main() -> None:
 
     logger.info("Tokenizing datasets...")
     with training_args.main_process_first(desc="Tokenize dataset (map)"):
-
         if data_args.map_tokenizers:
             enclosed_datasets = raw_datasets.map(
                 partial(
@@ -746,9 +710,7 @@ def main() -> None:
         )
     else:
         # Update model with information from tokenizer
-        logger.info(
-            "Updating model configuration with tokenizer information..."
-        )
+        logger.info("Updating model configuration with tokenizer information...")
         logger.debug(
             f"Vocabulary size: {tokenizer.vocab_size}, "
             f"BOS token id: {tokenizer.bos_token_id}, "
@@ -764,17 +726,13 @@ def main() -> None:
         config.update(model_overrides)
         logger.info("Creating model...")
         model = AutoModelForCausalLM.from_config(config)
-    n_params = sum(
-        dict((p.data_ptr(), p.numel()) for p in model.parameters()).values()
-    )
+    n_params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
     logger.info(f"Model size: {n_params/2**20:.2f}M params")
 
     # Reshape the embeddings if necessary
     embedding_size = model.get_input_embeddings().weight.shape[0]
     if len(tokenizer) > embedding_size:
-        logger.error(
-            "Reshaping of model's embedding necessary (should NOT happen)"
-        )
+        logger.error("Reshaping of model's embedding necessary (should NOT happen)")
         logger.error(
             f"Tokenizer length: {len(tokenizer)}, embedding size: {embedding_size}"
         )
@@ -815,8 +773,7 @@ def main() -> None:
                 "Use --overwrite_output_dir to overcome."
             )
         elif (  # checkpoint found but training not configured to resume from this checkpoint
-            last_checkpoint is not None
-            and training_args.resume_from_checkpoint is None
+            last_checkpoint is not None and training_args.resume_from_checkpoint is None
         ):
             logger.info(
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
@@ -844,9 +801,7 @@ def main() -> None:
             raise ValueError("--do_eval requires a validation dataset")
         eval_dataset: Dataset = tokenized_datasets["validation"]
         if data_args.max_val_samples is not None:
-            max_eval_samples: int = min(
-                len(eval_dataset), data_args.max_val_samples
-            )
+            max_eval_samples: int = min(len(eval_dataset), data_args.max_val_samples)
             logger.info(f"Limit validation samples to {max_eval_samples}")
             eval_dataset = eval_dataset.select(range(max_eval_samples))
 
@@ -908,10 +863,7 @@ def main() -> None:
     # https://github.com/huggingface/transformers/issues/20552
 
     # Configure wandb
-    if (
-        training_args.report_to is not None
-        and "wandb" in training_args.report_to
-    ):
+    if training_args.report_to is not None and "wandb" in training_args.report_to:
         os.environ["WANDB_DISABLED"] = "false"
         os.environ["WANDB_PROJECT"] = WANDB_PROJECT_NAME
         os.environ["WANDB_LOG_MODEL"] = "end"
@@ -959,9 +911,7 @@ def main() -> None:
         if checkpoint is not None and isinstance(checkpoint, bool):
             logger.info(f"Resuming training from checkpoint {checkpoint}")
         elif checkpoint is not None and isinstance(checkpoint, str):
-            logger.info(
-                f"Resuming training from checkpoint {training_args.output_dir}"
-            )
+            logger.info(f"Resuming training from checkpoint {training_args.output_dir}")
         logger.heading("Start training...")  # type: ignore
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         logger.info("Saving model...")

@@ -105,9 +105,7 @@ FILE_NAME_TRANSLATIONS: dict[str, str] = {
 }
 
 
-def _cleanse_and_copy_data(
-    input_file_path: Path, output_file_path: Path
-) -> None:
+def _cleanse_and_copy_data(input_file_path: Path, output_file_path: Path) -> None:
     df = pd.read_csv(input_file_path, usecols=[0], header=None)
     first_row = df[0][0]
     if first_row.upper().startswith(
@@ -129,9 +127,7 @@ def _download_pooched_dataset(
 
     processor: pooch.processors
     for file in POOCHES[dataset].registry:
-        processor = (
-            pooch.Decompress() if file.endswith(GZIP_FILE_EXTENSIONS) else None
-        )
+        processor = pooch.Decompress() if file.endswith(GZIP_FILE_EXTENSIONS) else None
         file_name = Path(
             POOCHES[dataset].fetch(
                 file,
@@ -142,9 +138,7 @@ def _download_pooched_dataset(
         logger.info(f"Loaded file {file_name.name}")
 
 
-def _prepare_pooched_dataset(
-    dataset: str, raw_dir: Path, prep_dir: Path
-) -> None:
+def _prepare_pooched_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> None:
     assert raw_dir.samefile(POOCHES[dataset].path)
     prep_dir.mkdir(parents=True, exist_ok=True)
     for file in POOCHES[dataset].registry:
@@ -318,12 +312,8 @@ def download_dataset(
     if download_fn is None:
         raise ValueError(f"Invalid dataset: {dataset}")
     else:
-        enforce_str = (
-            " (force deleting cached files)" if enforce_download else ""
-        )
-        logger.info(
-            f"Downloading dataset {dataset} to {raw_dir}{enforce_str}..."
-        )
+        enforce_str = " (force deleting cached files)" if enforce_download else ""
+        logger.info(f"Downloading dataset {dataset} to {raw_dir}{enforce_str}...")
         return download_fn(raw_dir, enforce_download)
 
 
@@ -341,15 +331,12 @@ def prepare_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> None:
     if prepare_fn is None:
         raise ValueError(f"Invalid dataset: {dataset}")
     else:
-        logger.info(
-            f"Preparing dataset {dataset} from {raw_dir} into {prep_dir}..."
-        )
+        logger.info(f"Preparing dataset {dataset} from {raw_dir} into {prep_dir}...")
         return prepare_fn(raw_dir, prep_dir)
 
 
 @logger.catch
 def main() -> None:
-
     parser = argparse.ArgumentParser(
         description="Prepare data for training of the Hugging Face model."
     )
