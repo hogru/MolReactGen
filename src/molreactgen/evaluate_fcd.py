@@ -36,7 +36,8 @@ T = TypeVar("T", bound=npt.NBitBase)
 
 # Global variables, defaults
 PROJECT_ROOT_DIR: Path = guess_project_root_dir()
-DEFAULT_OUTPUT_FILE_SUFFIX: Final = "_evaluation.csv"
+# DEFAULT_OUTPUT_FILE_SUFFIX: Final = "_evaluation.csv"
+DEFAULT_OUTPUT_FILE_NAME: Final = "evaluation.json"
 ARGUMENTS_FILE_NAME: Final = "evaluate_cl_args.json"
 
 VALID_EVALUATION_MODES: Final = [
@@ -296,7 +297,7 @@ def main() -> None:
         required=False,
         default=None,
         help=f"file path for the evaluation statistic, "
-        f"default: the file name of the generated molecules with suffix {DEFAULT_OUTPUT_FILE_SUFFIX}.",
+        f"default: {DEFAULT_OUTPUT_FILE_NAME} in the directory of the generated molecules.",
     )
     parser.add_argument(
         "-r",
@@ -396,14 +397,16 @@ def main() -> None:
         )
 
     if args.output is None:
-        output_file_path = generated_file_path.with_name(
-            generated_file_path.stem + "_evaluated.json"
-        )
+        # output_file_path = generated_file_path.with_name(
+        #     generated_file_path.stem + "_evaluated.json"
+        # )
+        output_file_path = generated_file_path.parent / DEFAULT_OUTPUT_FILE_NAME
 
     else:
         output_file_path = Path(args.output).resolve()
-        logger.debug(f"Output file path: '{output_file_path}'")
         output_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+    logger.debug(f"Output file path: '{output_file_path}'")
 
     # Start timer
     with Timer(
