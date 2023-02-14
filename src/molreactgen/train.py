@@ -189,7 +189,6 @@ class DataArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    # TODO add support for datasets from the HF hub
     dataset_name: Optional[str] = field(
         default=None,
         metadata={
@@ -927,6 +926,7 @@ def main() -> None:
         os.environ["WANDB_DISABLED"] = "true"
 
     # TODO configure optimizer manually, HF deprecated the support to configure it via arguments
+    # Will be an issues with transformers version 5
 
     # Initialize the Trainer
     trainer = Trainer(

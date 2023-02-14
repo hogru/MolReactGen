@@ -22,7 +22,7 @@ from molreactgen.helpers import get_num_workers
 logger = logging.getLogger(__name__)
 
 
-# TODO This could/should be refactored in the following ways:
+# This could/should be refactored in the following ways:
 # - allow canonicalize_template() to take a list of templates and call canonicalize_molecules() internally
 # But, worth it? only used in one place, the Reaction class, which is a single template by definition
 # - make canonicalize_molecules() aware of the smarts parameter
@@ -289,7 +289,7 @@ class Reaction:
         else:
             return False
 
-    # TODO Think about what equality means for Reaction
+    # might think about what equality means for Reaction
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, Reaction):
             return self.reaction_smarts == other.reaction_smarts

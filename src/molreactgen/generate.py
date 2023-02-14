@@ -546,7 +546,7 @@ def generate_smarts(
                 # broad exception clause due to RDKit raising non-Python exceptions
                 # noinspection PyBroadException
                 try:
-                    # TODO check rdChiralRun options/arguments
+                    # might play with rdChiralRun options/arguments
                     _outcomes = rdchiralRun(
                         _rxn,
                         _product,
