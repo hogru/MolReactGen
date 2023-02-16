@@ -269,6 +269,8 @@ def create_and_save_generation_config(
     # At least one atom plus the EOS token(s)
     min_length = 2 if fine_tuned else 1
     max_length = _determine_max_length(model, max_length)
+    # Make "room" for the custom EOS token if model is fine-tuned
+    max_length = max_length - 1 if fine_tuned else max_length
     stopping_criteria = _determine_stopping_criteria(tokenizer, fine_tuned)
     if split_into_chunks:
         num_to_generate_in_pipeline = _determine_num_to_generate_in_pipeline(
