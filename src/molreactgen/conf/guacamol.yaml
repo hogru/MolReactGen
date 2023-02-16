@@ -6,7 +6,7 @@ dataset_dir: ../../../data/prep/guacamol/csv/
 # validation_split_percentage: 10
 # test_split_percentage: 10
 # max_train_samples: 1000
-# max_eval_samples: 100
+# max_val_samples: 100
 preprocessing_num_workers: 4
 
 # Tokenizer
@@ -62,7 +62,7 @@ seed: 42
 fp16: false  # might change to true, gpu only
 dataloader_num_workers: 4
 # past_index: 2  # might use for TransformerXL or XLNet
-run_name: MolGen  # TODO might determine during runtime
+# run_name: MolReactGen
 disable_tqdm: false
 load_best_model_at_end: true
 # label_smoothing_factor: 0.1  # TODO might play with, not implemented yet
