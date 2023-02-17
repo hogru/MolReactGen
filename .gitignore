@@ -5,7 +5,7 @@
 /data/prep/*
 /data/raw/*
 !/data/raw/debug
-/docs/*
+/experiments/*
 /logs/*
 /src/molreactgen/checkpoints/*
 /src/molreactgen/generated/*
