@@ -86,10 +86,27 @@ REGEX_INPUT: Final = {
 # replace() is just a safety net against double "|" in the RegEx
 REGEX_PATTERN_SMARTS: Final = "|".join(REGEX_INPUT.values()).replace("||", "|")
 REGEX_PATTERN_ATOM: Final = REGEX_PATTERN_SMARTS.replace(r"\[[^\]]+]", r"\[|\]")
-MIN_VOCAB_SIZE_UNIGRAM: Final = 100
+MIN_VOCAB_SIZE_UNIGRAM: Final = 40
 
 
 logger = logging.getLogger(__name__)
+
+
+def _filter_invalid_tokenizer_combos(
+    pre_tokenizer: str, algorithm: str, vocab_size: int
+) -> None:
+    if pre_tokenizer in {"ATOM", "SMARTS"} and algorithm != "WORDLEVEL":
+        raise ValueError(
+            f"Pre-tokenizer {pre_tokenizer} must be used with WORDLEVEL algorithm"
+        )
+
+    if algorithm == "WORDLEVEL" and vocab_size != 0:
+        raise ValueError(f"Algorithm {algorithm} must be used with a vocab size of 0")
+
+    if algorithm == "UNIGRAM" and vocab_size < MIN_VOCAB_SIZE_UNIGRAM:
+        raise ValueError(
+            f"Algorithm {algorithm} must be used with a vocab size of at least {MIN_VOCAB_SIZE_UNIGRAM}"
+        )
 
 
 def token_in_regex(token: str, regex: str) -> bool:
@@ -127,6 +144,9 @@ def get_tokenizer(
     model_max_length = int(model_max_length)
     min_frequency = max(1, int(min_frequency))
     byte_level = bool(byte_level)
+
+    _filter_invalid_tokenizer_combos(pre_tokenizer, algorithm, vocab_size)
+
     try:
         add_token = str(ADD_TOKEN)
     except (NameError, ValueError):
@@ -134,17 +154,6 @@ def get_tokenizer(
 
     special_tokens = [bos_token, eos_token, pad_token, unk_token, add_token]
     vocab_size += len(special_tokens)
-
-    # if pre_tokenizer in ("ATOM", "SMARTS") and algorithm in (
-    #     "BPE",
-    #     "WORDPIECE",
-    #     "UNIGRAM",
-    # ):
-    #     logger.warning(
-    #         f"Combination of pre-tokenizer {pre_tokenizer} and algorithm {algorithm} not supported. "
-    #         f"Using pre-tokenizer CHAR instead."
-    #     )
-    #     pre_tokenizer = "CHAR"
 
     if regex_pattern is None:
         if pre_tokenizer == "CHAR":
