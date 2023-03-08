@@ -18,10 +18,11 @@
 .ipynb_checkpoints
 .mypy_cache
 .pytest_cache
+*.ignore
 *.json
 *.numbers
-*.ignore
 *.pyc
+*.svg
 .coverage
 .DS_Store
 .secrets.yaml
