@@ -37,10 +37,12 @@ tensorboard = "^2.11.0"
 rdchiral = "^1.1.0"
 pooch = "^1.6.0"
 types-tqdm = "^4.64.7.11"
+interrogate = "^1.5.0"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
 flake8 = "^6.0"
+interrogate = "^1.5.0"
 isort = "^5.12.0"
 mypy = "^1.0.0"
 psutil = "^5.9.4"
@@ -91,3 +93,27 @@ push = false
     "{pep440_version}",
 ]
 "src/molreactgen/__init__.py" = ["{version}"]
+
+
+[tool.interrogate]
+ignore-init-method = false
+ignore-init-module = false
+ignore-magic = false
+ignore-semiprivate = false
+ignore-private = false
+ignore-property-decorators = false
+ignore-module = false
+ignore-nested-functions = false
+ignore-nested-classes = true
+ignore-setters = false
+fail-under = 95
+exclude = ["setup.py", "docs", "build"]
+ignore-regex = ["^get$", "^mock_.*", ".*BaseClass.*"]
+# possible values: 0 (minimal output), 1 (-v), 2 (-vv)
+verbose = 0
+quiet = false
+whitelist-regex = []
+color = true
+omit-covered-files = false
+generate-badge = "."
+badge-format = "svg"
