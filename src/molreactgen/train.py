@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from functools import partial
 from pathlib import Path
+from random import randint
 from typing import Any, Final, Optional, Union
 
 # Most of Hugging Face has poor type hints, trying to avoid mypy errors
@@ -456,6 +457,8 @@ def main() -> None:
     logger.debug(f"Training/evaluation parameters \n{training_args}")
 
     # Set seed in random, numpy, torch (not only for training, but also for dataset creation, if applicable)
+    if additional_args.random_seed:
+        training_args.seed = randint(0, 2**32 - 1)
     set_seed(training_args.seed)
 
     # -----------------------------------------------------------------------------
