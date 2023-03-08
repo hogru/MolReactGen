@@ -6,9 +6,10 @@ Causal language modeling (CLM) with a transformer decoder model
 Author: Stephan Holzgruber
 Student ID: K08608294
 """
+import argparse
+
 # Parts of this file are based on the following huggingface example:
 # https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_clm.py
-
 import json
 import math
 import os
@@ -65,8 +66,10 @@ from molreactgen.tokenizer import (
     tokenize_function,
 )
 
+CONFIG_OVERWRITE_ARGS_FLAG: Final[str] = "--config_file"
 PROJECT_ROOT_DIR: Final = guess_project_root_dir()
-WANDB_PROJECT_NAME: Final = "MolReactGen"
+DEFAULT_CONFIG_DIR: Final[Path] = PROJECT_ROOT_DIR / "src/molreactgen/conf"
+WANDB_PROJECT_NAME: Final[str] = "MolReactGen"
 
 
 ###############################################################################
@@ -102,6 +105,7 @@ MODEL_CONFIG_CLASSES: Final = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
 MODEL_TYPES: Final = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
+# TODO Add default values to metadata
 # Dataclasses for command line arguments
 @dataclass
 class ModelArguments:
@@ -286,7 +290,7 @@ class DataArguments:
             raise ValueError("Need either a dataset name or a dataset directory.")
         elif self.dataset_dir is not None:
             self.dataset_dir = (
-                (Path(PROJECT_ROOT_DIR) / (self.dataset_dir)).resolve().as_posix()
+                (Path(PROJECT_ROOT_DIR) / self.dataset_dir).resolve().as_posix()
             )
             for file in Path(self.dataset_dir).glob("*"):
                 if (
@@ -323,6 +327,12 @@ class AdditionalArguments:
     Additional miscellaneous training arguments which can not be passed to the Trainer directly.
     """
 
+    random_seed: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether a random seed should be configured; overwrites a fixed seed value. Defaults to False."
+        },
+    )
     early_stopping_patience: Optional[int] = field(
         default=None,
         metadata={
@@ -344,17 +354,134 @@ class AdditionalArguments:
 
 
 ###############################################################################
+# Helper to parse arguments (command line or .yaml                            #
+###############################################################################
+
+
+def get_training_config() -> tuple[argparse.Namespace, ...]:
+    # Extract the arguments which are not overwritten via command line flags/.args files
+    config_file_parser = argparse.ArgumentParser()
+    config_file_parser.add_argument(
+        CONFIG_OVERWRITE_ARGS_FLAG, type=str, action="append"
+    )
+    _, remaining_args = config_file_parser.parse_known_args()
+
+    # Determine .args and .yaml files in arguments
+    args_file_names = {
+        arg
+        for arg in remaining_args
+        if arg.lower().endswith(".args") and not arg.startswith("--")
+    }
+    yaml_file_names = {
+        arg
+        for arg in remaining_args
+        if arg.lower().endswith(".yaml") and not arg.startswith("--")
+    }
+
+    # Check if arguments make sense
+    if len(args_file_names) and len(yaml_file_names):
+        raise ValueError(
+            "Both .args and .yaml config files specified, can only use one configuration file (format)"
+        )
+
+    if len(args_file_names) > 1 or len(yaml_file_names) > 1:
+        raise ValueError(
+            "Can only create configuration from a single configuration file"
+        )
+
+    if len(yaml_file_names) == 1 and len(sys.argv) > 2:
+        raise ValueError(
+            "Configuration with a .yaml file does not allow for additional command line arguments"
+        )
+
+    # Parse the arguments, taking care of the different config scenarios
+    parser = HfArgumentParser(
+        (
+            ModelArguments,
+            DataArguments,
+            TrainingArguments,
+            AdditionalArguments,
+        ),
+        description="Train a model on a dataset",
+    )
+
+    # we have a .yaml file as a single argument
+    if len(sys.argv) == 2 and sys.argv[1].lower().endswith(".yaml"):
+        # print(f"Config via .yaml file {sys.argv[1]}")
+        yaml_file_path = Path(sys.argv[1]).resolve()
+        if not yaml_file_path.is_file():
+            raise FileNotFoundError(f"Config file {yaml_file_path} not found")
+        model_args, data_args, training_args, additional_args = parser.parse_yaml_file(
+            yaml_file_path.as_posix(),
+        )
+
+    # we have a (main) .args file, plus potentially overwrites
+    elif len(args_file_names) == 1 and list(args_file_names)[0].lower().endswith(
+        ".args"
+    ):
+        main_args_file_name = list(args_file_names)[0]
+        main_args_file_path = Path(main_args_file_name).resolve()
+        # print(f"Config via .args file {main_args_file_path}")
+        if not main_args_file_path.is_file():
+            raise FileNotFoundError(f"Config file {main_args_file_path} not found")
+        (
+            model_args,
+            data_args,
+            training_args,
+            additional_args,
+            unused_args,
+        ) = parser.parse_args_into_dataclasses(
+            args_filename=main_args_file_path.as_posix(),
+            return_remaining_strings=True,
+            args_file_flag=CONFIG_OVERWRITE_ARGS_FLAG,
+        )
+        unused_args.remove(main_args_file_name)  # must use original string
+        if unused_args:
+            raise ValueError(f"Unknown configuration arguments: {unused_args}")
+
+    # no config given, look for default config
+    elif len(args_file_names) == 0:
+        main_args_file_path = (
+            Path(DEFAULT_CONFIG_DIR) / Path(sys.argv[0]).with_suffix(".args").name
+        )
+        # print(f"Config via default .args file {main_args_file_path}")
+        if not main_args_file_path.is_file():
+            raise FileNotFoundError(f"Config file {main_args_file_path} not found")
+        (
+            model_args,
+            data_args,
+            training_args,
+            additional_args,
+            unused_args,
+        ) = parser.parse_args_into_dataclasses(
+            args_filename=main_args_file_path,
+            return_remaining_strings=True,
+            args_file_flag=CONFIG_OVERWRITE_ARGS_FLAG,
+        )
+        if unused_args:
+            raise ValueError(f"Unknown configuration arguments: {unused_args}")
+
+    # Something we have not considered (hopefully not)
+    else:
+        raise RuntimeError(
+            "Can not determine valid configuration option (should not happen, check code)"
+        )
+
+    return model_args, data_args, training_args, additional_args
+
+
+###############################################################################
 # Functions for data manipulation                                             #
 ###############################################################################
 
 
 # TODO implement this function
-def load_raw_dataset_from_hub(  # type: ignore # Remove once implemented
-    dataset_name: str,
+def load_raw_dataset_from_hub(  # type: ignore  # noqa  # Remove once implemented
+    dataset_name: str,  # noqa
     *,
-    dataset_config_name: Optional[str] = None,
-    cache_dir: Optional[str] = None,
-    use_auth_token: bool = False,
+    dataset_config_name: Optional[str] = None,  # noqa
+    cache_dir: Optional[str] = None,  # noqa
+    use_auth_token: bool = False,  # noqa
 ) -> DatasetDict:
     ...
 
@@ -411,29 +538,7 @@ def main() -> None:
     # -----------------------------------------------------------------------------
 
     # Parse arguments from command line or yaml configuration file
-    parser = HfArgumentParser(
-        (
-            ModelArguments,
-            DataArguments,
-            TrainingArguments,
-            AdditionalArguments,
-        ),
-        description="Train a model on a dataset.",
-    )
-    if len(sys.argv) == 2 and sys.argv[1].endswith(".yaml"):
-        (
-            model_args,
-            data_args,
-            training_args,
-            additional_args,
-        ) = parser.parse_yaml_file(Path(sys.argv[1]).resolve().as_posix())
-    else:
-        (
-            model_args,
-            data_args,
-            training_args,
-            additional_args,
-        ) = parser.parse_args_into_dataclasses()
+    model_args, data_args, training_args, additional_args = get_training_config()
 
     # Configure logging
     log_level = (
@@ -454,12 +559,15 @@ def main() -> None:
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
 
-    logger.debug(f"Training/evaluation parameters \n{training_args}")
-
     # Set seed in random, numpy, torch (not only for training, but also for dataset creation, if applicable)
     if additional_args.random_seed:
         training_args.seed = randint(0, 2**32 - 1)
     set_seed(training_args.seed)
+
+    logger.debug(f"Data arguments\n{data_args}")
+    logger.debug(f"Model arguments\n{model_args}")
+    logger.debug(f"Training arguments\n{training_args}")
+    logger.debug(f"Additional arguments\n{additional_args}")
 
     # -----------------------------------------------------------------------------
     # Load datasets
@@ -756,7 +864,7 @@ def main() -> None:
     if additional_args.unique_output_subdir:
         training_args.output_dir = (
             Path(training_args.output_dir)
-            / f"{datetime.now():%Y-%m-%d_%H-%M}_experiment"
+            / f"{datetime.now():%Y-%m-%d_%H-%M-%S}_experiment"
         ).as_posix()
 
     if (
@@ -824,7 +932,7 @@ def main() -> None:
 
     def preprocess_logits_for_metrics(
         logits: Union[tuple[torch.Tensor, ...], torch.Tensor],
-        labels: torch.Tensor,
+        labels: torch.Tensor,  # noqa
     ) -> torch.Tensor:
         if isinstance(logits, tuple):
             # Depending on the model and config, logits may contain extra tensors,
@@ -871,6 +979,7 @@ def main() -> None:
         os.environ["WANDB_PROJECT"] = WANDB_PROJECT_NAME
         os.environ["WANDB_LOG_MODEL"] = "end"
         os.environ["WANDB_WATCH"] = "gradients"
+        # os.environ["WANDB_AGENT_DISABLE_FLAPPING"] = "true"
 
         _ = wandb.init(
             project=WANDB_PROJECT_NAME,
@@ -989,7 +1098,7 @@ def main() -> None:
 
 
 # For xla_spawn (TPUs)
-def _mp_fn(index: int) -> None:
+def _mp_fn(index: int) -> None:  # noqa
     main()
 
 
