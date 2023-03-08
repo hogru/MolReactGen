@@ -44,7 +44,7 @@ do_predict: true
 evaluation_strategy: epoch
 per_device_train_batch_size: 128
 per_device_eval_batch_size: 128
-gradient_accumulation_steps: 2
+gradient_accumulation_steps: 4
 learning_rate: 0.0005  # cannot use 5e-4 here; is interpreted as a string
 weight_decay: 0.1
 adam_beta1: 0.9
@@ -69,7 +69,7 @@ load_best_model_at_end: true
 group_by_length: true
 report_to: wandb
 push_to_hub: true
-hub_model_id: MolGen
+hub_model_id: MolReactGen
 hub_strategy: end
 hub_private_repo: true
 # resume_from_checkpoint: true | directory_path
