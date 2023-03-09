@@ -1,29 +1,34 @@
 default_language_version:
     python: python3.9
 repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
-    hooks:
-    -   id: check-json
-    -   id: check-merge-conflict
-    -   id: check-yaml
-    -   id: detect-private-key
-    -   id: end-of-file-fixer
-    -   id: trailing-whitespace
--   repo: https://github.com/python-poetry/poetry
-    rev: 1.4.0
-    hooks:
-      - id: poetry-check
--   repo: https://github.com/pycqa/isort
-    rev: 5.12.0
-    hooks:
-      - id: isort
-        args: ["--profile", "black", "--filter-files"]
--   repo: https://github.com/psf/black
-    rev: 23.1.0
-    hooks:
-      - id: black-jupyter
--   repo: https://github.com/pycqa/flake8
-    rev: 6.0.0
-    hooks:
-    - id: flake8
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.4.0
+  hooks:
+    - id: check-json
+    - id: check-merge-conflict
+    - id: check-yaml
+    - id: detect-private-key
+    - id: end-of-file-fixer
+    - id: trailing-whitespace
+- repo: https://github.com/python-poetry/poetry
+  rev: 1.4.0
+  hooks:
+    - id: poetry-check
+- repo: https://github.com/pycqa/isort
+  rev: 5.12.0
+  hooks:
+    - id: isort
+      args: ["--profile", "black", "--filter-files"]
+- repo: https://github.com/psf/black
+  rev: 23.1.0
+  hooks:
+    - id: black-jupyter
+- repo: https://github.com/pycqa/flake8
+  rev: 6.0.0
+  hooks:
+  - id: flake8
+-  repo: https://github.com/econchick/interrogate
+   rev: 1.5.0
+   hooks:
+     - id: interrogate
+       args: [--vv, -i, --fail-under=95]
