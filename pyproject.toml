@@ -44,7 +44,7 @@ black = "^23.1.0"
 flake8 = "^6.0"
 interrogate = "^1.5.0"
 isort = "^5.12.0"
-mypy = "^1.0.0"
+mypy = "^1.1.0"
 psutil = "^5.9.4"
 pytest = "^7.1"
 pytest-cov = "^4.0.0"
@@ -74,6 +74,7 @@ exclude = '''
 [tool.isort]
 profile = "black"
 line_length = 88
+filter_files = true
 
 [tool.bumpver]
 current_version = "1.0.0a0"
@@ -98,9 +99,9 @@ push = false
 [tool.interrogate]
 ignore-init-method = false
 ignore-init-module = false
-ignore-magic = false
-ignore-semiprivate = false
-ignore-private = false
+ignore-magic = true
+ignore-semiprivate = true
+ignore-private = true
 ignore-property-decorators = false
 ignore-module = false
 ignore-nested-functions = false
@@ -110,7 +111,7 @@ fail-under = 95
 exclude = ["setup.py", "docs", "build"]
 ignore-regex = ["^get$", "^mock_.*", ".*BaseClass.*"]
 # possible values: 0 (minimal output), 1 (-v), 2 (-vv)
-verbose = 0
+verbose = 2
 quiet = false
 whitelist-regex = []
 color = true
