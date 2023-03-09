@@ -15,10 +15,10 @@ parameters:
   algorithm:
     values: [wordlevel, bpe, wordpiece, unigram]
   vocab_size:
-    values: [0, 50, 250]
+    values: [0, 40, 80]
   per_device_train_batch_size:
-    value: 128
-    # values: [64, 128]
+    # value: 128
+    values: [64, 128, 256]
   label_smoothing:
-    value: 0.0
-    # values: [0.0, 0.1]
+    # value: 0.0
+    values: [0.0, 0.1]
