@@ -6,6 +6,13 @@ This script downloads the raw data from the internet and prepares it for the mod
 The valid datasets are listed in the global variable VALID_DATASETS.
 The dataset 'all' downloads and prepares all datasets.
 The raw files are stored in the directory 'data/raw' and the prepared files are stored in the directory 'data/prep'.
+
+Functions
+---------
+download_dataset
+    Download the raw data from the internet.
+prepare_dataset
+    Read the raw data and prepare it for the model training.
 """
 
 import argparse
@@ -107,15 +114,19 @@ FILE_NAME_TRANSLATIONS: dict[str, str] = {
 }
 
 
+# -----------------------------------------------------------------------------
+# Functions used for many datasets
+# -----------------------------------------------------------------------------
+
+
 def _cleanse_and_copy_data(input_file_path: Path, output_file_path: Path) -> None:
     """Reads the input file's first column and cleanses it from the first row if it contains a header.
 
     Args:
-        input_file_path (Path): Path to the input file.
-        output_file_path (Path): Path to the output file.
-
-    Returns: None
+        input_file_path: Path to the input file.
+        output_file_path: Path to the output file.
     """
+
     df = pd.read_csv(input_file_path, usecols=[0], header=None)
     first_row = df[0][0]
     if first_row.upper().startswith(
@@ -131,12 +142,11 @@ def _download_pooched_dataset(
     """Downloads the raw data from the internet and checks against the hash code.
 
     Args:
-        dataset (str): Name of the dataset.
-        raw_dir (Path): Path to the raw data directory.
-        enforce_download (bool): If True, the raw data will be downloaded even if it already exists.
-
-    Returns: None
+        dataset: Name of the dataset.
+        raw_dir: Path to the raw data directory.
+        enforce_download: If True, the raw data will be downloaded even if it already exists.
     """
+
     # We have two places where the path to the raw data directory is stored. Check if they are the same.
     assert raw_dir.samefile(POOCHES[dataset].path)
 
@@ -163,12 +173,11 @@ def _prepare_pooched_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> Non
     """Copy the raw data to the prepared data directory and rename the files if necessary.
 
     Args:
-        dataset (str): Name of the dataset.
-        raw_dir (Path): Path to the raw data directory.
-        prep_dir (Path): Path to the prepared data directory.
-
-    Returns: None
+        dataset: Name of the dataset.
+        raw_dir: Path to the raw data directory.
+        prep_dir: Path to the prepared data directory.
     """
+
     # We have two places where the path to the raw data directory is stored. Check if they are the same.
     assert raw_dir.samefile(POOCHES[dataset].path)
 
@@ -177,6 +186,11 @@ def _prepare_pooched_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> Non
         # sub_dir = Path(file).parent
         file_renamed = FILE_NAME_TRANSLATIONS.get(file, file)
         _cleanse_and_copy_data(raw_dir / file, prep_dir / file_renamed)
+
+
+# -----------------------------------------------------------------------------
+# Functions for each dataset
+# -----------------------------------------------------------------------------
 
 
 def _download_debug_dataset(raw_dir: Path, enforce_download: bool) -> None:
@@ -338,17 +352,23 @@ DOWNLOAD_FNS: dict[str, Callable[[Path, bool], None]] = {
 }
 
 
+# -----------------------------------------------------------------------------
+# The main functions for downloading and preparing datasets
+# -----------------------------------------------------------------------------
+
+
 def download_dataset(
     dataset: str, raw_dir: Path, enforce_download: bool = False
 ) -> None:
     """Download a dataset.
 
     Args:
-        dataset (str): Name of the dataset to download.
-        raw_dir (Path): Path to the directory where the raw data should be stored.
-        enforce_download (bool): If True, delete cached files before downloading. Defaults to False.
+        dataset: Name of the dataset to download.
+        raw_dir: Path to the directory where the raw data should be stored.
+        enforce_download: If True, delete cached files before downloading. Defaults to False.
 
-    Returns: None
+    Raises:
+        ValueError: If the dataset is not valid.
     """
 
     download_fn = DOWNLOAD_FNS.get(dataset, None)
@@ -374,11 +394,12 @@ def prepare_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> None:
     """Prepare a dataset.
 
     Args:
-        dataset (str): Name of the dataset to prepare.
-        raw_dir (Path): Path to the directory where the raw data is stored.
-        prep_dir (Path): Path to the directory where the prepared data should be stored.
+        dataset: Name of the dataset to prepare.
+        raw_dir: Path to the directory where the raw data is stored.
+        prep_dir: Path to the directory where the prepared data should be stored.
 
-    Returns: None
+    Raises:
+        ValueError: If the dataset is not valid.
     """
 
     prepare_fn = PREPARE_FNS.get(dataset, None)
@@ -391,7 +412,7 @@ def prepare_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> None:
 
 @logger.catch
 def main() -> None:
-    """Prepare data for training of the model."""
+    """Prepare the dataset(s) for training of the model."""
 
     parser = argparse.ArgumentParser(
         description="Prepare data for training of the Hugging Face model."
