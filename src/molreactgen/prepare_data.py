@@ -1,11 +1,13 @@
 # coding=utf-8
-# prepare_data.py
+# src/molreactgen/prepare_data.py
+""" Download and prepare the raw data for the model training.
+
+This script downloads the raw data from the internet and prepares it for the model training.
+The valid datasets are listed in the global variable VALID_DATASETS.
+The dataset 'all' downloads and prepares all datasets.
+The raw files are stored in the directory 'data/raw' and the prepared files are stored in the directory 'data/prep'.
 """
-Auto-Regressive Molecule and Reaction Template Generator
-Causal language modeling (CLM) with a transformer decoder model
-Author: Stephan Holzgruber
-Student ID: K08608294
-"""
+
 import argparse
 from collections.abc import Callable
 from pathlib import Path
@@ -22,7 +24,7 @@ from molreactgen.helpers import (
     guess_project_root_dir,
 )
 
-# Determining if tqdm is installed and if so, use it for the download progressbar
+# Determine if tqdm is installed and if so, use it for the download progressbar
 # Might experiment with a custom progressbar later
 # Sample code: https://www.fatiando.org/pooch/latest/progressbars.html#custom-progressbar
 try:
@@ -42,7 +44,7 @@ VALID_DATASETS: tuple[str, ...] = (
     "debug",
     "guacamol",
     "uspto50k",
-    "usptofull",
+    "usptofull",  # TODO: implement this
     "zinc",
 )
 
@@ -62,7 +64,7 @@ PREP_DIRS: dict[str, Path] = {
     "zinc": PREP_DATA_DIR / "zinc" / "csv",
 }
 
-# TODO add usptofull
+# "pooch" is used to download the raw data from the internet and to check against the hash code
 POOCHES: dict[str, pooch.Pooch] = {
     "debug": pooch.create(
         path=RAW_DIRS["debug"].as_posix(),
@@ -106,6 +108,14 @@ FILE_NAME_TRANSLATIONS: dict[str, str] = {
 
 
 def _cleanse_and_copy_data(input_file_path: Path, output_file_path: Path) -> None:
+    """Reads the input file's first column and cleanses it from the first row if it contains a header.
+
+    Args:
+        input_file_path (Path): Path to the input file.
+        output_file_path (Path): Path to the output file.
+
+    Returns: None
+    """
     df = pd.read_csv(input_file_path, usecols=[0], header=None)
     first_row = df[0][0]
     if first_row.upper().startswith(
@@ -118,15 +128,26 @@ def _cleanse_and_copy_data(input_file_path: Path, output_file_path: Path) -> Non
 def _download_pooched_dataset(
     dataset: str, raw_dir: Path, enforce_download: bool
 ) -> None:
+    """Downloads the raw data from the internet and checks against the hash code.
+
+    Args:
+        dataset (str): Name of the dataset.
+        raw_dir (Path): Path to the raw data directory.
+        enforce_download (bool): If True, the raw data will be downloaded even if it already exists.
+
+    Returns: None
+    """
+    # We have two places where the path to the raw data directory is stored. Check if they are the same.
     assert raw_dir.samefile(POOCHES[dataset].path)
-    if enforce_download:
+
+    if enforce_download:  # If True, delete all files in the raw data directory
         for file in POOCHES[dataset].registry:
             if (raw_dir / file).exists():
                 logger.info(f"Deleting file {file}...")
                 (raw_dir / file).unlink()
 
     processor: pooch.processors
-    for file in POOCHES[dataset].registry:
+    for file in POOCHES[dataset].registry:  # Download (and decompress) the raw data
         processor = pooch.Decompress() if file.endswith(GZIP_FILE_EXTENSIONS) else None
         file_name = Path(
             POOCHES[dataset].fetch(
@@ -139,7 +160,18 @@ def _download_pooched_dataset(
 
 
 def _prepare_pooched_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> None:
+    """Copy the raw data to the prepared data directory and rename the files if necessary.
+
+    Args:
+        dataset (str): Name of the dataset.
+        raw_dir (Path): Path to the raw data directory.
+        prep_dir (Path): Path to the prepared data directory.
+
+    Returns: None
+    """
+    # We have two places where the path to the raw data directory is stored. Check if they are the same.
     assert raw_dir.samefile(POOCHES[dataset].path)
+
     prep_dir.mkdir(parents=True, exist_ok=True)
     for file in POOCHES[dataset].registry:
         # sub_dir = Path(file).parent
@@ -175,7 +207,7 @@ def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
             f"File {raw_file} not found. The raw file name seems to have changed."
         )
     files: dict[str, str] = {
-        "known": "USPTO_50k_known.csv",  # "known" means in either in validation or test set (but not train set)
+        "known": "USPTO_50k_known.csv",  # "known" means in either validation or test set (but not train set)
         "train": "USPTO_50k_train.csv",
         "valid": "USPTO_50k_val.csv",
         "test": "USPTO_50k_test.csv",
@@ -296,6 +328,7 @@ def _prepare_zinc_dataset(raw_dir: Path, prep_dir: Path) -> None:
     _cleanse_and_copy_data(raw_file, prep_file)
 
 
+# Can define this dictionary only once the functions are defined
 DOWNLOAD_FNS: dict[str, Callable[[Path, bool], None]] = {
     "debug": _download_debug_dataset,
     "guacamol": _download_guacamol_dataset,
@@ -308,6 +341,16 @@ DOWNLOAD_FNS: dict[str, Callable[[Path, bool], None]] = {
 def download_dataset(
     dataset: str, raw_dir: Path, enforce_download: bool = False
 ) -> None:
+    """Download a dataset.
+
+    Args:
+        dataset (str): Name of the dataset to download.
+        raw_dir (Path): Path to the directory where the raw data should be stored.
+        enforce_download (bool): If True, delete cached files before downloading. Defaults to False.
+
+    Returns: None
+    """
+
     download_fn = DOWNLOAD_FNS.get(dataset, None)
     if download_fn is None:
         raise ValueError(f"Invalid dataset: {dataset}")
@@ -317,6 +360,7 @@ def download_dataset(
         return download_fn(raw_dir, enforce_download)
 
 
+# Can define this dictionary only once the functions are defined
 PREPARE_FNS: dict[str, Callable[[Path, Path], None]] = {
     "debug": _prepare_debug_dataset,
     "guacamol": _prepare_guacamol_dataset,
@@ -327,6 +371,16 @@ PREPARE_FNS: dict[str, Callable[[Path, Path], None]] = {
 
 
 def prepare_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> None:
+    """Prepare a dataset.
+
+    Args:
+        dataset (str): Name of the dataset to prepare.
+        raw_dir (Path): Path to the directory where the raw data is stored.
+        prep_dir (Path): Path to the directory where the prepared data should be stored.
+
+    Returns: None
+    """
+
     prepare_fn = PREPARE_FNS.get(dataset, None)
     if prepare_fn is None:
         raise ValueError(f"Invalid dataset: {dataset}")
@@ -337,6 +391,8 @@ def prepare_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> None:
 
 @logger.catch
 def main() -> None:
+    """Prepare data for training of the model."""
+
     parser = argparse.ArgumentParser(
         description="Prepare data for training of the Hugging Face model."
     )
@@ -376,11 +432,13 @@ def main() -> None:
     log_level: int = determine_log_level(args.log_level)
     configure_logging(log_level)
 
+    # Replace "all" with all datasets
     if "all" in args.dataset:
         datasets = sorted(set(VALID_DATASETS) - {"all"})
     else:
         datasets = [args.dataset]
 
+    # Download and prepare datasets
     for dataset in datasets:
         logger.heading(f"Preparing dataset {dataset}...")  # type: ignore
         raw_dir = RAW_DIRS[dataset]
