@@ -1,10 +1,20 @@
 # coding=utf-8
+# src/molreactgen/tokenizer.py
+"""Helper functions for tokenizing the dataset.
+
+Functions:
+    get_tokenizer:
+        Returns a trained Hugging Face fast tokenizer for the given pre-tokenizer, tokenization algorithm and dataset.
+    tokenize_function:
+        Tokenizes a string using the given tokenizer.
+    enclose_function:
+        Encloses a string in 'non-special' (i.e. the tokens are part of the normal vocabulary) BOS and EOS tokens.
+        Used for fine-tuning the pre-trained model only.
+    get_modified_vocab:
+        Maps the tokens of one tokenizer to the tokens of another tokenizer.
+        Used for fine-tuning the pre-trained model only.
 """
-Auto-Regressive Molecule and Reaction Template Generator
-Causal language modeling (CLM) with a transformer decoder model
-Author: Stephan Holzgruber
-Student ID: K08608294
-"""
+
 import json
 import logging
 import re
@@ -95,6 +105,21 @@ logger = logging.getLogger(__name__)
 def _filter_invalid_tokenizer_combos(
     pre_tokenizer: str, algorithm: str, vocab_size: int
 ) -> None:
+    """Check if the given tokenizer combination is valid.
+
+    This is mainly used to handle the wandb sweeps, which do not allow for conditional parameters.
+    Therefore, we iterate over all combinations, check if the given combination is valid and
+    raise an error if not. The wandb sweep will then skip this combination and continue with the next one.
+
+    Args:
+        pre_tokenizer: The pre-tokenizer to use.
+        algorithm: The tokenization algorithm to use.
+        vocab_size: The vocabulary size to use.
+
+    Raises:
+        ValueError: If the given combination is invalid.
+    """
+
     if pre_tokenizer in {"ATOM", "SMARTS"} and algorithm != "WORDLEVEL":
         raise ValueError(
             f"Pre-tokenizer {pre_tokenizer} must be used with WORDLEVEL algorithm"
@@ -109,7 +134,20 @@ def _filter_invalid_tokenizer_combos(
         )
 
 
-def token_in_regex(token: str, regex: str) -> bool:
+def token_in_regex(token: str, regex: str) -> bool:  # TODO: make this private
+    """Checks whether a token matches a given regex.
+
+    Used to check whether a special token like BOS is part of the regex pattern.
+    If so, it should not be used as a special token.
+
+    Args:
+        token: the (special) token to check
+        regex: the regex pattern to check against
+
+    Returns:
+        True if the token is part of the regex pattern, False otherwise.
+    """
+
     token = str(token)
     regex = str(regex)
     regex_pattern = re.compile(regex)
@@ -133,9 +171,32 @@ def get_tokenizer(
     pad_token: str = PAD_TOKEN,
     unk_token: str = UNK_TOKEN,
     regex_pattern: Optional[str] = None,
-    byte_level: bool = False,
+    byte_level: bool = False,  # TODO: can this be removed? If no, add to docstring
     # save_path: str = "./tokenizers/",
 ) -> PreTrainedTokenizerFast:
+    """Get a Hugging Face fast tokenizer with the given parameters.
+
+    Args:
+        pre_tokenizer: The pre-tokenizer to use. One of 'CHAR', 'ATOM', 'SMARTS'.
+        algorithm: The tokenization algorithm to use. One of 'WORDLEVEL', 'BPE', 'WORDPIECE', 'UNIGRAM'.
+        train_source: The list of strings to train the tokenizer on.
+        vocab_size: The vocabulary size to use. Defaults to 0, which means a minimum vocab size is used.
+            Can not be used with 'UNIGRAM' algorithm.
+        model_max_length: The maximum sequence length of the model. Defaults to MODEL_MAX_LENGTH.
+        min_frequency: The minimum frequency a pair should have in order to be merged. Defaults to 1.
+        bos_token: The beginning of sequence token. Defaults to BOS_TOKEN.
+        eos_token: The end of sequence token. Defaults to EOS_TOKEN.
+        pad_token: The padding token. Defaults to PAD_TOKEN.
+        unk_token: The unknown token. Defaults to UNK_TOKEN.
+        regex_pattern: The regex pattern to use. Defaults to None, which means a default pattern is used.
+
+    Returns:
+        The trained Hugging Face fast tokenizer.
+
+    Raises:
+        ValueError: If the given argument combination is invalid.
+    """
+
     pre_tokenizer = str(pre_tokenizer).upper()
     algorithm = str(algorithm).upper()
     vocab_size = max(
@@ -147,6 +208,7 @@ def get_tokenizer(
 
     _filter_invalid_tokenizer_combos(pre_tokenizer, algorithm, vocab_size)
 
+    # Safety check for special 'additional' token (not used at the moment)
     try:
         add_token = str(ADD_TOKEN)
     except (NameError, ValueError):
@@ -155,6 +217,7 @@ def get_tokenizer(
     special_tokens = [bos_token, eos_token, pad_token, unk_token, add_token]
     vocab_size += len(special_tokens)
 
+    # Determine regex pattern for pre-tokenizer
     if regex_pattern is None:
         if pre_tokenizer == "CHAR":
             regex_pattern = ""
@@ -168,6 +231,7 @@ def get_tokenizer(
                 f"Choose from CHAR, ATOM, SMARTS."
             )
 
+    # Check if special tokens are part of the regex pattern
     if pre_tokenizer in ("ATOM", "SMARTS"):
         for token in special_tokens:
             if token_in_regex(token, regex_pattern):
@@ -190,6 +254,7 @@ def get_tokenizer(
 
     tokenizer: Tokenizer
 
+    # Train the tokenizer
     if algorithm == "WORDLEVEL":
         if min_frequency > 1:
             logger.warning(
@@ -233,6 +298,7 @@ def get_tokenizer(
         tokenizer.train_from_iterator(train_source, trainer=trainer)
 
     elif algorithm == "UNIGRAM":
+        # Set a minimum vocab size for Unigram
         old_vocab_size = vocab_size
         vocab_size = max(MIN_VOCAB_SIZE_UNIGRAM, vocab_size)
         if vocab_size > old_vocab_size:
@@ -296,6 +362,7 @@ def get_tokenizer(
     else:
         raise ValueError(f"Unknown tokenization algorithm: {algorithm}")
 
+    # Enclose tokens in special tokens BOS and EOS
     tokenizer.post_processor = TemplateProcessing(
         single=bos_token + " $A " + eos_token,
         special_tokens=[
@@ -306,6 +373,8 @@ def get_tokenizer(
 
     # file_path = Path(save_path) / ((algorithm + ".json").lower())
     # file_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Save the tokenizer and load it again as a fast tokenizer
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as f:
         tokenizer.save(f.name)
         tokenizer_pretrained = PreTrainedTokenizerFast(
@@ -330,6 +399,24 @@ def enclose_function(
     start_token: str,
     end_token: str,
 ) -> dict[str, list[str]]:
+    """Enclose each string in the batch with the start and end token.
+
+    Intended to be used with Hugging Face datasets' map function.
+    For our custom tokenizers enclosing is done via the tokenizer's post processor.
+    For the pre-trained tokenizers this is done via this function. The pre-trained tokenizers might already
+    implement a post processor and we can't add another one (no sequence of post processors).
+    In this case we add the BOS and EOS tokens to the data instead.
+    The BOS and EOS tokens are non-special tokens from the tokenizer's "perspective".
+
+    Args:
+        batch: A batch of data
+        start_token: The start token
+        end_token: The end token
+
+    Returns:
+        The batch with the start and end token added to each string
+    """
+
     enclosed = [start_token + line + end_token for line in batch[DATASET_COLUMN_NAME]]
     return {DATASET_COLUMN_NAME: enclosed}
 
@@ -338,6 +425,18 @@ def tokenize_function(
     batch: Mapping[str, list[Union[str, Sequence[str]]]],
     tokenizer: transformers.PreTrainedTokenizerFast,
 ) -> BatchEncoding:
+    """Tokenize a batch of data.
+
+    Intended to be used with Hugging Face datasets' map function.
+
+    Args:
+        batch: A batch of data
+        tokenizer: The tokenizer to use
+
+    Returns:
+        The batch encoded by the tokenizer
+    """
+
     # since this will be pickled to avoid _LazyModule error in Hasher force logger loading before tokenize_function
     # tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_utils_base")
     # with CaptureLogger(tok_logger) as cl:
@@ -351,6 +450,7 @@ def tokenize_function(
         # https://huggingface.co/docs/transformers/v4.24.0/en/main_classes/data_collator#
         # transformers.DataCollatorForLanguageModeling
         # But not recognized by GPT2LMHeadModel.forward
+        # Raises a warning which can be ignored
         return_special_tokens_mask=True,
     )
     # clm input could be much longer than block_size
@@ -371,6 +471,22 @@ def get_modified_vocab(
     start_idx: int = 0,
     end_idx: Optional[int] = None,
 ) -> dict[str, int]:
+    """Maps a tokenizer´s vocabulary into a new pre-trained tokenizer.
+
+    The mapping is based on the frequency of the tokens in the original tokenizer's vocabulary.
+    The mapping applied linear from the original (small) vocab into to the new (large) vocab.
+
+    Args:
+        tokenizer_original: The original, trained tokenizer.
+        modified_freq: The frequency of the tokens in the original tokenizer´s vocabulary.
+        mapping_strategy: The strategy to use for mapping the tokens. Currently only "linear" is supported.
+        start_idx: The index to start the mapping at. For GPT-2 byte-level BPE tokenizer this is 256.
+        end_idx: The index to end the mapping at. If None, the end index is the length of the original vocab.
+
+    Returns:
+        A pre-trained tokenizer with the modified vocabulary.
+    """
+
     # Check arguments
     if not isinstance(tokenizer_original, PreTrainedTokenizerFast):
         raise TypeError(
@@ -429,7 +545,7 @@ def get_modified_vocab(
             return to
 
         idx_original: Optional[int]
-        # Go over all tokens in modfied_freq and do the following
+        # Go over all tokens in modified_freq and do the following
         for token_modified, count in modified_freq.most_common(None):
             # Delete the original entry from the vocab (if it exists) and remember its index
             idx_original = vocab_modified.pop(token_modified, None)
@@ -465,8 +581,17 @@ def get_modified_vocab(
     return vocab_modified
 
 
-def get_merges(tokenizer: PreTrainedTokenizerFast) -> list[str]:
-    # Save the tokenizer and read the merges from file
+def get_merges(tokenizer: PreTrainedTokenizerFast) -> list[str]:  # TODO: make private
+    """Get the merge information from a tokenizer´s algorithm.
+
+    Args:
+        tokenizer: The tokenizer to get the merges from.
+
+    Returns:
+        A list of merges.
+    """
+
+    # Save the tokenizer and read the merges from its configuration file
     with tempfile.TemporaryDirectory() as d_tokenizer:
         tokenizer.save_pretrained(d_tokenizer)
         tokenizer_file = Path(d_tokenizer) / "tokenizer.json"

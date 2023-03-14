@@ -1,10 +1,34 @@
 # coding=utf-8
+# src/molreactgen/helpers.py
+"""General helper functions.
+
+Classes:
+    ArgsEncoder:
+        A JSON encoder for arguments of type Path.
+    Tally:
+        A simple tally class for counting things.
+
+Functions:
+    determine_log_level:
+        Determine the log level from command line arguments.
+    configure_logging:
+        Configure loguru logging.
+    guess_project_root_dir:
+        Guess the project´s root directory.
+    get_hash_code:
+        Get a hash code for a given file or directory of files.
+    save_commandline_arguments:
+        Save the command line arguments to a JSON file.
+    create_file_link:
+        Create a link to a file.
+    get_num_workers:
+        Get a default number of workers for multiprocessing.
+    get_device:
+        Get the torch device to use for computations (single gpu case only).
+    get_device_type:
+        Get basic information about the device type (single gpu case only).
 """
-Auto-Regressive Molecule and Reaction Template Generator
-Causal language modeling (CLM) with a transformer decoder model
-Author: Stephan Holzgruber
-Student ID: K08608294
-"""
+
 import argparse
 import hashlib
 import inspect
@@ -40,13 +64,35 @@ SIGNS_FOR_ROOT_DIR = (".git", "pyproject.toml", "setup.py", "setup.cfg")
 
 
 class Tally:
-    base_name = "__base__"
-    valid_file_formats: dict[str, tuple[str, ...]] = {
+    """A simple tally class for counting things.
+
+    The counters have a hierarchical structure with the hierarchy defined by the order of the counter names.
+    The base counter is always the first counter.
+    Absolute fractions are calculated with respect to the base counter.
+    Relative fractions are calculated with respect to the counter one hierarchy level up.
+
+    Methods:
+        increment: increment a counter by a given amount
+        get_count: get the current count of a given or all counter(s)
+        get_absolute_fraction: get the absolute fraction of a given or all counter(s)
+        get_relative_fraction: get the relative fraction of a given or all counter(s)
+        save_to_file: save the counters to a file
+    """
+
+    base_name = "__base__"  # TODO: make private
+    valid_file_formats: dict[str, tuple[str, ...]] = {  # TODO: make private
         # "CSV": (".CSV",),
         "JSON": (".JSON",),
     }
 
     def __init__(self, counters: Union[Sequence[str], str]) -> None:
+        """Initialize the Tally object.
+
+        Args:
+            counters: a list of counter names or a single counter name
+        """
+
+        # Validate arguments
         if isinstance(counters, str) or not isinstance(counters, Iterable):
             counters = [counters]
 
@@ -57,6 +103,7 @@ class Tally:
         if len(counters) != len(set(counters)):
             raise ValueError("counters must be unique")
 
+        # Initialize counters, setup counter hierarchy
         self._counters: dict[str, int] = {str(k): 0 for k in counters}
         self._key_to_idx: dict[str, int] = {str(k): i for i, k in enumerate(counters)}
         self._idx_to_key: dict[int, str] = {i: str(k) for i, k in enumerate(counters)}
@@ -72,11 +119,21 @@ class Tally:
         return self._counters[self._idx_to_key[idx]]
 
     def increment(self, counter: str, increment: int = 1) -> None:
+        """Increment a counter by a given amount.
+
+        Args:
+            counter: the counter to increment.
+            increment: the amount to increment the counter by, defaults to 1.
+        """
+
         if counter in self._counters:
             self._counters[counter] += increment
         else:
-            raise AttributeError(f"Tally {counter} not found")
+            raise AttributeError(
+                f"Tally {counter} not found"
+            )  # TODO here and other places: tally or counter string?
 
+    # noinspection PyMissingOrEmptyDocstring
     @overload
     def get_count(
         self,
@@ -86,6 +143,7 @@ class Tally:
     ) -> Union[dict[str, int], dict[str, str]]:
         ...
 
+    # noinspection PyMissingOrEmptyDocstring
     @overload
     def get_count(
         self, counter: Sequence[str], *, format_specifier: Optional[str] = None
@@ -104,19 +162,35 @@ class Tally:
         *,
         format_specifier: Optional[str] = None,
     ) -> Union[dict[str, int], dict[str, str], int, str]:
+        """Get the current count of (a) given counter(s) or all counters.
+
+        Args:
+            counter: the counter(s) to get the count of, defaults to None, i.e. all counters.
+            format_specifier: a format specifier for the count, defaults to None.
+
+        Returns:
+            the count(s) of the counter(s) as a dictionary or a single value.
+        """
+
         counts: Union[dict[str, int], int]
-        if counter is None:
+
+        # Get counts
+        if counter is None:  # defaults to all counters
             counts = self._counters
+
         elif not isinstance(counter, str) and isinstance(counter, Iterable):
             for k in counter:
                 if k not in self._counters:
                     raise AttributeError(f"Tally {k} not found")
             counts = {k: self._counters[k] for k in counter}
+
         elif counter in self._counters:
             counts = self._counters[counter]
+
         else:
             raise AttributeError(f"Tally {counter} not found")
 
+        # Format counts
         if format_specifier is not None and isinstance(format_specifier, str):
             counts_formatted: Union[dict[str, str], str]
             if isinstance(counts, dict):
@@ -130,6 +204,7 @@ class Tally:
         else:
             return counts
 
+    # noinspection PyMissingOrEmptyDocstring
     @overload
     def get_absolute_fraction(
         self,
@@ -139,6 +214,7 @@ class Tally:
     ) -> Union[dict[str, float], dict[str, str]]:
         ...
 
+    # noinspection PyMissingOrEmptyDocstring
     @overload
     def get_absolute_fraction(
         self, counter: Sequence[str], *, format_specifier: Optional[str] = None
@@ -151,22 +227,40 @@ class Tally:
         *,
         format_specifier: Optional[str] = None,
     ) -> Union[dict[str, float], dict[str, str], float, str]:
+        """Get the absolute fraction of (a) given counter(s) or all counters.
+
+        Absolute refers to the fraction of the counter relative to the base counter.
+        The base counter is the first counter in the sequence given to the constructor.
+
+        Args:
+            counter: the counter(s) to get the absolute fraction of, defaults to None, i.e. all counters.
+            format_specifier: a format specifier for the absolute fraction, defaults to None.
+
+        Returns:
+            the absolute fraction(s) of the counter(s) as a dictionary or a single value.
+        """
+
+        # Get absolute fractions
         counts = self.get_count(counter)
         base_value = self._get_value_from_idx(0)
         fractions: Union[dict[str, float], float]
-        if isinstance(counts, dict):  # counter is None:
+
+        if isinstance(counts, dict):  # counter was/is None
             if base_value == 0:
                 fractions = {k: float("nan") for k in counts}
             else:
                 fractions = {k: int(v) / base_value for k, v in counts.items()}
+
         elif isinstance(counter, str) and counter in self._counters:
             if base_value == 0:
                 fractions = float("nan")
             else:
                 fractions = self._counters[counter] / base_value
+
         else:
             raise AttributeError(f"Tally {counter} not found")
 
+        # Format absolute fractions
         if format_specifier is not None and isinstance(format_specifier, str):
             fractions_formatted: Union[dict[str, str], str]
             if isinstance(fractions, dict):
@@ -180,12 +274,14 @@ class Tally:
         else:
             return fractions
 
+    # noinspection PyMissingOrEmptyDocstring
     @overload
     def get_relative_fraction(
         self, *, format_specifier: Optional[str] = None
     ) -> Union[dict[str, float], dict[str, str]]:
         ...
 
+    # noinspection PyMissingOrEmptyDocstring
     @overload
     def get_relative_fraction(
         self, counter: str, *, format_specifier: Optional[str] = None
@@ -198,6 +294,19 @@ class Tally:
         *,
         format_specifier: Optional[str] = None,
     ) -> Union[dict[str, float], dict[str, str], float, str]:
+        """Get the relative fraction of (a) given counter(s) or all counters.
+
+        Relative refers to the fraction of the counter relative to the counter one hierarchy up.
+        The hierarchy is defined by the sequence of names given to the constructor.
+
+        Args:
+            counter: the counter(s) to get the relative fraction of, defaults to None, i.e. all counters.
+            format_specifier: a format specifier for the relative fraction, defaults to None.
+
+        Returns:
+            the relative fraction(s) of the counter(s) as a dictionary or a single value.
+        """
+
         counts = self.get_count()
         count_names = list(counts.keys())
         count_values = list(counts.values())
@@ -258,6 +367,15 @@ class Tally:
             json.dump(dict_to_save, f)
 
     def save_to_file(self, file_path: PathLike[str], format_: str = "json") -> None:
+        """Save the counters to a file.
+
+        Currently only JSON format is supported.
+
+        Args:
+            file_path: the path to the file to save to.
+            format_: the format to save the file in, defaults to "json".
+        """
+
         file_path = Path(file_path).resolve()
         if format_.upper() not in self.valid_file_formats:
             raise ValueError(f"Unknown format {format_}")
@@ -292,11 +410,25 @@ def determine_log_level(
     default_log_level: int = DEFAULT_LOG_LEVEL,
     log_levels: Iterable[int] = LOG_LEVELS,
 ) -> int:
+    """Determine the log level based on the given adjustments and default log level.
+
+    The adjustments are given as a sequence of integers.
+    Usually -1 or 1 corresponding to command line arguments such as -q (quiet) and -v (verbose).
+
+    Args:
+        adjustments: the adjustments to the log level, defaults to None, i.e. no adjustments.
+        default_log_level: the default log level, defaults to DEFAULT_LOG_LEVEL.
+        log_levels: the log levels to choose from, defaults to LOG_LEVELS.
+
+    Returns:
+        the log level to use.
+    """
+
     adjustments = () if adjustments is None else adjustments
     log_levels = sorted(list(log_levels))
     log_level_idx: int = log_levels.index(default_log_level)
-    # For each "-q" and "-v" flag, adjust the logging verbosity accordingly
-    # making sure to clamp off the value from 0 to 4, inclusive of both
+    # For each adjustment ("-q" and "-v" flag), adjust the logging verbosity accordingly
+    # making sure to clamp off the value from 0 to the length of the log levels, inclusive of both
     for adj in adjustments:
         log_level_idx = min(len(log_levels) - 1, max(log_level_idx + adj, 0))
 
@@ -305,7 +437,10 @@ def determine_log_level(
 
 # Code taken from https://github.com/Delgan/loguru#entirely-compatible-with-standard-logging
 # Type annotations are my own
-class InterceptHandler(logging.Handler):
+class InterceptHandler(logging.Handler):  # TODO make private
+    """Intercept standard logging messages and forward them to loguru."""
+
+    # noinspection PyMissingOrEmptyDocstring
     def emit(self, record: logging.LogRecord) -> None:
         # Get corresponding Loguru level if it exists.
         level: Union[int, str]
@@ -317,6 +452,7 @@ class InterceptHandler(logging.Handler):
         # Find caller from where originated the logged message
         frame: Optional[FrameType]
         depth: int
+        # noinspection PyProtectedMember
         frame, depth = sys._getframe(6), 6
         while frame and frame.f_code.co_filename == logging.__file__:
             frame = frame.f_back
@@ -327,7 +463,8 @@ class InterceptHandler(logging.Handler):
         )
 
 
-def show_warning(message: str, *_: Any, **__: Any) -> None:
+def show_warning(message: str, *_: Any, **__: Any) -> None:  # TODO make private
+    """Redirect warnings to loguru."""
     logger.warning(message)
 
 
@@ -344,10 +481,27 @@ def configure_logging(
     retention: str = "7 days",
     address: Optional[tuple[str, int]] = None,
 ) -> None:
+    """Configure logging.
+
+    Args:
+        log_level: the log level to use, defaults to logging.INFO.
+        console_format: the format to use for the console, defaults to None, i.e. use the default format.
+        file_format: the format to use for the file, defaults to None, i.e. use the default format.
+        syslog_format: the format to use for syslog, defaults to None, i.e. use the default format.
+        file_log_level: the log level to use for the file, defaults to None, i.e. use the console log level.
+        log_dir: the directory to use for the log file, defaults to None, i.e. use <project root>/logs.
+        log_file: the name of the log file, defaults to None, i.e. use <caller name>.log.
+        rotation: the rotation to use for the log file, defaults to "1 day".
+        retention: the retention to use for the log file, defaults to "7 days".
+        address: the address to use for syslog, defaults to None, i.e. do not use syslog.
+    """
+
     # This is the default format used by loguru
     # default_console_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | " \
     #                          "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - " \
     #                          "<level>{message}</level>"
+
+    # TODO: move default formats to class variables
     default_console_format = "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>"
     default_file_format = (
         "{time:YYYY-MM-DD HH:mm:ss.SSS} | <level>{level: <8}</level> | "
@@ -417,7 +571,7 @@ def configure_logging(
         colorize=False,
     )
 
-    # Add papertrail handler, experimental
+    # Add syslog (papertrail) handler, experimental
     if address is not None:
         syslog_handler = SysLogHandler(address=address)
         logger.add(syslog_handler, level=syslog_log_level, format=syslog_format)
@@ -442,7 +596,20 @@ def guess_project_root_dir(
     caller_file_path: Optional[PathLike[str]] = None,
     signs_for_root_dir: Iterable[str] = SIGNS_FOR_ROOT_DIR,
 ) -> Path:
-    """Guess the root directory of the project."""
+    """Guess the project´s root directory.
+
+    Traverses the directory from the caller´s directory toward the root directory.
+    The first directory that contains one of the signs for the root directory becomes the root directory.
+    If no such directory is found, the caller´s directory is returned.
+
+    Args:
+        caller_file_path: the path to the caller´s file, defaults to None, i.e. use the caller´s file.
+        signs_for_root_dir: the signs for the root directory, defaults to SIGNS_FOR_ROOT_DIR.
+
+    Returns:
+        The project´s root directory.
+    """
+
     caller_file_path = (
         Path(inspect.stack()[1].filename).resolve()
         if caller_file_path is None
@@ -457,6 +624,17 @@ def guess_project_root_dir(
 
 
 def get_hash_code(file_path: Union[str, Path], algorithm: str = "sha256") -> int:
+    """Get the hash code of a file or directory.
+
+    Args:
+        file_path: the path to the file or directory.
+        algorithm: the hash algorithm, defaults to "sha256".
+
+    Returns:
+        The hash code.
+    """
+
+    # Validate arguments
     file_path = Path(file_path).resolve()
     if algorithm.upper() == "MD5":
         hash_fn = hashlib.md5()
@@ -465,6 +643,7 @@ def get_hash_code(file_path: Union[str, Path], algorithm: str = "sha256") -> int
     else:
         raise ValueError(f"Unsupported hash algorithm '{algorithm}'")
 
+    # Build file list
     file_list: Union[list[Path], Generator[Path, None, None]]
     if file_path.is_file():
         file_list = [file_path]
@@ -473,6 +652,7 @@ def get_hash_code(file_path: Union[str, Path], algorithm: str = "sha256") -> int
     else:
         raise ValueError(f"Invalid file_path: {file_path}")
 
+    # Calculate hash code
     for file in file_list:
         # print(file)
         if file.is_file():
@@ -490,7 +670,10 @@ def get_hash_code(file_path: Union[str, Path], algorithm: str = "sha256") -> int
     return int(hash_fn.hexdigest(), 16)
 
 
-class ArgsEncoder(json.JSONEncoder):
+class ArgsEncoder(json.JSONEncoder):  # TODO: make private
+    """JSON encoder for PosixPath (as used by pathlib)."""
+
+    # noinspection PyMissingOrEmptyDocstring
     def default(self, x: Any) -> Any:
         if isinstance(x, PosixPath):
             return x.as_posix()
@@ -503,7 +686,14 @@ def save_commandline_arguments(
     file_path: PathLike[str],
     keys_to_remove: Optional[Iterable[str]] = None,
 ) -> None:
-    """Save commandline arguments to a file."""
+    """Save command-line arguments to a JSON file.
+
+    Args:
+        args: the command-line arguments.
+        file_path: the path to the JSON file.
+        keys_to_remove: the keys to remove from the arguments, defaults to None, i.e. remove nothing.
+    """
+
     dict_to_save = dict(args.__dict__)
     if keys_to_remove is not None:
         for key in keys_to_remove:
@@ -519,6 +709,14 @@ def create_file_link(
     to_file_path: PathLike[str],
     hard_link: bool = False,
 ) -> None:
+    """Create a link from a file to another file.
+
+    Args:
+        from_file_path: the path to the file to link from.
+        to_file_path: the path to the file to link to.
+        hard_link: whether to create a hard link, defaults to False, i.e. create a symlink (depends on OS behavior).
+    """
+
     from_file_path = Path(from_file_path)
     to_file_path = Path(to_file_path).resolve()
     if not to_file_path.exists():
@@ -538,7 +736,16 @@ def create_file_link(
 
 
 def get_num_workers(spare_cpus: int = 1) -> int:
-    if int(spare_cpus) < 0:
+    """Determine a reasonable number of workers for multiprocessing.
+
+    Args:
+        spare_cpus: the number of CPUs to spare, defaults to 1.
+
+    Returns:
+        The number of workers.
+    """
+
+    if int(spare_cpus) < 0:  # replace with max(0, int(spare_cpus))?
         spare_cpus = 0
     num_cpus = os.cpu_count()
     if num_cpus is None:
@@ -552,7 +759,7 @@ def get_device() -> torch.device:
     """Determine available device.
 
     Returns:
-        torch.device: device(type='cuda') if cuda is available, device(type='cpu') otherwise.
+        device(type='cuda') if cuda is available, device(type='cpu') otherwise.
     """
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -564,7 +771,7 @@ def get_device_type() -> str:
     """Provides GPU type/name (for information only)
 
     Returns:
-        str: GPU type/name
+        GPU type/name
     """
 
     device_type = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"

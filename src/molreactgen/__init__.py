@@ -1,9 +1,5 @@
 # coding=utf-8
-"""
-Auto-Regressive Molecule and Reaction Template Generator
-Causal language modeling (CLM) with a transformer decoder model
-Author: Stephan Holzgruber
-Student ID: K08608294
-"""
+# src/molreactgen/__init__.py
+"""Standard _init__.py for molreactgen package."""
 
 __version__ = "0.1.0a1"

@@ -1,10 +1,26 @@
 # coding=utf-8
+# src/molreactgen/molecule.py
+"""Helper classes and functions for working with molecules and reaction templates.
+
+Classes:
+    Molecule:
+        A class for working with molecules.
+    Reaction:
+        A class for working with reaction templates.
+
+Functions:
+    canonicalize_molecule:
+        Canonicalize a single molecule.
+    canonicalize_smiles:
+        Canonicalize a single molecule. For compatibility reasons, this is a wrapper around canonicalize_molecule().
+    canonicalize_molecules:
+        Canonicalize a list of molecules with multiprocessing.
+    canonicalize_template:
+        Canonicalize a reaction template.
+    remove_atom_mapping:
+        Remove atom mapping from a reaction template.
 """
-Auto-Regressive Molecule and Reaction Template Generator
-Causal language modeling (CLM) with a transformer decoder model
-Author: Stephan Holzgruber
-Student ID: K08608294
-"""
+
 import logging
 import re
 from collections.abc import Iterable, Sequence  # Callable,; Iterator,; MutableMapping,
@@ -29,6 +45,18 @@ logger = logging.getLogger(__name__)
 def _canonicalize_molecule(
     molecule: str, is_smarts: bool, remove_atom_mapping: bool, strict: bool
 ) -> Optional[str]:
+    """Canonicalize a single molecule.
+
+    Args:
+        molecule: A SMILES or SMARTS string.
+        is_smarts: If True, the molecule is a SMARTS string. If False, the molecule is a SMILES string.
+        remove_atom_mapping: If True, remove atom mapping from the molecule.
+        strict: If True, raise an error if the molecule is not valid. If False, return None.
+
+    Returns:
+        The canonical SMILES string for the molecule. If the molecule is not valid, return None.
+    """
+
     if is_smarts:
         mol = Chem.MolFromSmarts(molecule)
     else:
@@ -63,6 +91,17 @@ def canonicalize_smiles(
     strict: bool = False,
     double_check: bool = False,
 ) -> Optional[str]:
+    """Canonicalize a single molecule. For compatibility reasons, this is a wrapper around canonicalize_molecule().
+
+    Args:
+        molecule: A SMILES string.
+        strict: If True, raise an error if the molecule is not valid. If False, return None.
+        double_check: If True, canonicalize the molecule twice and check that the results are the same.
+
+    Returns:
+        The canonical SMILES string for the molecule. If the molecule is not valid, return None.
+    """
+
     return canonicalize_molecule(
         molecule,
         is_smarts=False,
@@ -80,6 +119,19 @@ def canonicalize_molecule(
     strict: bool = False,
     double_check: bool = False,
 ) -> Optional[str]:
+    """Canonicalize a single molecule.
+
+    Args:
+        molecule: A SMILES or SMARTS string.
+        is_smarts: If True, the molecule is a SMARTS string. If False, the molecule is a SMILES string.
+        remove_atom_mapping: If True, remove atom mapping from the molecule.
+        strict: If True, raise an error if the molecule is not valid. If False, return None.
+        double_check: If True, canonicalize the molecule twice and check that the results are the same.
+
+    Returns:
+        The canonical SMILES string for the molecule. If the molecule is not valid, return None.
+    """
+
     molecule = str(molecule)
     is_smarts = bool(is_smarts)
     remove_atom_mapping = bool(remove_atom_mapping)
@@ -111,6 +163,18 @@ def canonicalize_molecules(
     strict: bool = False,
     double_check: bool = False,
 ) -> list[Optional[str]]:
+    """Canonicalize a list of molecules.
+
+    Args:
+        molecules: A list of SMILES strings.
+        num_workers: The number of workers to use. If None, determine a "reasonable" number of workers.
+        strict: If True, raise an error if the molecule is not valid. If False, return None.
+        double_check: If True, canonicalize the molecule twice and check that the results are the same.
+
+    Returns:
+        A list of canonical SMILES strings for the molecules. If a molecule is not valid, return None.
+    """
+
     # double_check parameter is required due to a bug in RDKit
     # see https://github.com/rdkit/rdkit/issues/5455
 
@@ -126,6 +190,7 @@ def canonicalize_molecules(
     else:
         num_workers = int(num_workers)
 
+    # Canonicalize molecules in parallel
     chunk_size = max(
         len(molecules) // (num_workers * 4), 1
     )  # heuristics; make chunk size smaller than necessary
@@ -162,7 +227,15 @@ def remove_atom_mapping(smarts: Sequence[str]) -> list[str]:
 
 
 def remove_atom_mapping(smarts: Union[str, Sequence[str]]) -> Union[str, list[str]]:
-    """Removes a number after a ':'"""
+    """Remove atom mapping (a number after a ':') from a SMARTS string or list of SMARTS strings.
+
+    Args:
+        smarts: A SMARTS string or list of SMARTS strings.
+
+    Returns:
+        A SMARTS string or list of SMARTS strings with atom mapping removed.
+    """
+
     if isinstance(smarts, str) or not isinstance(smarts, Iterable):
         smarts = [smarts]
 
@@ -180,6 +253,19 @@ def remove_atom_mapping(smarts: Union[str, Sequence[str]]) -> Union[str, list[st
 def canonicalize_template(
     smarts: str, strict: bool = False, double_check: bool = False
 ) -> Optional[str]:
+    """Canonicalize a template.
+
+    Remove atom mappings, canonicalize reactants and products, and sort them.
+
+    Args:
+        smarts: A SMARTS string.
+        strict: If True, raise an error if the template is not valid. If False, return None.
+        double_check: If True, canonicalize the template parts twice and check that the results are the same.
+
+    Returns:
+        The canonical SMARTS string for the template. If the template is not valid, return None.
+    """
+
     # this is faster than remove_atom_mapping via rdkit, so don't use it below
     smarts = remove_atom_mapping(str(smarts))
     # order the list of smiles + canonicalize it
@@ -207,6 +293,23 @@ def canonicalize_template(
 
 
 class Reaction:
+    """A reaction template.
+
+    Attributes:
+        reaction_smarts: The reaction template SMARTS string.
+        split: Split the reaction template originates from.
+        id: The reaction template ID.
+        product: The product of the reaction template.
+        feasible: Whether the reaction template is feasible.
+
+    Methods:
+        reaction_smarts_without_atom_mapping: The reaction template SMARTS string without atom mapping.
+        reaction_smarts_canonicalized: The canonical reaction template SMARTS string.
+        valid: Whether the reaction template is valid.
+        invalid: Whether the reaction template is invalid.
+        is_similar_to: Check if the reaction template is similar to another reaction template.
+    """
+
     def __init__(
         self,
         reaction_smarts: str,
@@ -216,10 +319,19 @@ class Reaction:
         product: Optional[str] = None,
         feasible: bool = False,
     ) -> None:
+        """
+        Args:
+            reaction_smarts: The reaction template SMARTS string.
+            split: Split the reaction template originates from. Defaults to None.
+            id_: The reaction template ID. Defaults to None.
+            product: The product of the reaction template. Defaults to None.
+            feasible: Whether the reaction template is feasible. Defaults to False.
+        """
+
         self.reaction_smarts = str(reaction_smarts)
         self.split = str(split).lower() if split is not None else None
-        self.id = str(id_)
-        self.product = str(product)
+        self.id = str(id_)  # TODO this might be None?!
+        self.product = str(product)  # TODO this might be None?!
         self.feasible = bool(feasible)
         self.works_with: Optional[str] = None
         self.num_works_with: int = 0
@@ -260,6 +372,23 @@ class Reaction:
         return not self.valid
 
     def is_similar_to(self, other: "Reaction", criterion: str = "atom_mapping") -> bool:
+        """Whether the reaction template is similar to another reaction template.
+
+        Similar in this context means that the reaction smarts either have
+        - the same form without atom mapping (criterion="atom_mapping")
+        - the same canonical form (criterion="canonical"); stricter than the above
+
+        Args:
+            other: The other reaction template.
+            criterion: The criterion to use for similarity. Defaults to "atom_mapping".
+
+        Returns:
+            Whether the reaction template is similar to another reaction template.
+
+        Raises:
+            ValueError: If the criterion is unknown.
+        """
+
         criterion = str(criterion).lower()
         if isinstance(other, Reaction):
             if criterion == "atom_mapping":
@@ -308,6 +437,25 @@ class Reaction:
 
 
 class Molecule:
+    """A molecule.
+
+    During generation/evaluation of molecules, the following attributes are set:
+    novel, unique (depend on other generated molecules).
+
+    Attributes:
+        smiles: The molecule SMILES string.
+        id: The molecule ID.
+        notation: The molecule notation format.
+        novel: Whether the molecule is novel.
+        unique: Whether the molecule is unique.
+
+    Methods:
+        canonical_smiles: The canonical SMILES string.
+        valid: Whether the molecule is valid.
+        invalid: Whether the molecule is invalid.
+
+    """
+
     def __init__(
         self,
         smiles: str,
@@ -315,6 +463,16 @@ class Molecule:
         id_: Optional[str] = None,
         notation: str = "SMILES",
     ) -> None:
+        """
+        Args:
+            smiles: The molecule SMILES string.
+            id_: The molecule ID. Defaults to None.
+            notation: The molecule notation format. Defaults to 'SMILES'.
+
+        Raises:
+            ValueError: If the notation is unknown (at the moment only 'SMILES' is supported).
+        """
+
         self.smiles: str = str(smiles)
         self.id = id_
         # Currently only SMILES notation is supported

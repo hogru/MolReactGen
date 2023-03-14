@@ -7,12 +7,11 @@ The valid datasets are listed in the global variable VALID_DATASETS.
 The dataset 'all' downloads and prepares all datasets.
 The raw files are stored in the directory 'data/raw' and the prepared files are stored in the directory 'data/prep'.
 
-Functions
----------
-download_dataset
-    Download the raw data from the internet.
-prepare_dataset
-    Read the raw data and prepare it for the model training.
+Functions:
+    download_dataset:
+        Download the raw data from the internet.
+    prepare_dataset:
+        Read the raw data and prepare it for the model training.
 """
 
 import argparse
