@@ -1,11 +1,26 @@
 # coding=utf-8
-# train.py
+# src/molreactgen/train.py
+"""Train the model.
+
+Classes:
+    ModelArguments:
+        Arguments pertaining to which model/config we are going to fine-tune, or train from scratch.
+    DataArguments:
+        Arguments pertaining to what data/tokenizer we are going to input our model for training and eval.
+    AdditionalArguments:
+        Arguments pertaining additional miscellaneous training arguments.
+
+Functions:
+    get_training_config:
+        Create a training config from a combination of command line arguments and (a) config file(s).
+    load_raw_dataset_from_hub:
+        Load a dataset from the Hugging Face Hub.
+    load_raw_dataset_from_dir:
+        Load a dataset from a directory.
+    main:
+        Main training loop.
 """
-Auto-Regressive Molecule and Reaction Template Generator
-Causal language modeling (CLM) with a transformer decoder model
-Author: Stephan Holzgruber
-Student ID: K08608294
-"""
+
 import argparse
 
 # Parts of this file are based on the following huggingface example:
@@ -109,9 +124,7 @@ MODEL_TYPES: Final = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 # Dataclasses for command line arguments
 @dataclass
 class ModelArguments:
-    """
-    Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
-    """
+    """Arguments pertaining to which model/config we are going to fine-tune, or train from scratch."""
 
     model_name_or_path: Optional[str] = field(
         default=None,
@@ -184,9 +197,7 @@ class ModelArguments:
 
 @dataclass
 class DataArguments:
-    """
-    Arguments pertaining to what data we are going to input our model for training and eval.
-    """
+    """Arguments pertaining to what data/tokenizer we are going to input our model for training and eval."""
 
     dataset_name: Optional[str] = field(
         default=None,
@@ -323,9 +334,7 @@ class DataArguments:
 
 @dataclass
 class AdditionalArguments:
-    """
-    Additional miscellaneous training arguments which can not be passed to the Trainer directly.
-    """
+    """Additional miscellaneous training arguments which can not be passed to the Trainer directly."""
 
     random_seed: bool = field(
         default=False,
@@ -359,6 +368,20 @@ class AdditionalArguments:
 
 
 def get_training_config() -> tuple[argparse.Namespace, ...]:
+    """Parse the command line arguments and the .yaml/.args file(s).
+
+    Compiles the config from the command line arguments, the .yaml/.args file(s) and the default values as follows:
+    1. The default values are set in the dataclasses above.
+    2. A single .yaml file is parsed and overwrites the default values.
+        --- OR ---
+    3a. Without any command line parameters, train.args file is parsed and overwrites the default values.
+    3b. Command line flags --config_file plus a .args file are parsed and overwrite the default values.
+    3c. Additional command line flags overwrite the default values.
+
+    Returns:
+        ModelArguments, DataArguments, TrainingArguments, AdditionalArguments.
+    """
+
     # Extract the arguments which are not overwritten via command line flags/.args files
     config_file_parser = argparse.ArgumentParser()
     config_file_parser.add_argument(
@@ -476,6 +499,7 @@ def get_training_config() -> tuple[argparse.Namespace, ...]:
 
 
 # TODO implement this function
+# noinspection PyMissingOrEmptyDocstring
 def load_raw_dataset_from_hub(  # type: ignore  # noqa  # Remove once implemented
     dataset_name: str,  # noqa
     *,
@@ -494,6 +518,19 @@ def load_raw_dataset_from_dir(
     cache_dir: Optional[str] = None,
     seed: int = 42,
 ) -> DatasetDict:
+    """Load raw dataset from directory.
+
+    Args:
+        data_dir: the directory containing the dataset.
+        validation_split_percentage: the percentage of the dataset to use for validation. Not used for fixed splits.
+        test_split_percentage: the percentage of the dataset to use for testing. Not used for fixed splits.
+        cache_dir: the directory to cache the dataset.
+        seed: the seed to use for random shuffling.
+
+    Returns:
+        the dataset as a DatasetDict.
+    """
+
     features = Features({"0": Value(dtype="string")})  # type: ignore
     # mypy complains about the type of dataset, but it's correct
     # see also https://discuss.huggingface.co/t/...
@@ -502,6 +539,8 @@ def load_raw_dataset_from_dir(
     dataset: DatasetDict = load_dataset(
         data_dir, features=features, cache_dir=cache_dir, header=None
     )  # type: ignore
+
+    # If random split (no validation/test data found), create validation/test split
     if "validation" not in dataset.keys():
         if "train" not in dataset.keys():
             raise RuntimeError("Can't load dataset, no train split found")
@@ -522,7 +561,8 @@ def load_raw_dataset_from_dir(
             range(train_len + val_len, train_len + val_len + test_len)
         )
 
-    dataset = dataset.rename_column("0", DATASET_COLUMN_NAME)
+    dataset = dataset.rename_column("0", DATASET_COLUMN_NAME)  # standardize column name
+
     return dataset
 
 
@@ -533,6 +573,8 @@ def load_raw_dataset_from_dir(
 
 # @logger.catch
 def main() -> None:
+    """Main training loop."""
+
     # -----------------------------------------------------------------------------
     # Setup
     # -----------------------------------------------------------------------------
@@ -605,17 +647,17 @@ def main() -> None:
         "use_auth_token": True if model_args.use_auth_token else None,
     }
 
-    if model_args.model_name_or_path:
+    if model_args.model_name_or_path:  # Load model config from model name or path
         logger.info(f"Loading configuration from {model_args.model_name_or_path}")
         config = AutoConfig.from_pretrained(
             model_args.model_name_or_path, **config_kwargs
         )
 
-    elif model_args.config_name:
+    elif model_args.config_name:  # Load model config from config name
         logger.info(f"Loading configuration from {model_args.config_name}")
         config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
 
-    else:
+    else:  # Create model config from scratch
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.info(f"Training model type {model_args.model_type} from scratch")
         # logger.debug(f"Old config {config}")
@@ -639,7 +681,7 @@ def main() -> None:
     }
 
     need_tokenizer_from_scratch: bool
-    if data_args.map_tokenizers:
+    if data_args.map_tokenizers:  # Map new tokenizer into pre-trained tokenizer
         need_tokenizer_from_scratch = True
         logger.info("Loading pre-trained tokenizer...")
         tokenizer_pretrained: PreTrainedTokenizerFast
@@ -658,21 +700,21 @@ def main() -> None:
                 "Mapping tokenizers requires a pre-trained model or tokenizer"
             )
 
-    else:
+    else:  # Load pre-trained tokenizer or create tokenizer from scratch
         tokenizer: PreTrainedTokenizerFast
-        if model_args.tokenizer_name:
+        if model_args.tokenizer_name:  # Load tokenizer from tokenizer name
             need_tokenizer_from_scratch = False
             logger.info(f"Loading tokenizer from {model_args.tokenizer_name}")
             tokenizer = AutoTokenizer.from_pretrained(
                 model_args.tokenizer_name, **tokenizer_kwargs
             )
-        elif model_args.model_name_or_path:
+        elif model_args.model_name_or_path:  # Load tokenizer from model name or path
             need_tokenizer_from_scratch = False
             logger.info(f"Loading tokenizer from {model_args.model_name_or_path}")
             tokenizer = AutoTokenizer.from_pretrained(
                 model_args.model_name_or_path, **tokenizer_kwargs
             )
-        else:
+        else:  # Create tokenizer from scratch
             need_tokenizer_from_scratch = True
             pass
 
@@ -686,16 +728,18 @@ def main() -> None:
             f"max length: {config.n_positions}"
         )
         data_iterator = raw_datasets["train"][DATASET_COLUMN_NAME]
-        tokenizer_from_scratch: PreTrainedTokenizerFast = get_tokenizer(
-            pre_tokenizer=data_args.pre_tokenizer,
-            algorithm=data_args.algorithm,
-            train_source=data_iterator,
-            vocab_size=data_args.vocab_size,
-            min_frequency=data_args.vocab_min_frequency,
-            model_max_length=config.n_positions,
+        tokenizer_from_scratch: PreTrainedTokenizerFast = (
+            get_tokenizer(  # Build a new tokenizer
+                pre_tokenizer=data_args.pre_tokenizer,
+                algorithm=data_args.algorithm,
+                train_source=data_iterator,
+                vocab_size=data_args.vocab_size,
+                min_frequency=data_args.vocab_min_frequency,
+                model_max_length=config.n_positions,
+            )
         )
 
-    if data_args.map_tokenizers:
+    if data_args.map_tokenizers:  # Map new tokenizer into pre-trained tokenizer
         assert need_tokenizer_from_scratch
         # Get the token frequencies by tokenizing the training data
         all_tokens: list[str] = []
@@ -779,7 +823,9 @@ def main() -> None:
 
     logger.info("Tokenizing datasets...")
     with training_args.main_process_first(desc="Tokenize dataset (map)"):
-        if data_args.map_tokenizers:
+        if (
+            data_args.map_tokenizers
+        ):  # we need to enclose the dataset with BOS and EOS (not done by tokenizer)
             enclosed_datasets = raw_datasets.map(
                 partial(
                     enclose_function,
@@ -793,7 +839,7 @@ def main() -> None:
             )
             raw_datasets = enclosed_datasets
 
-        tokenized_datasets: DatasetDict = raw_datasets.map(
+        tokenized_datasets: DatasetDict = raw_datasets.map(  # Tokenize datasets
             partial(tokenize_function, tokenizer=tokenizer),
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
@@ -840,7 +886,7 @@ def main() -> None:
     n_params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
     logger.info(f"Model size: {n_params/2**20:.2f}M params")
 
-    # Reshape the embeddings if necessary
+    # Could reshape the embeddings if necessary; but this should not happen
     embedding_size = model.get_input_embeddings().weight.shape[0]
     if len(tokenizer) > embedding_size:
         logger.error("Reshaping of model's embedding necessary (should NOT happen)")
@@ -861,13 +907,15 @@ def main() -> None:
     training_args.output_dir = (
         Path(PROJECT_ROOT_DIR) / training_args.output_dir
     ).as_posix()
-    if additional_args.unique_output_subdir:
+    if (
+        additional_args.unique_output_subdir
+    ):  # add timestamp to create a unique output directory
         training_args.output_dir = (
             Path(training_args.output_dir)
             / f"{datetime.now():%Y-%m-%d_%H-%M-%S}_experiment"
         ).as_posix()
 
-    if (
+    if (  # output directory already exists and we should not overwrite it
         Path(training_args.output_dir).is_dir()
         and training_args.do_train
         and not training_args.overwrite_output_dir
@@ -895,7 +943,7 @@ def main() -> None:
     # Configure training data
     # -----------------------------------------------------------------------------
 
-    # Define training/validation sets and limit to max length if necessary
+    # Define training/validation sets and limit to max length if configured
     if training_args.do_train:
         if "train" not in tokenized_datasets:
             raise ValueError("--do_train requires a train dataset")
@@ -934,6 +982,16 @@ def main() -> None:
         logits: Union[tuple[torch.Tensor, ...], torch.Tensor],
         labels: torch.Tensor,  # noqa
     ) -> torch.Tensor:
+        """Preprocess logits and labels before computing the metric.
+
+        Args:
+            logits: Logits output by the model.
+            labels: Labels for the logits.
+
+        Returns:
+            Logits after preprocessing.
+        """
+
         if isinstance(logits, tuple):
             # Depending on the model and config, logits may contain extra tensors,
             # like past_key_values, but logits always come first
@@ -944,6 +1002,15 @@ def main() -> None:
     def compute_metrics(
         eval_preds: tuple[torch.Tensor, torch.Tensor]
     ) -> Optional[dict[str, float]]:
+        """Compute metrics from predictions and labels.
+
+        Args:
+            eval_preds: Tuple of predictions and labels.
+
+        Returns:
+            Dictionary of metrics.
+        """
+
         preds, labels = eval_preds
         # preds have the same shape as the labels, after the argmax(-1) has been calculated
         # by preprocess_logits_for_metrics, but we need to shift the labels
@@ -1097,7 +1164,7 @@ def main() -> None:
         trainer.create_model_card(**kwargs)
 
 
-# For xla_spawn (TPUs)
+# For xla_spawn (TPUs); not tested
 def _mp_fn(index: int) -> None:  # noqa
     main()
 

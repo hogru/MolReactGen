@@ -1,10 +1,22 @@
 # coding=utf-8
+# src/molreactgen/generate.py
+"""Generate molecules and reaction templates resp.
+
+Functions:
+    load_existing_molecules:
+        Load molecules from a CSV file.
+    load_existing_reaction_templates:
+        Load reaction templates from a CSV file.
+    create_and_save_generation_config:
+        Create and save a generation config from command line arguments.
+    generate_smiles:
+        Generate molecules from a trained model.
+    generate_smarts:
+        Generate reaction templates from a trained model.
+    main:
+        Entry point for the generate command line interface.
 """
-Auto-Regressive Molecule and Reaction Template Generator
-Causal language modeling (CLM) with a transformer decoder model
-Author: Stephan Holzgruber
-Student ID: K08608294
-"""
+
 import argparse
 from datetime import datetime
 from pathlib import Path
@@ -79,6 +91,15 @@ DEFAULT_TEMPERATURE: Final = 1.0
 def load_existing_molecules(
     file_path: Path,
 ) -> list[Molecule]:
+    """Load molecules from a CSV file.
+
+    Args:
+        file_path: Path to the CSV file.
+
+    Returns:
+        A list of Molecule objects.
+    """
+
     df: pd.DataFrame = pd.read_csv(file_path, header=None)
     molecules: list[Molecule] = [Molecule(row) for row in df[0]]
     return molecules
@@ -87,6 +108,15 @@ def load_existing_molecules(
 def load_existing_reaction_templates(
     file_path: Path,
 ) -> list[Reaction]:
+    """Load reaction templates from a CSV file.
+
+    Args:
+        file_path: Path to the CSV file.
+
+    Returns:
+        A list of Reaction objects.
+    """
+
     df: pd.DataFrame = pd.read_csv(file_path, header=0)
     reactions: list[Reaction] = [
         Reaction(
@@ -103,6 +133,14 @@ def load_existing_reaction_templates(
 def _load_model(
     model_file_path: Path,
 ) -> AutoModelForCausalLM:
+    """Load a model from a file path.
+    Args:
+        model_file_path: Path to the model file.
+
+    Returns:
+        The loaded AutoModelForCausalLM model.
+    """
+
     model_file_path = Path(model_file_path).resolve()
     logger.debug(f"Loading model from {model_file_path}...")
     model = AutoModelForCausalLM.from_pretrained(model_file_path)
@@ -112,6 +150,15 @@ def _load_model(
 def _load_tokenizer(
     tokenizer_file_path: Path,
 ) -> PreTrainedTokenizerFast:
+    """Load a tokenizer from a file path.
+
+    Args:
+        tokenizer_file_path: Path to the tokenizer file.
+
+    Returns:
+        The loaded PreTrainedTokenizerFast tokenizer.
+    """
+
     tokenizer_file_path = Path(tokenizer_file_path).resolve()
     logger.debug(f"Loading tokenizer from {tokenizer_file_path}...")
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_file_path)
@@ -124,6 +171,23 @@ def _is_finetuned_model(
     from_scratch_bos_token: str = BOS_TOKEN,
     from_scratch_eos_token: str = EOS_TOKEN,
 ) -> bool:
+    """Determine if a model is fine-tuned or from scratch.
+
+    Since we can't tell from the model itself, we have to rely on the tokenizer.
+    In this context, a fine-tuned model has different BOS and EOS tokens compared to a model trained from scratch.
+
+    Args:
+        tokenizer: the tokenizer corresponding to the model.
+        from_scratch_bos_token: the BOS token used for models trained from scratch.
+        from_scratch_eos_token: the EOS token used for models trained from scratch.
+
+    Returns:
+        True if the model is fine-tuned, False if it is trained from scratch.
+
+    Raises:
+        RunTimeError: if the tokenizer BOS and EOS tokens are ambiguous.
+    """
+
     if not isinstance(tokenizer, PreTrainedTokenizerFast):
         raise TypeError(
             f"tokenizer must be a PreTrainedTokenizerFast, but is {type(tokenizer)}"
@@ -158,6 +222,20 @@ def _is_finetuned_model(
 def _determine_max_length(
     model: AutoModelForCausalLM, max_length: Optional[int] = None
 ) -> int:
+    """Determine the maximum input sequence length for a model.
+
+    Args:
+        model: the model to determine the maximum input sequence length for.
+        max_length: the maximum input sequence length to use, if specified,
+            can not be larger than the model's maximum input sequence length.
+
+    Returns:
+        the maximum input sequence length to use.
+
+    Raises:
+        TypeError: if both the model does not have length information and max_length is None.
+    """
+
     if not isinstance(
         model, PreTrainedModel
     ):  # would like to check for AutoModelForCausalLM, but that doesn't work
@@ -194,6 +272,16 @@ def _determine_max_length(
 def _determine_stopping_criteria(
     tokenizer: PreTrainedTokenizerFast, fine_tuned: bool
 ) -> Union[int, list[int]]:
+    """Determine the stopping criteria for the generation pipeline.
+
+    Args:
+        tokenizer: the tokenizer corresponding to the model.
+        fine_tuned: whether the model is fine-tuned or not.
+
+    Returns:
+        the stopping criteria for the generation pipeline.
+    """
+
     stopping_criteria: Union[int, list[int]]
     if fine_tuned:
         # This would be correct but does not work due to a bug in transformers, see:
@@ -213,9 +301,19 @@ def _determine_stopping_criteria(
 def _determine_num_to_generate_in_pipeline(
     num_to_generate: int, item_name: str = "items"
 ) -> int:
+    """Determine the number of items to generate during a batch in the generation pipeline.
+
+    Args:
+        num_to_generate: the total number of items to generate.
+        item_name: the name of the items to generate, used for logging only.
+
+    Returns:
+        the number of items to generate during a batch in the generation pipeline.
+    """
+
     num_to_generate_in_pipeline: int = min(
-        max(MIN_NUM_TO_GENERATE, num_to_generate // 100),
-        MIN_NUM_TO_GENERATE * 10,
+        max(MIN_NUM_TO_GENERATE, num_to_generate // 100),  # TODO make this configurable
+        MIN_NUM_TO_GENERATE * 10,  # TODO make this configurable
     )
     logger.debug(f"Generating {num_to_generate_in_pipeline} {item_name} at a time")
     return num_to_generate_in_pipeline
@@ -224,6 +322,16 @@ def _determine_num_to_generate_in_pipeline(
 def _create_generation_pipeline(
     model: AutoModelForCausalLM, tokenizer: PreTrainedTokenizerFast
 ) -> Pipeline:
+    """Create a generation pipeline.
+
+    Args:
+        model: the model to use.
+        tokenizer: the tokenizer to use.
+
+    Returns:
+        the generation pipeline.
+    """
+
     if not isinstance(
         model, PreTrainedModel
     ):  # would like to check for AutoModelForCausalLM, but that doesn't work
@@ -240,10 +348,29 @@ def _create_generation_pipeline(
 
 
 def _determine_max_num_tries(num_to_generate: int) -> int:
-    return max(int(num_to_generate) // 100, 10)
+    """Determine the maximum number of tries to generate a given number of items.
+
+    Args:
+        num_to_generate: the number of items to generate.
+
+    Returns:
+        the maximum number of tries to generate a given number of items.
+    """
+
+    return max(int(num_to_generate) // 100, 10)  # TODO make this configurable
 
 
 def _determine_prompt(tokenizer: PreTrainedTokenizerFast, fine_tuned: bool) -> str:
+    """Determine the prompt to use for the generation pipeline.
+
+    Args:
+        tokenizer: the tokenizer corresponding to the model.
+        fine_tuned: weather the model is fine-tuned or not.
+
+    Returns:
+        the prompt to use for the generation pipeline.
+    """
+
     if fine_tuned:
         prompt = BOS_TOKEN
     else:
@@ -261,14 +388,31 @@ def create_and_save_generation_config(
     num_beams: int = 1,
     temperature: float = 1.0,
 ) -> GenerationConfig:
+    """Create and save a generation config from command line arguments.
+
+    Args:
+        model_file_path: the path to the model file.
+        num_to_generate: the number of items to generate. Defaults to DEFAULT_NUM_TO_GENERATE.
+        split_into_chunks: whether to split the number of items to generate into chunks/batches. Defaults to True.
+        max_length:the maximum length of the generated items. Defaults to None, i.e. the model's maximum length.
+        num_beams: the number of beams to use for beam search. Defaults to 1, i.e. multinomial search.
+        temperature: the value used to modulate the next token probabilities (change logits before softmax).
+            Defaults to 1.0, i.e. no modulation.
+
+    Returns:
+        the generation config.
+    """
+
     model = _load_model(model_file_path)
     tokenizer = _load_tokenizer(model_file_path)
     fine_tuned = _is_finetuned_model(tokenizer)
     fine_tuned_str = "fine-tuned" if fine_tuned else "trained from scratch"
     logger.debug(f"Model assumed to be {fine_tuned_str}")
-    # At least one atom plus the EOS token(s)
+
+    # Generate at least one token plus the EOS token(s)
     min_length = 2 if fine_tuned else 1
     max_length = _determine_max_length(model, max_length)
+
     # Make "room" for the custom EOS token if model is fine-tuned
     max_length = max_length - 1 if fine_tuned else max_length
     stopping_criteria = _determine_stopping_criteria(tokenizer, fine_tuned)
@@ -278,12 +422,14 @@ def create_and_save_generation_config(
         )
     else:
         num_to_generate_in_pipeline = num_to_generate
+
     if num_beams > 1:
         early_stopping = True
     else:
         early_stopping = False
     do_sample = True
 
+    # If there is a generation config file, load it and overwrite the default values
     if (model_file_path / DEFAULT_GENERATION_CONFIG_FILE_NAME).is_file():
         generation_config, unused_kwargs = GenerationConfig.from_pretrained(
             model_file_path,
@@ -302,6 +448,7 @@ def create_and_save_generation_config(
         if len(unused_kwargs) > 0:
             logger.warning(f"Unused kwargs for GenerationConfig: {list(unused_kwargs)}")
 
+    # Otherwise, create a new generation config
     else:
         generation_config = GenerationConfig(
             do_sample=do_sample,
@@ -316,7 +463,7 @@ def create_and_save_generation_config(
             length_penalty=0.0,  # does neither promote nor penalize long sequences
         )
 
-    generation_config.save_pretrained(model_file_path)
+    generation_config.save_pretrained(model_file_path)  # save to model directory
     return generation_config
 
 
@@ -329,6 +476,24 @@ def generate_smiles(
     num_to_generate: int,
     max_num_tries: int,
 ) -> tuple[Tally, pd.DataFrame, pd.DataFrame]:
+    """Generate SMILES strings, i.e. molecules.
+
+    Args:
+        config: the generation config.
+        pipe: the generation pipeline.
+        prompt: the prompt to use for the generation pipeline.
+        existing_file_path: the path to the existing molecules, i.e. the molecules the model was trained on.
+        num_to_generate: the number of molecules to generate.
+        max_num_tries: the maximum number of tries to generate the molecules before raising an exception.
+
+    Returns:
+        a tuple containing the tally, the dataframe of all valid molecules,
+        and the dataframe of all generated molecules.
+
+    Raises:
+        RunTimeError: if the number of tries to generate molecules exceeds max_num_tries.
+    """
+
     # Validate arguments
     if not isinstance(config, GenerationConfig):
         raise TypeError(f"config must be a GenerationConfig, but is {type(config)}")
@@ -410,6 +575,7 @@ def generate_smiles(
             smiles["pl_novel"] = smiles["pl_unique"] - smiles["all_existing"]
             smiles["all_novel"] |= smiles["pl_novel"]
 
+            # Check if we have to abort because we cannot generate valid molecules
             if len(smiles["pl_novel"]) == 0:
                 num_tries += 1
                 if num_tries >= max_num_tries:
@@ -417,6 +583,7 @@ def generate_smiles(
                         f"Aborting... no novel molecules generated for {num_tries} times"
                     )
 
+            # Update the sets of molecules and the corresponding counters
             generated_counter = len(smiles["pl_generated"])
             valid_counter = len(smiles["pl_valid"])
             unique_counter = len(smiles["pl_unique"])
@@ -486,9 +653,38 @@ def generate_smarts(
     num_to_generate: int,
     max_num_tries: int,
 ) -> tuple[Tally, pd.DataFrame, pd.DataFrame]:
+    """Generate SMARTS strings, i.e. reaction templates.
+
+    Args:
+        config: the generation config.
+        pipe: the generation pipeline.
+        prompt: the prompt to use for the generation pipeline.
+        existing_file_path: the path to the existing reaction templates,
+            i.e. the reaction templates the model was trained on.
+        num_to_generate: the number of reaction templates to generate.
+        max_num_tries: the maximum number of tries to generate the reaction templates before raising an exception.
+
+    Returns:
+        a tuple containing the tally, the dataframe of all feasible molecules, and a copy of that dataframe
+            (the copy is work in progress and might change later).
+
+    Raises:
+        RunTimeError: if the number of tries to generate reaction templates exceeds max_num_tries.
+    """
+
     def get_reactions_with_feasible_products(
         _reaction: Reaction,
     ) -> list[Reaction]:
+        """Determine similar reactions to the given reaction and check whether applying the Reaction to the
+        corresponding products is chemically feasible.
+
+        Args:
+            _reaction: the reaction to check.
+
+        Returns:
+            a list of reactions with products that are chemically feasible with the given reaction.
+        """
+
         # Determine similar reactions; similar means that the reaction smarts have the same canonical form
         _similar_reactions = [
             r for r in existing_reactions if _reaction.is_similar_to(r, "canonical")
@@ -613,6 +809,7 @@ def generate_smarts(
             smarts["pl_generated"] = {Reaction(s) for s in generated}
             smarts["pl_valid"] = {s for s in smarts["pl_generated"] if s.valid}
 
+            # Check if we have to abort because we cannot generate valid molecules
             if len(smarts["pl_valid"]) == 0:
                 num_tries += 1
                 if num_tries >= max_num_tries:
@@ -620,6 +817,7 @@ def generate_smarts(
                         f"Aborting... no valid reaction templates generated for {num_tries} times"
                     )
 
+            # Update the reaction template sets and the corresponding counters
             smarts["pl_unique"] = smarts["pl_valid"] - smarts["all_valid"]
             smarts["all_valid"] |= smarts["pl_unique"]
 
@@ -742,6 +940,12 @@ def generate_smarts(
 
 @logger.catch
 def main() -> None:
+    """Main generation wrapper function.
+
+    Reads the command line arguments and calls the appropriate functions.
+    Saves the generation output to a file.
+    """
+
     # Prepare argument parser
     parser = argparse.ArgumentParser(
         description="Generate SMILES molecules or SMARTS reaction templates."
@@ -922,6 +1126,7 @@ def main() -> None:
     prompt = _determine_prompt(tokenizer, fine_tuned)
     max_num_tries = _determine_max_num_tries(num_to_generate)
 
+    # Start generation
     if args.mode == "smiles":
         counter, df_short, df_full = generate_smiles(
             config=generation_config,
