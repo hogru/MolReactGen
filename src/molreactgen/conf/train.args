@@ -29,7 +29,7 @@
 --logging_steps 100
 --save_strategy epoch
 --save_total_limit 5
---fp16 false
+--fp16 true
 --dataloader_num_workers 4
 --disable_tqdm false
 --load_best_model_at_end true
