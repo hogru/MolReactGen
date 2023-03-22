@@ -364,7 +364,13 @@ def get_training_config() -> tuple[argparse.Namespace, ...]:
     config_file_parser.add_argument(
         CONFIG_OVERWRITE_ARGS_FLAG, type=str, action="append"
     )
-    _, remaining_args = config_file_parser.parse_known_args()
+    config_file_args, remaining_args = config_file_parser.parse_known_args()
+
+    # The HfArgumentParser does not care if the files in config_file_args do not exist
+    # So we need to check this manually
+    for config_file in config_file_args.config_file:
+        if not Path(config_file).is_file():
+            raise FileNotFoundError(f"Configuration file {config_file} does not exist.")
 
     # Determine .args and .yaml files in arguments
     args_file_names = {
