@@ -3,4 +3,3 @@
 --num_train_epochs 2
 --log_level debug
 --logging_steps 10
---fp16 false
