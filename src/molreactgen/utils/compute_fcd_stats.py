@@ -48,18 +48,16 @@ def main() -> None:
         name="compute_fcd_metrics",
         text=lambda secs: f"Computed FCD metrics in {format_timespan(secs)}",
     ):
-
         dataset_file_path = Path(args.dataset).resolve()
         if not dataset_file_path.is_file():
             raise ValueError(f"Dataset file {dataset_file_path} does not exist")
 
         output_file_path = Path(args.output).resolve()
+        output_file_path.parent.mkdir(parents=True, exist_ok=True)
         # Add .pkl extension if none present
         if output_file_path.suffix == "":
             output_file_path = output_file_path.with_suffix(".pkl")
-            print(
-                f"Added file extension .pkl to output file: {output_file_path.name}"
-            )
+            print(f"Added file extension .pkl to output file: {output_file_path.name}")
         # Raise warning if output file already exists
         if output_file_path.is_file():
             warnings.warn(
