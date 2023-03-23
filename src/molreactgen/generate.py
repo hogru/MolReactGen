@@ -260,6 +260,7 @@ def create_and_save_generation_config(
     max_length: Optional[int] = None,
     num_beams: int = 1,
     temperature: float = 1.0,
+    overwrite_pretrained_config: bool = False,
 ) -> GenerationConfig:
     model = _load_model(model_file_path)
     tokenizer = _load_tokenizer(model_file_path)
@@ -316,7 +317,9 @@ def create_and_save_generation_config(
             length_penalty=0.0,  # does neither promote nor penalize long sequences
         )
 
-    generation_config.save_pretrained(model_file_path)
+    if overwrite_pretrained_config:
+        generation_config.save_pretrained(model_file_path)
+
     return generation_config
 
 
@@ -388,6 +391,7 @@ def generate_smiles(
         while len(smiles["all_novel"]) < num_to_generate:
             generated = pipe(
                 prompt,
+                generation_config=config,
                 return_full_text=True,
             )
 
