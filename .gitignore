@@ -13,6 +13,7 @@
 /src/molreactgen/models/*
 /src/molreactgen/playground/*
 /src/molreactgen/tokenizers/*
+/src/molreactgen/utils/wandb/*
 /src/molreactgen/wandb/*
 /tests/htmlcov/*
 .ipynb_checkpoints
