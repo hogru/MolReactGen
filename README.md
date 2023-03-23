@@ -14,7 +14,7 @@ An auto-regressive causal language model for molecule (SMILES) and reaction temp
 This is currently under development and should not be considered for any serious use case besides academic curiosity. A local (editable package) installation requires `python` ≥ 3.9, [`poetry`](https://python-poetry.org)  ≥ 1.0.8 and `pip` ≥ 22.3. Experiment results are logged to [`weights and biases`](https://wandb.ai).
 
 ```
-git clone https://github.com/hogru/molreactgen
+git clone --recurse-submodules https://github.com/hogru/molreactgen
 cd molreactgen
 python -m pip install -e .
 ```
@@ -28,3 +28,4 @@ python -m pip install -e .
 - `evaluate_fcd.py` calculates the Fréchet ChemNet Distance (FCD) between the generated molecules and a reference set of molecules (e.g. the GuacaMol dataset)
 - `molecule.py` covers helpers for the chemical space of the task
 - `helpers.py` is a set of misc helpers/utils (logging etc.)
+- `utils/compute_fcd_stats.py` computes the model activations that are needed to calculate the FCD. This is a separate script because it is computationally expensive and can be reused for model comparison.
