@@ -24,6 +24,7 @@
 --num_train_epochs 50
 --lr_scheduler_type cosine
 --warmup_ratio 0.1
+--label_smoothing 0.0
 --log_level info
 --logging_strategy steps
 --logging_steps 100
