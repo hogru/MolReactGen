@@ -1,10 +1,27 @@
 # coding=utf-8
+# src/molreactgen/evaluate_fcd.py
+"""Evaluate the generated molecules using different metrics.
+
+Functions:
+    read_molecules_from_file:
+        Read molecules from a CSV file.
+    get_stats_from_molecules:
+        Calculate the model activations for a list of molecules.
+    get_stats_from_file:
+        Read precomputed model activations from a file.
+    get_basic_stats:
+        Calculate basic metrics (validity, uniqueness, novelty) for the generated molecules.
+    get_reference_stats:
+        Compute the model activations for the reference molecules.
+    get_fcd:
+        Calculate the Fréchet ChemNet Distance between the generated and reference molecules, or,
+        between the generated molecules and precomputed model activations.
+    evaluate_molecules:
+        Evaluate the generated molecules using different metrics.
+    main:
+        The main function of the script.
 """
-Auto-Regressive Molecule and Reaction Template Generator
-Causal language modeling (CLM) with a transformer decoder model
-Author: Stephan Holzgruber
-Student ID: K08608294
-"""
+
 import argparse
 import json
 import pickle
@@ -48,7 +65,19 @@ VALID_EVALUATION_MODES: Final = [
 def read_molecules_from_file(
     file: Path, num_molecules: Optional[int] = None
 ) -> list[str]:
-    # Cope with different column names
+    """Read molecules from a CSV file.
+    Args:
+        file: the path to the CSV file.
+        num_molecules: the first num_molecules of molecules to provide. Defaults to None, i.e. all molecules.
+
+    Returns:
+        A list of molecules as strings.
+
+    Raises:
+        ValueError: if num_molecules is greater than the number of molecules in the file.
+    """
+
+    # Cope with different column names, allows for several columns names or no header
     molecules_df: pd.DataFrame
     try:
         molecules_df = pd.read_csv(file, usecols=["canonical_smiles"])
@@ -58,6 +87,7 @@ def read_molecules_from_file(
         except ValueError:
             molecules_df = pd.read_csv(file, header=None, usecols=[0])
 
+    # Delete rows with NaN values
     molecules: list[str] = molecules_df.dropna().values.squeeze()
 
     # If num_molecules is provided, only return the first num_molecules
@@ -76,21 +106,42 @@ def get_stats_from_molecules(
     molecules: Sequence[str],
     canonicalize: bool = True,
 ) -> dict[str, "np.floating[T]"]:
+    """Calculate the model activations for a list of molecules.
+
+    Args:
+        molecules: the molecules for which to calculate the model activations.
+        canonicalize: whether to canonicalize the molecules before calculating the model activations.
+
+    Returns:
+        a dictionary containing the model activations.
+    """
+
     fcd_fn = _get_fcd_instance(canonicalize=canonicalize)
     stats: dict[str, "np.floating[T]"] = fcd_fn.precalc(molecules)
     return stats
 
 
 def get_stats_from_file(file: Path) -> dict[str, "np.floating[T]"]:
+    """Read precomputed model activations from a file.
+    Args:
+        file: the path to the file containing the precomputed model activations.
+
+    Returns:
+        a dictionary containing the model activations.
+
+    Raises:
+        ValueError: if the file does not contain known format.
+    """
+
     with open(file, "rb") as f:
         stats = pickle.load(f)
 
     if isinstance(stats, tuple) and len(stats) == 2:  # assume fcd style stats
         mu, sigma = stats
-        stats_dict = {
+        stats_dict = {  # convert to format that fcd_torch expects
             "mu": mu,
             "sigma": sigma,
-        }  # = format that fcd_torch expects
+        }
     elif isinstance(stats, Mapping):  # assume fcd_torch style stats
         stats_dict = dict(stats)
     else:
@@ -102,6 +153,16 @@ def get_stats_from_file(file: Path) -> dict[str, "np.floating[T]"]:
 def get_basic_stats(
     mols_generated: Sequence[str], mols_reference: Sequence[str]
 ) -> tuple[float, float, float]:
+    """Calculate basic metrics (validity, uniqueness, novelty) for the generated molecules.
+
+    Args:
+        mols_generated: the generated molecules to calculate the metrics for.
+        mols_reference  the reference molecules to calculate some metrics against.
+
+    Returns:
+
+    """
+
     mols_canonical = canonicalize_molecules(
         mols_generated, strict=False, double_check=True
     )
@@ -109,7 +170,9 @@ def get_basic_stats(
     mols_unique = set(mols_valid)
     mols_novel = mols_unique - set(mols_reference)
     len_mols_generated = len(mols_generated)
-    validity = len(mols_valid) / len_mols_generated
+    validity = (
+        len(mols_valid) / len_mols_generated
+    )  # TODO guard against division by zero (3x)
     uniqueness = len(mols_unique) / len_mols_generated
     novelty = len(mols_novel) / len_mols_generated
 
@@ -120,6 +183,19 @@ def get_reference_stats(
     molecule_file_path: Optional[Path] = None,
     stats_file_path: Optional[Path] = None,
 ) -> dict[str, "np.floating[T]"]:
+    """Read precomputed model activations from a file or calculate them from a list of molecules.
+
+    Args:
+        molecule_file_path: the path to the file containing the molecules for which to calculate the model activations.
+        stats_file_path: the path to the file containing the precomputed model activations.
+
+    Returns:
+        a dictionary containing the model activations.
+
+    Raises:
+        ValueError: if neither molecule_file_path nor stats_file_path is provided or if both are provided.
+    """
+
     stats: dict[str, "np.floating[T]"]
 
     if molecule_file_path is not None and stats_file_path is None:
