@@ -509,6 +509,8 @@ def save_commandline_arguments(
         for key in keys_to_remove:
             dict_to_save.pop(key, None)
     file_path = Path(file_path).resolve()
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    # file_path.unlink(missing_ok=True)
     logger.debug(f"Saving command-line arguments to {file_path}...")
     with open(file_path, "w") as f:
         json.dump(dict_to_save, f, cls=ArgsEncoder, indent=4, sort_keys=True)

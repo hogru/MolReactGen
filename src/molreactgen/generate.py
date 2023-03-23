@@ -877,7 +877,7 @@ def main() -> None:
     logger.debug(f"Output file path: {output_file_path_full}")
     logger.debug(f"Secondary output file path: {output_file_path_short}")
 
-    GENERATED_DATA_DIR.mkdir(exist_ok=False, parents=True)
+    GENERATED_DATA_DIR.mkdir(exist_ok=True, parents=True)
     output_file_path_short.parent.mkdir(parents=True, exist_ok=True)
     output_file_path_full.parent.mkdir(parents=True, exist_ok=True)
 
