@@ -967,6 +967,10 @@ def main() -> None:
 
     # Configure early stopping
     if additional_args.early_stopping_patience is not None:
+        logger.info(
+            f"Setting up early stopping with patience {additional_args.early_stopping_patience} and "
+            f"threshold {additional_args.early_stopping_threshold}"
+        )
         early_stopping_callback = EarlyStoppingCallback(
             early_stopping_patience=additional_args.early_stopping_patience,
             early_stopping_threshold=additional_args.early_stopping_threshold,
