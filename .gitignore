@@ -16,6 +16,7 @@
 /src/molreactgen/utils/wandb/*
 /src/molreactgen/wandb/*
 /tests/htmlcov/*
+/wandb/*
 .ipynb_checkpoints
 .mypy_cache
 .pytest_cache
