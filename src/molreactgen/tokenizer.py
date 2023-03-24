@@ -171,7 +171,7 @@ def get_tokenizer(
     pad_token: str = PAD_TOKEN,
     unk_token: str = UNK_TOKEN,
     regex_pattern: Optional[str] = None,
-    byte_level: bool = False,  # TODO: can this be removed? If no, add to docstring
+    # byte_level: bool = False,  # TODO: can this be removed? If no, add to docstring
     # save_path: str = "./tokenizers/",
 ) -> PreTrainedTokenizerFast:
     """Get a Hugging Face fast tokenizer with the given parameters.
@@ -204,7 +204,7 @@ def get_tokenizer(
     )  # Zero works with all algorithms except Unigram (runs "infinitely")
     model_max_length = int(model_max_length)
     min_frequency = max(1, int(min_frequency))
-    byte_level = bool(byte_level)
+    # byte_level = bool(byte_level)
 
     _filter_invalid_tokenizer_combos(pre_tokenizer, algorithm, vocab_size)
 

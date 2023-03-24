@@ -153,14 +153,14 @@ def get_stats_from_file(file: Path) -> dict[str, "np.floating[T]"]:
 def get_basic_stats(
     mols_generated: Sequence[str], mols_reference: Sequence[str]
 ) -> tuple[float, float, float]:
-    """Calculate basic metrics (validity, uniqueness, novelty) for the generated molecules.
+    """Calculate validity, uniqueness, novelty for the generated molecules.
 
     Args:
         mols_generated: the generated molecules to calculate the metrics for.
-        mols_reference  the reference molecules to calculate some metrics against.
+        mols_reference: the reference molecules to calculate some metrics against.
 
     Returns:
-
+        a tuple containing the validity, uniqueness, novelty.
     """
 
     mols_canonical = canonicalize_molecules(
@@ -242,6 +242,22 @@ def get_fcd(
     mols_reference: Optional[Sequence[str]] = None,
     reference_stats: Optional[Mapping[str, "np.floating[T]"]] = None,
 ) -> float:
+    """Compute the FCD between the generated molecules and the reference molecules / stats.
+
+    Provide either mols_reference or reference_stats, but not both.
+
+    Args:
+        mols_generated: the generated molecules to calculate the FCD for.
+        mols_reference: the reference molecules to calculate the FCD against.
+        reference_stats: the precomputed model activations to calculate the FCD against.
+
+    Returns:
+        the FCD value.
+
+    Raises:
+        ValueError: if neither mols_reference nor reference_stats is provided or if both are provided.
+    """
+
     if mols_reference is not None and reference_stats is None:
         fcd_value = _get_fcd_from_molecules(mols_generated, mols_reference)
     elif reference_stats is not None:
@@ -253,6 +269,13 @@ def get_fcd(
 
 
 def save_stats_to_file(file: Path, stats: Mapping[str, "np.floating[T]"]) -> None:
+    """Save precomputed model activations to a file.
+
+    Args:
+        file: the path to the file to save the model activations to.
+        stats: the model activations to save.
+    """
+
     with open(file, "wb") as f:
         pickle.dump(stats, f)
 
@@ -265,6 +288,23 @@ def evaluate_molecules(
     stats_file_path: Optional[Path] = None,
     num_molecules: Optional[int] = None,
 ) -> dict[str, float]:
+    """Evaluate the generated molecules.
+
+    Mode "stats" requires a file containing the precomputed model activations.
+    Mode "reference" requires a file containing the reference molecules.
+    For mode "stats" a "reference_file_path" can still be provided; it is used for basic statistics.
+
+    Args:
+        mode: the evaluation mode. Either "stats" or "reference".
+        generated_file_path: the path to the file containing the generated molecules.
+        reference_file_path: the path to the file containing the reference molecules.
+        stats_file_path: the path to the file containing the precomputed model activations.
+        num_molecules: the number of molecules to evaluate. If None, all molecules are evaluated.
+
+    Returns:
+        a dictionary containing the evaluation results.
+    """
+
     if mode not in VALID_EVALUATION_MODES:
         raise ValueError(f"Invalid evaluation mode: {mode}")
 
@@ -327,6 +367,12 @@ def evaluate_molecules(
 
 @logger.catch
 def main() -> None:
+    """Main function of the evaluation script.
+
+    Reads the command line arguments and calls evaluate_molecules().
+    Saves the evaluation results to a file.
+    """
+
     # Prepare argument parser
     parser = argparse.ArgumentParser(
         description="Evaluate Fréchet ChemNet Distance (FCD) between generated SMILES molecules "

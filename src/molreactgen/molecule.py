@@ -216,11 +216,13 @@ def canonicalize_molecules(
 # This let's mypy complain about
 # "Overloaded function signatures 1 and 2 overlap with incompatible return types"
 # see also https://github.com/python/mypy/issues/11001
+# noinspection PyMissingOrEmptyDocstring
 @overload
 def remove_atom_mapping(smarts: str) -> str:  # type: ignore
     ...
 
 
+# noinspection PyMissingOrEmptyDocstring
 @overload
 def remove_atom_mapping(smarts: Sequence[str]) -> list[str]:
     ...
@@ -339,6 +341,7 @@ class Reaction:
         self.in_test_set: bool = False
         # self.reactants: Optional[str] = None
 
+    # noinspection PyMissingOrEmptyDocstring
     @property
     def reaction_smarts(self) -> str:
         return self._reaction_smarts
@@ -351,22 +354,26 @@ class Reaction:
         # noinspection PyAttributeOutsideInit
         self._reaction_smarts = str(value)
 
+    # noinspection PyMissingOrEmptyDocstring
     @cached_property
     def reaction_smarts_without_atom_mapping(
         self,
     ) -> str:
         return remove_atom_mapping(self.reaction_smarts)
 
+    # noinspection PyMissingOrEmptyDocstring
     @cached_property
     def reaction_smarts_canonicalized(self) -> Optional[str]:
         return canonicalize_template(
             self.reaction_smarts, strict=False, double_check=True
         )
 
+    # noinspection PyMissingOrEmptyDocstring
     @property
     def valid(self) -> bool:
         return self.reaction_smarts_canonicalized is not None
 
+    # noinspection PyMissingOrEmptyDocstring
     @property
     def invalid(self) -> bool:
         return not self.valid
@@ -485,6 +492,7 @@ class Molecule:
         self.unique: bool = False
         self.novel: bool = False
 
+    # noinspection PyMissingOrEmptyDocstring
     @property
     def smiles(self) -> str:
         return self._smiles
@@ -497,16 +505,19 @@ class Molecule:
         # noinspection PyAttributeOutsideInit
         self._smiles = str(value)
 
+    # noinspection PyMissingOrEmptyDocstring
     @cached_property
     def canonical_smiles(
         self,
     ) -> Optional[str]:
         return canonicalize_smiles(self.smiles, strict=False, double_check=True)
 
+    # noinspection PyMissingOrEmptyDocstring
     @property
     def valid(self) -> bool:
         return self.canonical_smiles is not None
 
+    # noinspection PyMissingOrEmptyDocstring
     @property
     def invalid(self) -> bool:
         return not self.valid

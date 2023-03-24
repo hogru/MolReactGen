@@ -1,10 +1,12 @@
 # coding=utf-8
+# src/molreactgen/utils/check_tokenizer.py
+"""Checks whether a given tokenizer can successfully encode and decode a given dataset.
+
+Functions:
+    main:
+        The main function of the script.
 """
-Auto-Regressive Molecule and Reaction Template Generator
-Causal language modeling (CLM) with a transformer decoder model
-Author: Stephan Holzgruber
-Student ID: K08608294
-"""
+
 import argparse
 from pathlib import Path
 
@@ -28,12 +30,14 @@ VALID_ALGORITHMS: tuple[str, ...] = (
 
 
 def main() -> None:
+    """Checks whether a given tokenizer can successfully encode and decode a given dataset."""
+
     parser = argparse.ArgumentParser(
         description="Check a tokenizer against a dataset",
     )
     parser.add_argument(
         "-p",
-        "--pretokenizer",
+        "--pre-tokenizer",
         type=str.lower,
         required=True,
         choices=VALID_PRE_TOKENIZERS,
@@ -81,7 +85,9 @@ def main() -> None:
             print(f"Original: {ori}")
             print(f"Encoded: {enc}")
             print(f"Decoded: {dec}")
+            print("Stopping...")
             break
+
     print("Success!")
 
 

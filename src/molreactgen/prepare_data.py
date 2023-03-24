@@ -301,12 +301,14 @@ def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
         ), "Train set includes reactions from validation and/or test set!"
 
 
+# noinspection PyUnusedLocal
 def _prepare_uspto_full_dataset(raw_dir: Path, prep_dir: Path) -> None:
     raise NotImplementedError(
         "Preparation of the full USPTO dataset is not yet implemented."
     )
 
 
+# noinspection PyUnusedLocal
 def _download_uspto_full_dataset(raw_dir: Path, enforce_download: bool) -> None:
     # _download_pooched_dataset("uspto50k", raw_dir, enforce_download)
     raise NotImplementedError(

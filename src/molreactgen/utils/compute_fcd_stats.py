@@ -1,9 +1,12 @@
 # coding=utf-8
-"""
-Auto-Regressive Molecule and Reaction Template Generator
-Causal language modeling (CLM) with a transformer decoder model
-Author: Stephan Holzgruber
-Student ID: K08608294
+# src/molreactgen/utils/compute_fcd_stats.py
+"""Precomputes and saves the model activations for a given dataset.
+
+The model activations can be used to compute the FCD metrics to assess the model performance.
+
+Functions:
+    main:
+        The main function of the script.
 """
 
 import argparse
@@ -25,6 +28,8 @@ DEFAULT_FCD_STATS_FILE: Final = "./fcd_stats.pkl"
 
 
 def main() -> None:
+    """Precompute and save the model activations for a given dataset."""
+
     parser = argparse.ArgumentParser(
         description="pre-compute FCD metrics (activations' mean, sigma) for a dataset",
     )
@@ -48,7 +53,6 @@ def main() -> None:
         name="compute_fcd_metrics",
         text=lambda secs: f"Computed FCD metrics in {format_timespan(secs)}",
     ):
-
         dataset_file_path = Path(args.dataset).resolve()
         if not dataset_file_path.is_file():
             raise ValueError(f"Dataset file {dataset_file_path} does not exist")
@@ -57,9 +61,7 @@ def main() -> None:
         # Add .pkl extension if none present
         if output_file_path.suffix == "":
             output_file_path = output_file_path.with_suffix(".pkl")
-            print(
-                f"Added file extension .pkl to output file: {output_file_path.name}"
-            )
+            print(f"Added file extension .pkl to output file: {output_file_path.name}")
         # Raise warning if output file already exists
         if output_file_path.is_file():
             warnings.warn(
