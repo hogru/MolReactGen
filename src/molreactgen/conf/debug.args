@@ -1,6 +1,6 @@
 --dataset_dir data/prep/debug/csv
 --config_overrides n_positions=128,n_embd=144,n_layer=4,n_head=4
 --num_train_epochs 2
---log_level debug
+--log_level info
 --logging_steps 10
---random_seed true
+--fp16 false

@@ -58,6 +58,7 @@ def main() -> None:
             raise ValueError(f"Dataset file {dataset_file_path} does not exist")
 
         output_file_path = Path(args.output).resolve()
+        output_file_path.parent.mkdir(parents=True, exist_ok=True)
         # Add .pkl extension if none present
         if output_file_path.suffix == "":
             output_file_path = output_file_path.with_suffix(".pkl")

@@ -96,7 +96,7 @@ REGEX_INPUT: Final = {
 # replace() is just a safety net against double "|" in the RegEx
 REGEX_PATTERN_SMARTS: Final = "|".join(REGEX_INPUT.values()).replace("||", "|")
 REGEX_PATTERN_ATOM: Final = REGEX_PATTERN_SMARTS.replace(r"\[[^\]]+]", r"\[|\]")
-MIN_VOCAB_SIZE_UNIGRAM: Final = 40
+MIN_VOCAB_SIZE_UNIGRAM: Final = 44  # for comparison with SMARTS + WORDLEVEL tokenizer, which has 44 non-special tokens
 
 
 logger = logging.getLogger(__name__)
@@ -128,10 +128,10 @@ def _filter_invalid_tokenizer_combos(
     if algorithm == "WORDLEVEL" and vocab_size != 0:
         raise ValueError(f"Algorithm {algorithm} must be used with a vocab size of 0")
 
-    if algorithm == "UNIGRAM" and vocab_size < MIN_VOCAB_SIZE_UNIGRAM:
-        raise ValueError(
-            f"Algorithm {algorithm} must be used with a vocab size of at least {MIN_VOCAB_SIZE_UNIGRAM}"
-        )
+    # if algorithm == "UNIGRAM" and vocab_size < MIN_VOCAB_SIZE_UNIGRAM:
+    #     raise ValueError(
+    #         f"Algorithm {algorithm} must be used with a vocab size of at least {MIN_VOCAB_SIZE_UNIGRAM}"
+    #     )
 
 
 def token_in_regex(token: str, regex: str) -> bool:  # TODO: make this private

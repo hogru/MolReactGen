@@ -147,7 +147,10 @@ def _download_pooched_dataset(
     """
 
     # We have two places where the path to the raw data directory is stored. Check if they are the same.
-    assert raw_dir.samefile(POOCHES[dataset].path)
+    # assert raw_dir.samefile(POOCHES[dataset].path)
+    assert raw_dir.as_posix() == str(
+        POOCHES[dataset].path
+    )  # pooch.path should be a string, but isn't
 
     if enforce_download:  # If True, delete all files in the raw data directory
         for file in POOCHES[dataset].registry:
@@ -178,8 +181,10 @@ def _prepare_pooched_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> Non
     """
 
     # We have two places where the path to the raw data directory is stored. Check if they are the same.
-    assert raw_dir.samefile(POOCHES[dataset].path)
-
+    # assert raw_dir.samefile(POOCHES[dataset].path)
+    assert raw_dir.as_posix() == str(
+        POOCHES[dataset].path
+    )  # pooch.path should be a string, but isn't
     prep_dir.mkdir(parents=True, exist_ok=True)
     for file in POOCHES[dataset].registry:
         # sub_dir = Path(file).parent
@@ -219,6 +224,7 @@ def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
         raise FileNotFoundError(
             f"File {raw_file} not found. The raw file name seems to have changed."
         )
+    prep_dir.mkdir(parents=True, exist_ok=True)
     files: dict[str, str] = {
         "known": "USPTO_50k_known.csv",  # "known" means in either validation or test set (but not train set)
         "train": "USPTO_50k_train.csv",
@@ -303,17 +309,19 @@ def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
 
 # noinspection PyUnusedLocal
 def _prepare_uspto_full_dataset(raw_dir: Path, prep_dir: Path) -> None:
-    raise NotImplementedError(
-        "Preparation of the full USPTO dataset is not yet implemented."
-    )
+    # raise NotImplementedError(
+    #     "Preparation of the full USPTO dataset is not yet implemented."
+    # )
+    logger.warning("Dataset usptofull preparation is not yet implemented, skipping...")
 
 
 # noinspection PyUnusedLocal
 def _download_uspto_full_dataset(raw_dir: Path, enforce_download: bool) -> None:
     # _download_pooched_dataset("uspto50k", raw_dir, enforce_download)
-    raise NotImplementedError(
-        "Download of the full USPTO dataset is not yet implemented."
-    )
+    # raise NotImplementedError(
+    #     "Download of the full USPTO dataset is not yet implemented."
+    # )
+    logger.warning("Dataset usptofull download is not yet implemented, skipping...")
 
 
 def _download_zinc_dataset(raw_dir: Path, enforce_download: bool) -> None:

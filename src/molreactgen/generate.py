@@ -387,6 +387,7 @@ def create_and_save_generation_config(
     max_length: Optional[int] = None,
     num_beams: int = 1,
     temperature: float = 1.0,
+    overwrite_pretrained_config: bool = False,
 ) -> GenerationConfig:
     """Create and save a generation config from command line arguments.
 
@@ -463,7 +464,9 @@ def create_and_save_generation_config(
             length_penalty=0.0,  # does neither promote nor penalize long sequences
         )
 
-    generation_config.save_pretrained(model_file_path)  # save to model directory
+    if overwrite_pretrained_config:
+        generation_config.save_pretrained(model_file_path)
+
     return generation_config
 
 
@@ -553,6 +556,7 @@ def generate_smiles(
         while len(smiles["all_novel"]) < num_to_generate:
             generated = pipe(
                 prompt,
+                generation_config=config,
                 return_full_text=True,
             )
 
@@ -1081,7 +1085,7 @@ def main() -> None:
     logger.debug(f"Output file path: {output_file_path_full}")
     logger.debug(f"Secondary output file path: {output_file_path_short}")
 
-    GENERATED_DATA_DIR.mkdir(exist_ok=False, parents=True)
+    GENERATED_DATA_DIR.mkdir(exist_ok=True, parents=True)
     output_file_path_short.parent.mkdir(parents=True, exist_ok=True)
     output_file_path_full.parent.mkdir(parents=True, exist_ok=True)
 

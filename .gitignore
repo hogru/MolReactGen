@@ -13,8 +13,10 @@
 /src/molreactgen/models/*
 /src/molreactgen/playground/*
 /src/molreactgen/tokenizers/*
+/src/molreactgen/utils/wandb/*
 /src/molreactgen/wandb/*
 /tests/htmlcov/*
+/wandb/*
 .ipynb_checkpoints
 .mypy_cache
 .pytest_cache
@@ -23,6 +25,7 @@
 *.numbers
 *.pyc
 *.svg
+*.zip
 .coverage
 .DS_Store
 .secrets.yaml

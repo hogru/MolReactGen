@@ -1,1 +1,3 @@
 --fp16 true
+--pre_tokenizer char
+--label_smoothing 0.1
