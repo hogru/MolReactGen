@@ -25,6 +25,7 @@
 *.numbers
 *.pyc
 *.svg
+*.zip
 .coverage
 .DS_Store
 .secrets.yaml
