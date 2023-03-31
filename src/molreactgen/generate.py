@@ -70,7 +70,10 @@ VALID_GENERATION_MODES: Final = (
     "smiles",
     "smarts",
 )
-DEFAULT_NUM_TO_GENERATE: Final = 100
+VALID_GENERATION_MODES_HELP_STR: Final[str] = (
+    "{" + "|".join(VALID_GENERATION_MODES) + "}"
+)
+DEFAULT_NUM_TO_GENERATE: Final = 10000
 MIN_NUM_TO_GENERATE: Final = 20
 DEFAULT_NUM_BEAMS: Final = 1
 DEFAULT_TEMPERATURE: Final = 1.0
@@ -799,7 +802,7 @@ def main() -> None:
         # help="file path for the generated molecules or reaction templates,
         # default (for this instance): '%(default)s'.",
         help=f"file path for the generated molecules or reaction templates, default: "
-        f"'{GENERATED_DATA_DIR}/generated_*.csv'.",
+        f"'{GENERATED_DATA_DIR}/generated_{VALID_GENERATION_MODES_HELP_STR}.csv'.",
     )
     parser.add_argument(
         "-t",
@@ -889,9 +892,15 @@ def main() -> None:
     # logger.debug(f"Number of {items_name} to generate: {num_to_generate}")
     max_length = args.length
     # logger.debug(f"Maximum length of generated {items_name}: {max_length}")
-    logger.info(
-        f"Generate ≥ {num_to_generate} {items_name} with a length ≤ {max_length}"
-    )
+    if max_length is None:
+        logger.info(
+            f"Generate ≥ {num_to_generate} {items_name}; "
+            f"the maximum length will be determined by the model's sequence length"
+        )
+    else:
+        logger.info(
+            f"Generate ≥ {num_to_generate} {items_name} with a maximum length ≤ {max_length}"
+        )
 
     num_beams = args.num_beams
     logger.debug(f"Number of beams: {num_beams}")
