@@ -30,6 +30,8 @@
 --logging_steps 100
 --save_strategy epoch
 --save_total_limit 5
+--seed 42
+--random_seed false
 --fp16 true
 --dataloader_num_workers 4
 --disable_tqdm false
