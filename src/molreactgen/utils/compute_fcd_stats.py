@@ -1,8 +1,8 @@
 # coding=utf-8
 # src/molreactgen/utils/compute_fcd_stats.py
-"""Precomputes and saves the model activations for a given dataset.
+"""Precompute and save the Fréchet ChemNet Distance stats (model activations) for a given dataset.
 
-The model activations can be used to compute the FCD metrics to assess the model performance.
+The precomputed FCD stats can be used to compute the FCD metrics for assessing a model's performance.
 
 Functions:
     main:
@@ -25,19 +25,19 @@ from molreactgen.evaluate_fcd import (
 from molreactgen.helpers import configure_logging, determine_log_level
 from molreactgen.molecule import canonicalize_molecules
 
-DEFAULT_FCD_STATS_FILE: Final = "./fcd_stats.pkl"
+DEFAULT_FCD_STATS_FILE: Final[str] = "./fcd_stats.pkl"
 
 
 def main() -> None:
     """Precompute and save the model activations for a given dataset."""
 
     parser = argparse.ArgumentParser(
-        description="pre-compute FCD stats (activations' mean, sigma) for a dataset",
+        description="pre-compute FCD stats (model activations) for a given dataset",
     )
     parser.add_argument(
         "dataset",
         type=Path,
-        help="dataset (csv with SMILES strings) to pre-compute FCD stats for",
+        help="dataset (csv with SMILES strings) to pre-compute the FCD stats for",
     )
     parser.add_argument(
         "-o",
@@ -87,7 +87,7 @@ def main() -> None:
             logger.debug(
                 f"Added file extension .pkl to output file: {output_file_path.name}"
             )
-        # Raise warning if output file already exists
+        # Give warning if output file already exists
         if output_file_path.is_file():
             logger.warning(
                 f"Output file {output_file_path.name} already exists, overwriting it"
