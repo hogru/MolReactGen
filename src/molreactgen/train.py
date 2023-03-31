@@ -29,7 +29,6 @@ import datasets
 import evaluate  # type: ignore
 import torch
 import transformers  # type: ignore
-import wandb
 from datasets import Dataset, DatasetDict, Features, Value, load_dataset  # type: ignore
 from loguru import logger
 from transformers import (
@@ -55,6 +54,7 @@ from transformers.trainer_utils import get_last_checkpoint  # type: ignore
 from transformers.utils import check_min_version  # type: ignore
 from transformers.utils.versions import require_version  # type: ignore
 
+import wandb
 from molreactgen.generate import create_and_save_generation_config
 from molreactgen.helpers import configure_logging, guess_project_root_dir
 from molreactgen.tokenizer import (
@@ -568,6 +568,7 @@ def main() -> None:
     # Set seed in random, numpy, torch (not only for training, but also for dataset creation, if applicable)
     if additional_args.random_seed:
         training_args.seed = randint(0, 2**32 - 1)
+    logger.debug(f"Using random seed {training_args.seed}")
     set_seed(training_args.seed)
 
     logger.debug(f"Data arguments\n{data_args}")
