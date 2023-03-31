@@ -29,6 +29,7 @@ import datasets
 import evaluate  # type: ignore
 import torch
 import transformers  # type: ignore
+import wandb
 from datasets import Dataset, DatasetDict, Features, Value, load_dataset  # type: ignore
 from loguru import logger
 from transformers import (
@@ -54,7 +55,6 @@ from transformers.trainer_utils import get_last_checkpoint  # type: ignore
 from transformers.utils import check_min_version  # type: ignore
 from transformers.utils.versions import require_version  # type: ignore
 
-import wandb
 from molreactgen.generate import create_and_save_generation_config
 from molreactgen.helpers import configure_logging, guess_project_root_dir
 from molreactgen.tokenizer import (
@@ -990,7 +990,9 @@ def main() -> None:
         os.environ["WANDB_PROJECT"] = WANDB_PROJECT_NAME
         os.environ["WANDB_LOG_MODEL"] = "end"
         os.environ["WANDB_WATCH"] = "gradients"
-        # os.environ["WANDB_AGENT_DISABLE_FLAPPING"] = "true"
+        # Continue sweep even if a run fails (invalid tokenizer combination) and only try it once
+        os.environ["WANDB_AGENT_DISABLE_FLAPPING"] = "true"
+        os.environ["WANDB_AGENT_MAX_INITIAL_FAILURES"] = "1"
 
         _ = wandb.init(
             project=WANDB_PROJECT_NAME,
