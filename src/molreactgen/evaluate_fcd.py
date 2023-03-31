@@ -51,15 +51,14 @@ from molreactgen.molecule import canonicalize_molecules
 T = TypeVar("T", bound=npt.NBitBase)
 
 # Global variables, defaults
-PROJECT_ROOT_DIR: Path = guess_project_root_dir()
-# DEFAULT_OUTPUT_FILE_SUFFIX: Final = "_evaluation.csv"
-DEFAULT_OUTPUT_FILE_NAME: Final = "evaluation.json"
-ARGUMENTS_FILE_NAME: Final = "evaluate_cl_args.json"
+PROJECT_ROOT_DIR: Final[Path] = guess_project_root_dir()
+DEFAULT_OUTPUT_FILE_NAME: Final[str] = "evaluation.json"
+ARGUMENTS_FILE_NAME: Final[str] = "evaluate_cl_args.json"
 
-VALID_EVALUATION_MODES: Final = [
+VALID_EVALUATION_MODES: Final[tuple[str, ...]] = (
     "reference",
     "stats",
-]
+)
 
 
 def read_molecules_from_file(
@@ -77,6 +76,7 @@ def read_molecules_from_file(
         ValueError: if num_molecules is greater than the number of molecules in the file.
     """
 
+    file = Path(file).resolve()
     # Cope with different column names, allows for several columns names or no header
     molecules_df: pd.DataFrame
     try:
@@ -130,7 +130,7 @@ def get_stats_from_file(file: Path) -> dict[str, "np.floating[T]"]:
         a dictionary containing the model activations.
 
     Raises:
-        ValueError: if the file does not contain known format.
+        ValueError: if the file does not contain a known format.
     """
 
     with open(file, "rb") as f:
@@ -171,10 +171,12 @@ def get_basic_stats(
     mols_novel = mols_unique - set(mols_reference)
     len_mols_generated = len(mols_generated)
     validity = (
-        len(mols_valid) / len_mols_generated
-    )  # TODO guard against division by zero (3x)
-    uniqueness = len(mols_unique) / len_mols_generated
-    novelty = len(mols_novel) / len_mols_generated
+        len(mols_valid) / len_mols_generated if len_mols_generated != 0.0 else 0.0
+    )
+    uniqueness = (
+        len(mols_unique) / len_mols_generated if len_mols_generated != 0.0 else 0.0
+    )
+    novelty = len(mols_novel) / len_mols_generated if len_mols_generated != 0.0 else 0.0
 
     return validity, uniqueness, novelty
 
@@ -216,24 +218,21 @@ def get_reference_stats(
 def _get_fcd_instance(canonicalize: bool = True) -> "FCD":
     num_workers = min(get_num_workers(), 4)
     device = get_device()
-    fcd_fn = FCD(canonize=canonicalize, n_jobs=num_workers, device=device, pbar=True)
-    return fcd_fn
+    return FCD(canonize=canonicalize, n_jobs=num_workers, device=device, pbar=True)
 
 
 def _get_fcd_from_molecules(
     mols_generated: Sequence[str], mols_reference: Sequence[str]
 ) -> float:
     fcd_fn: FCD = _get_fcd_instance()
-    fcd_value: float = fcd_fn(gen=mols_generated, ref=mols_reference)
-    return fcd_value
+    return fcd_fn(gen=mols_generated, ref=mols_reference)
 
 
 def _get_fcd_from_stats(
     molecules: Sequence[str], stats: Mapping[str, "np.floating[T]"]
 ) -> float:
     fcd_fn: FCD = _get_fcd_instance()
-    fcd_value: float = fcd_fn(gen=molecules, pref=stats)
-    return fcd_value
+    return fcd_fn(gen=molecules, pref=stats)
 
 
 def get_fcd(
@@ -312,8 +311,6 @@ def evaluate_molecules(
         raise ValueError(
             "At least one of 'reference_file_path' and 'stats_file_path' must be passed"
         )
-    else:
-        pass
 
     # Load generated molecules
     if num_molecules is None:
@@ -471,18 +468,20 @@ def main() -> None:
             raise FileNotFoundError(
                 f"Reference molecules file '{reference_file_path}' not found"
             )
+
     elif args.mode == "stats":
-        if args.stats is not None:
-            stats_file_path = Path(args.stats).resolve()
-            logger.debug(f"Reference statistics file path: {stats_file_path}")
-            if not stats_file_path.is_file():
-                raise FileNotFoundError(
-                    f"Reference statistics file '{stats_file_path}' not found"
-                )
-        else:
+        if args.stats is None:
             raise ValueError(
                 "Reference statistics file path must be provided in 'stats' mode"
             )
+        stats_file_path = Path(args.stats).resolve()
+        logger.debug(f"Reference statistics file path: {stats_file_path}")
+
+        if not stats_file_path.is_file():
+            raise FileNotFoundError(
+                f"Reference statistics file '{stats_file_path}' not found"
+            )
+
         if args.reference is not None:
             reference_file_path = Path(args.reference).resolve()
             logger.debug(f"Reference molecules file path: {reference_file_path}")
@@ -490,8 +489,10 @@ def main() -> None:
                 raise FileNotFoundError(
                     f"Reference molecules file '{reference_file_path}' not found"
                 )
+
         else:
             reference_file_path = None
+
     else:
         raise ValueError(
             "Reference molecules file path must be provided in 'reference' mode"
@@ -504,11 +505,7 @@ def main() -> None:
         )
 
     if args.output is None:
-        # output_file_path = generated_file_path.with_name(
-        #     generated_file_path.stem + "_evaluated.json"
-        # )
         output_file_path = generated_file_path.parent / DEFAULT_OUTPUT_FILE_NAME
-
     else:
         output_file_path = Path(args.output).resolve()
         output_file_path.parent.mkdir(parents=True, exist_ok=True)
