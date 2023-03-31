@@ -610,6 +610,7 @@ def main() -> None:
     # Set seed in random, numpy, torch (not only for training, but also for dataset creation, if applicable)
     if additional_args.random_seed:
         training_args.seed = randint(0, 2**32 - 1)
+    logger.debug(f"Using random seed {training_args.seed}")
     set_seed(training_args.seed)
 
     logger.debug(f"Data arguments\n{data_args}")
