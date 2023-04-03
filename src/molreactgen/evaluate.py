@@ -62,7 +62,7 @@ VALID_EVALUATION_MODES: Final[tuple[str, ...]] = (
 
 
 def read_molecules_from_file(
-    file: Path, num_molecules: Optional[int] = None
+    file: Path, num_molecules: Optional[int] = None, valid_only: bool = False
 ) -> list[str]:
     """Read molecules from a CSV file.
     Args:
@@ -80,12 +80,21 @@ def read_molecules_from_file(
     # Cope with different column names, allows for several columns names or no header
     molecules_df: pd.DataFrame
     try:
-        molecules_df = pd.read_csv(file, usecols=["canonical_smiles"])
+        molecules_df = pd.read_csv(file, usecols=["smiles", "valid"])
+        if valid_only:
+            molecules_df = molecules_df[molecules_df["valid"]]["smiles"]
+        else:
+            molecules_df = molecules_df["smiles"]
+
     except ValueError:
         try:
             molecules_df = pd.read_csv(file, usecols=["smiles"])
         except ValueError:
             molecules_df = pd.read_csv(file, header=None, usecols=[0])
+        if valid_only:
+            raise ValueError(
+                "The 'valid_only' option is not supported for this file, check file format"
+            )
 
     # Delete rows with NaN values
     molecules: list[str] = molecules_df.dropna().values.squeeze()
@@ -93,9 +102,10 @@ def read_molecules_from_file(
     # If num_molecules is provided, only return the first num_molecules
     if num_molecules is not None:
         if num_molecules > len(molecules):
+            adjective_str = "valid" if valid_only else "generated"
             raise ValueError(
                 f"The number of molecules to be evaluated ({num_molecules:,d}) is greater than "
-                f"the number of generated molecules ({len(molecules)})"
+                f"the number of {adjective_str} molecules ({len(molecules):,d})"
             )
         molecules = molecules[:num_molecules]
 
@@ -170,13 +180,14 @@ def get_basic_stats(
     mols_unique = set(mols_valid)
     mols_novel = mols_unique - set(mols_reference)
     len_mols_generated = len(mols_generated)
-    validity = (
-        len(mols_valid) / len_mols_generated if len_mols_generated != 0.0 else 0.0
-    )
-    uniqueness = (
-        len(mols_unique) / len_mols_generated if len_mols_generated != 0.0 else 0.0
-    )
-    novelty = len(mols_novel) / len_mols_generated if len_mols_generated != 0.0 else 0.0
+    len_mols_valid = len(mols_valid)
+    len_mols_unique = len(mols_unique)
+    len_mols_novel = len(mols_novel)
+
+    # The stats / percentages are calculated hierarchically (as in GuacaMol)
+    validity = len_mols_valid / len_mols_generated if len_mols_generated > 0 else 0.0
+    uniqueness = len_mols_unique / len_mols_valid if len_mols_valid > 0 else 0.0
+    novelty = len_mols_novel / len_mols_unique if len_mols_unique > 0 else 0.0
 
     return validity, uniqueness, novelty
 
@@ -318,8 +329,10 @@ def evaluate_molecules(
     else:
         num_molecules_str = f"first {num_molecules:,d}"
 
-    logger.info(f"Loading {num_molecules_str} generated molecules...")
-    mols_generated = read_molecules_from_file(generated_file_path, num_molecules)
+    logger.info(f"Loading {num_molecules_str} *generated* molecules...")
+    mols_generated = read_molecules_from_file(
+        generated_file_path, num_molecules, valid_only=False
+    )
 
     # Calculate basic stats; compare generated and reference molecules (if available)
     if reference_file_path is not None:
@@ -337,7 +350,9 @@ def evaluate_molecules(
         basic_stats = {}
 
     # Get reference stats
-    reference_stats: dict[str, "np.floating[T]"]
+    # mypy complains "Type variable "molreactgen.evaluate.T" is unbound  [valid-type]"
+    # Might R&D why this is the case, but for now, we ignore it
+    reference_stats: dict[str, "np.floating[T]"]  # type: ignore
 
     if mode == "reference":
         logger.info("Calculating reference stats from reference molecules...")
@@ -350,6 +365,10 @@ def evaluate_molecules(
 
     # Calculate FCD value
     logger.info("Calculating FCD value...")
+    logger.info(f"Loading {num_molecules_str} *valid* molecules...")
+    mols_generated = read_molecules_from_file(
+        generated_file_path, num_molecules, valid_only=True
+    )
     fcd_value = get_fcd(
         mols_generated=mols_generated,
         mols_reference=mols_reference,
