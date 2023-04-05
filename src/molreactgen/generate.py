@@ -17,7 +17,9 @@ Functions:
         Entry point for the generate command line interface.
 """
 
+
 import argparse
+import contextlib
 from datetime import datetime
 from pathlib import Path
 from typing import Final, Optional, Union
@@ -61,37 +63,42 @@ from molreactgen.molecule import Molecule, Reaction
 from molreactgen.tokenizer import BOS_TOKEN, EOS_TOKEN, PAD_TOKEN
 
 # Global variables, defaults
-PROJECT_ROOT_DIR: Path = guess_project_root_dir()
-GENERATED_DATA_DIR: Path = (
+PROJECT_ROOT_DIR: Final[Path] = guess_project_root_dir()
+GENERATED_DATA_DIR: Final[Path] = (
     PROJECT_ROOT_DIR / "data" / "generated" / f"{datetime.now():%Y-%m-%d_%H-%M}"
 )
-ARGUMENTS_FILE_PATH: Final = GENERATED_DATA_DIR / "generate_cl_args.json"
-DEFAULT_SMILES_OUTPUT_FILE_PATH: Final = GENERATED_DATA_DIR / "generated_smiles.csv"
-DEFAULT_SMARTS_OUTPUT_FILE_PATH: Final = GENERATED_DATA_DIR / "generated_smarts.csv"
-DEFAULT_GENERATION_CONFIG_FILE_NAME: Final = "generation_config.json"
-CSV_STATS_FILE_NAME: Final = GENERATED_DATA_DIR / "generation_stats.csv"
-JSON_STATS_FILE_NAME: Final = GENERATED_DATA_DIR / "generation_stats.json"
-MODEL_LINK_DIR_NAME: Final = GENERATED_DATA_DIR / "link_to_model"
-KNOWN_LINK_FILE_NAME: Final = GENERATED_DATA_DIR / "link_to_known.csv"
-LATEST_LINK_FILE_NAME: Final = (
+ARGUMENTS_FILE_PATH: Final[Path] = GENERATED_DATA_DIR / "generate_cl_args.json"
+DEFAULT_SMILES_OUTPUT_FILE_PATH: Final[Path] = (
+    GENERATED_DATA_DIR / "generated_smiles.csv"
+)
+DEFAULT_SMARTS_OUTPUT_FILE_PATH: Final[Path] = (
+    GENERATED_DATA_DIR / "generated_smarts.csv"
+)
+DEFAULT_GENERATION_CONFIG_FILE_NAME: Final[str] = "generation_config.json"
+CSV_STATS_FILE_NAME: Final[Path] = GENERATED_DATA_DIR / "generation_stats.csv"
+JSON_STATS_FILE_NAME: Final[Path] = GENERATED_DATA_DIR / "generation_stats.json"
+MODEL_LINK_DIR_NAME: Final[Path] = GENERATED_DATA_DIR / "link_to_model"
+KNOWN_LINK_FILE_NAME: Final[Path] = GENERATED_DATA_DIR / "link_to_known.csv"
+LATEST_LINK_FILE_NAME: Final[Path] = (
     GENERATED_DATA_DIR.parent / "link_to_latest_generated.csv"
 )
-CSV_ID_SPLITTER: Final = " | "
+CSV_ID_SPLITTER: Final[str] = " | "
 
-VALID_GENERATION_MODES: Final = (
+VALID_GENERATION_MODES: Final[tuple[str, ...]] = (
     "smiles",
     "smarts",
 )
 VALID_GENERATION_MODES_HELP_STR: Final[str] = (
     "{" + "|".join(VALID_GENERATION_MODES) + "}"
 )
-DEFAULT_NUM_TO_GENERATE: Final = 10000
-MIN_NUM_TO_GENERATE: Final = 20
-DEFAULT_NUM_BEAMS: Final = 1
-DEFAULT_TEMPERATURE: Final = 1.0
+
+DEFAULT_NUM_TO_GENERATE: Final[int] = 10_000
+MIN_NUM_TO_GENERATE: Final[int] = 20
+DEFAULT_NUM_BEAMS: Final[int] = 1
+DEFAULT_TEMPERATURE: Final[float] = 1.0
 
 
-def load_existing_molecules(
+def _load_existing_molecules(
     file_path: Path,
 ) -> list[Molecule]:
     """Load molecules from a CSV file.
@@ -104,11 +111,10 @@ def load_existing_molecules(
     """
 
     df: pd.DataFrame = pd.read_csv(file_path, header=None)
-    molecules: list[Molecule] = [Molecule(row) for row in df[0]]
-    return molecules
+    return [Molecule(row) for row in df[0]]
 
 
-def load_existing_reaction_templates(
+def _load_existing_reaction_templates(
     file_path: Path,
 ) -> list[Reaction]:
     """Load reaction templates from a CSV file.
@@ -146,8 +152,7 @@ def _load_model(
 
     model_file_path = Path(model_file_path).resolve()
     logger.debug(f"Loading model from {model_file_path}...")
-    model = AutoModelForCausalLM.from_pretrained(model_file_path)
-    return model
+    return AutoModelForCausalLM.from_pretrained(model_file_path)
 
 
 def _load_tokenizer(
@@ -164,8 +169,7 @@ def _load_tokenizer(
 
     tokenizer_file_path = Path(tokenizer_file_path).resolve()
     logger.debug(f"Loading tokenizer from {tokenizer_file_path}...")
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_file_path)
-    return tokenizer
+    return AutoTokenizer.from_pretrained(tokenizer_file_path)
 
 
 def _is_finetuned_model(
@@ -246,14 +250,14 @@ def _determine_max_length(
 
     try:
         model_max_length = int(model.config.n_positions)
-    except (AttributeError, TypeError):
+    except (AttributeError, TypeError) as e:
         model_max_length = None
         logger.warning("Cannot determine the model's maximum input sequence length")
         if max_length is None:
             raise ValueError(
                 "Cannot determine maximum input sequence length, "
                 "since max_length is also None"
-            )
+            ) from e
 
     if max_length is None and model_max_length is not None:
         max_length = model_max_length
@@ -285,20 +289,21 @@ def _determine_stopping_criteria(
         the stopping criteria for the generation pipeline.
     """
 
-    stopping_criteria: Union[int, list[int]]
-    if fine_tuned:
-        # This would be correct but does not work due to a bug in transformers, see:
-        # https://github.com/huggingface/transformers/pull/21461
-        # TODO Change once the HF bug is fixed
-        # stopping_criteria = [
-        #     tokenizer.convert_tokens_to_ids(EOS_TOKEN),
-        #     tokenizer.eos_token_id,
-        # ]
-        stopping_criteria = tokenizer.convert_tokens_to_ids(EOS_TOKEN)
-    else:
-        stopping_criteria = tokenizer.eos_token_id
+    # TODO Change once the HF bug is fixed
+    # This would be correct but does not work due to a bug in transformers, see:
+    # https://github.com/huggingface/transformers/pull/21461
+    # stopping_criteria: Union[int, list[int]]
+    # if fine_tuned:
+    #   stopping_criteria = [
+    #         tokenizer.convert_tokens_to_ids(EOS_TOKEN),
+    #       tokenizer.eos_token_id,
+    #   ]
 
-    return stopping_criteria
+    return (  # type: ignore
+        tokenizer.convert_tokens_to_ids(EOS_TOKEN)
+        if fine_tuned
+        else tokenizer.eos_token_id
+    )
 
 
 def _determine_num_to_generate_in_pipeline(
@@ -314,9 +319,10 @@ def _determine_num_to_generate_in_pipeline(
         the number of items to generate during a batch in the generation pipeline.
     """
 
+    # Empirical number to generate in a batch
     num_to_generate_in_pipeline: int = min(
-        max(MIN_NUM_TO_GENERATE, num_to_generate // 100),  # TODO make this configurable
-        MIN_NUM_TO_GENERATE * 10,  # TODO make this configurable
+        max(MIN_NUM_TO_GENERATE, num_to_generate // 100),
+        MIN_NUM_TO_GENERATE * 10,
     )
     logger.debug(f"Generating {num_to_generate_in_pipeline} {item_name} at a time")
     return num_to_generate_in_pipeline
@@ -344,10 +350,9 @@ def _create_generation_pipeline(
             f"tokenizer must be a PreTrainedTokenizerFast, but is {type(tokenizer)}"
         )
 
-    pipe: Pipeline = pipeline(
+    return pipeline(
         "text-generation", model=model, tokenizer=tokenizer  # ,device=device
     )
-    return pipe
 
 
 def _determine_max_num_tries(num_to_generate: int) -> int:
@@ -360,7 +365,8 @@ def _determine_max_num_tries(num_to_generate: int) -> int:
         the maximum number of tries to generate a given number of items.
     """
 
-    return max(int(num_to_generate) // 100, 10)  # TODO make this configurable
+    # Empirical number of tries to generate a given number of items
+    return max(num_to_generate // 100, 10)
 
 
 def _determine_prompt(tokenizer: PreTrainedTokenizerFast, fine_tuned: bool) -> str:
@@ -374,12 +380,7 @@ def _determine_prompt(tokenizer: PreTrainedTokenizerFast, fine_tuned: bool) -> s
         the prompt to use for the generation pipeline.
     """
 
-    if fine_tuned:
-        prompt = BOS_TOKEN
-    else:
-        prompt = tokenizer.bos_token
-
-    return prompt
+    return BOS_TOKEN if fine_tuned else tokenizer.bos_token  # type: ignore
 
 
 def create_and_save_generation_config(
@@ -402,6 +403,7 @@ def create_and_save_generation_config(
         num_beams: the number of beams to use for beam search. Defaults to 1, i.e. multinomial search.
         temperature: the value used to modulate the next token probabilities (change logits before softmax).
             Defaults to 1.0, i.e. no modulation.
+        overwrite_pretrained_config: whether to overwrite the generation config if it already exists. Defaults to False.
 
     Returns:
         the generation config.
@@ -427,10 +429,7 @@ def create_and_save_generation_config(
     else:
         num_to_generate_in_pipeline = num_to_generate
 
-    if num_beams > 1:
-        early_stopping = True
-    else:
-        early_stopping = False
+    early_stopping = num_beams > 1
     do_sample = True
 
     # If there is a generation config file, load it and overwrite the default values
@@ -449,7 +448,7 @@ def create_and_save_generation_config(
             length_penalty=0.0,  # does neither promote nor penalize long sequences
             return_unused_kwargs=True,
         )
-        if len(unused_kwargs) > 0:
+        if unused_kwargs:
             logger.warning(f"Unused kwargs for GenerationConfig: {list(unused_kwargs)}")
 
     # Otherwise, create a new generation config
@@ -505,10 +504,9 @@ def generate_smiles(
         raise TypeError(f"config must be a GenerationConfig, but is {type(config)}")
     if not isinstance(pipe, Pipeline):
         raise TypeError(f"pipe must be a transformers.Pipeline, but is {type(pipe)}")
-    prompt = str(prompt)
     existing_file_path = Path(existing_file_path).resolve()
-    assert int(num_to_generate) > 0
-    assert int(max_num_tries) > 0
+    assert num_to_generate > 0
+    assert max_num_tries > 0
 
     # Setup variables
     all_smiles: list[Molecule] = []  # need a list instead of a set for master list
@@ -525,7 +523,7 @@ def generate_smiles(
 
     # Load existing molecules
     logger.info("Loading known molecules...")
-    existing_molecules: list[Molecule] = load_existing_molecules(existing_file_path)
+    existing_molecules: list[Molecule] = _load_existing_molecules(existing_file_path)
     smiles["all_existing"] = set(existing_molecules)
     assert all(bool(s.canonical_smiles) for s in smiles["all_existing"])
 
@@ -572,7 +570,7 @@ def generate_smiles(
             }
             # I ask for at least one new token in the generation config, but
             # the pipeline still returns empty strings sometimes; therefore the if len(s) > 0
-            smiles["pl_generated"] = {Molecule(s) for s in generated if len(s) > 0}
+            smiles["pl_generated"] = {Molecule(s) for s in generated if s}
             all_smiles.extend(smiles["pl_generated"])
             smiles["pl_valid"] = {s for s in smiles["pl_generated"] if s.valid}
 
@@ -624,7 +622,7 @@ def generate_smiles(
         s.novel = s not in smiles["all_existing"]
 
     # Generate the "simple" output
-    # TODO Might replace with full output later (once I know how to "correctly" evaluate)
+    # TODO Might delete this later since it is not really needed
     column_smiles = [s.canonical_smiles for s in smiles["all_novel"]]
     df_small = pd.DataFrame(
         {
@@ -679,9 +677,7 @@ def generate_smarts(
         RunTimeError: if the number of tries to generate reaction templates exceeds max_num_tries.
     """
 
-    def get_reactions_with_feasible_products(
-        _reaction: Reaction,
-    ) -> list[Reaction]:
+    def get_reactions_with_feasible_products(_reaction: Reaction) -> list[Reaction]:
         """Determine similar reactions to the given reaction and check whether applying the Reaction to the
         corresponding products is chemically feasible.
 
@@ -698,13 +694,13 @@ def generate_smarts(
         ]
 
         # If there are similar reactions, see if the reaction smarts itself is syntactically valid
-        if len(_similar_reactions) > 0:
+        if _similar_reactions:
             rdBase.DisableLog("rdApp.error")
             # broad exception clause due to RDKit raising non-Python exceptions
             # noinspection PyBroadException
             try:
                 _rxn = rdchiralReaction(_reaction.reaction_smarts)
-            except:  # noqa: E722
+            except Exception:  # noqa: E722
                 return []
             # If the reaction smarts is valid, iterate over all similar reactions and determine their products
             _feasible_reactions: list[
@@ -716,7 +712,7 @@ def generate_smarts(
                 # If we can, add the similar reaction to the list of feasible reactions
                 # broad exception clause due to RDKit raising non-Python exceptions
                 # noinspection PyBroadException
-                try:
+                with contextlib.suppress(Exception):
                     # might play with rdChiralRun options/arguments
                     _outcomes = rdchiralRun(
                         _rxn,
@@ -724,11 +720,8 @@ def generate_smarts(
                         keep_mapnums=True,
                         combine_enantiomers=True,
                     )
-                    if len(_outcomes) > 0:
+                    if _outcomes:
                         _feasible_reactions.append(_similar_reaction)
-                except:  # noqa: E722
-                    pass
-
             rdBase.EnableLog("rdApp.error")
             return _feasible_reactions
 
@@ -740,10 +733,9 @@ def generate_smarts(
         raise TypeError(f"config must be a GenerationConfig, but is {type(config)}")
     if not isinstance(pipe, Pipeline):
         raise TypeError(f"pipe must be a Pipeline, but is {type(pipe)}")
-    prompt = str(prompt)
     existing_file_path = Path(existing_file_path).resolve()
-    assert int(num_to_generate) > 0
-    assert int(max_num_tries) > 0
+    assert num_to_generate > 0
+    assert max_num_tries > 0
 
     # Setup variables
     smarts: dict[str, set[Reaction]] = {
@@ -770,7 +762,7 @@ def generate_smarts(
 
     # Load existing reaction templates
     logger.info("Loading known reaction templates...")
-    existing_reactions: list[Reaction] = load_existing_reaction_templates(
+    existing_reactions: list[Reaction] = _load_existing_reaction_templates(
         existing_file_path
     )
     smarts["all_existing"] = set(existing_reactions)
@@ -866,7 +858,7 @@ def generate_smarts(
             feasible_reactions = get_reactions_with_feasible_products(reaction)
             # If we can find a reaction with a product that works with the generated reaction,
             # then the reaction is feasible = these products/reactions "work with" the generated reaction
-            if len(feasible_reactions) > 0:
+            if feasible_reactions:
                 reaction.feasible = True
                 smarts["all_feasible"].add(reaction)
                 # Gather the IDs of the reactions that work with the generated reaction
@@ -875,10 +867,10 @@ def generate_smarts(
                 reaction.num_works_with = len(feasible_ids)
                 # Gather information about the data split of the reaction that work with the generated reaction
                 reaction.in_val_set = any(
-                    [s.split == "valid" for s in existing_reactions if s == reaction]
+                    s.split == "valid" for s in existing_reactions if s == reaction
                 )
                 reaction.in_test_set = any(
-                    [s.split == "test" for s in existing_reactions if s == reaction]
+                    s.split == "test" for s in existing_reactions if s == reaction
                 )
             progress.update(task, advance=1)
 
@@ -902,7 +894,7 @@ def generate_smarts(
     logger.info("Performing final plausibility checks...")
     assert len(smarts["all_valid"]) == len(smarts["all_known"]) + len(smarts["all_new"])
     should_be_empty = smarts["all_known"] - smarts["all_existing"]
-    if len(should_be_empty) > 0:
+    if should_be_empty:
         logger.warning(
             f"Found {len(should_be_empty)} known reaction templates that are not in the existing file"
         )
@@ -925,10 +917,7 @@ def generate_smarts(
         else "ERROR!"
         for s in smarts["all_feasible"]
     ]
-    # column_works_with = [s.works_with for s in smarts["all_feasible"]]
-    # output = [s.reaction_smarts for s in smarts["all_known"]]
-    # output.extend([s.reaction_smarts for s in smarts["all_new"]])
-    # existing_flag = [True] * len(smarts["all_known"]) + [False] * len(smarts["all_new"])
+
     df = pd.DataFrame(
         {
             "feasible_reaction_smarts": column_smarts,
@@ -937,7 +926,6 @@ def generate_smarts(
             "known_from_test_set": column_test_set,
             "num_products_works_with": column_num_works_with,
             "example_works_with_reaction_id": column_example,
-            # "works_with": column_works_with,
         }
     )
 
@@ -1001,10 +989,7 @@ def main() -> None:
         "-o",
         "--output",
         type=Path,
-        # default=Path(DEFAULT_OUTPUT_FILE_PATH),
         default=None,
-        # help="file path for the generated molecules or reaction templates,
-        # default (for this instance): '%(default)s'.",
         help=f"file path for the generated molecules or reaction templates, default: "
         f"'{GENERATED_DATA_DIR}/generated_{VALID_GENERATION_MODES_HELP_STR}.csv'.",
     )
@@ -1093,9 +1078,7 @@ def main() -> None:
     output_file_path_full.parent.mkdir(parents=True, exist_ok=True)
 
     num_to_generate = args.num
-    # logger.debug(f"Number of {items_name} to generate: {num_to_generate}")
     max_length = args.length
-    # logger.debug(f"Maximum length of generated {items_name}: {max_length}")
     if max_length is None:
         logger.info(
             f"Generate ≥ {num_to_generate} {items_name}; "
