@@ -326,7 +326,8 @@ class Reaction:
         product: Optional[str] = None,
         feasible: bool = False,
     ) -> None:
-        """
+        """Initialize the Reaction object.
+
         Args:
             reaction_smarts: The reaction template SMARTS string.
             split: Split the reaction template originates from. Defaults to None.
@@ -476,7 +477,8 @@ class Molecule:
         id_: Optional[str] = None,
         notation: str = "SMILES",
     ) -> None:
-        """
+        """Initialize the Molecule object.
+
         Args:
             smiles: The molecule SMILES string.
             id_: The molecule ID. Defaults to None.

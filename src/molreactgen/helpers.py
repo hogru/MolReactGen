@@ -3,7 +3,7 @@
 """General helper functions.
 
 Classes:
-    ArgsEncoder:
+    _ArgsEncoder:
         A JSON encoder for arguments of type Path.
     Tally:
         A simple tally class for counting things.
@@ -29,7 +29,9 @@ Functions:
         Get basic information about the device type (single gpu case only).
 """
 
+
 import argparse
+import contextlib
 import hashlib
 import inspect
 import json
@@ -42,20 +44,42 @@ from logging.handlers import SysLogHandler
 from os import PathLike
 from pathlib import Path, PosixPath
 from types import FrameType
-from typing import Any, Generator, Iterable, Optional, Sequence, Union, overload
+from typing import Any, Final, Generator, Iterable, Optional, Sequence, Union, overload
 
 import torch
 from loguru import logger
 
-LOG_LEVELS = (
+LOG_LEVELS: Final[tuple[int, ...]] = (
     logging.DEBUG,
     logging.INFO,
     logging.WARNING,
     logging.ERROR,
     logging.CRITICAL,
 )
-DEFAULT_LOG_LEVEL = logging.INFO
-SIGNS_FOR_ROOT_DIR = (".git", "pyproject.toml", "setup.py", "setup.cfg")
+
+# This is the default format used by loguru
+# DEFAULT_CONSOLE_FORMAT = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | " \
+#                          "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - " \
+#                          "<level>{message}</level>"
+DEFAULT_CONSOLE_FORMAT: Final[
+    str
+] = "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>"
+DEFAULT_FILE_FORMAT: Final[str] = (
+    "{time:YYYY-MM-DD HH:mm:ss.SSS} | <level>{level: <8}</level> | "
+    "{name}:{function}:{line} - <level>{message}</level>"
+)
+DEFAULT_SYSLOG_FORMAT: Final[str] = (
+    "{time:YYYY-MM-DD HH:mm:ss.SSS} | <level>{level: <8}</level> | "
+    "{file}:{name}:{function}:{line} - <level>{message}</level>"
+)
+
+DEFAULT_LOG_LEVEL: Final[int] = logging.INFO
+SIGNS_FOR_ROOT_DIR: Final[tuple[str, ...]] = (
+    ".git",
+    "pyproject.toml",
+    "setup.py",
+    "setup.cfg",
+)
 
 
 ###############################################################################
@@ -79,8 +103,8 @@ class Tally:
         save_to_file: save the counters to a file
     """
 
-    base_name = "__base__"  # TODO: make private
-    valid_file_formats: dict[str, tuple[str, ...]] = {  # TODO: make private
+    _base_name = "__base__"
+    _valid_file_formats: dict[str, tuple[str, ...]] = {
         # "CSV": (".CSV",),
         "JSON": (".JSON",),
     }
@@ -97,8 +121,8 @@ class Tally:
             counters = [counters]
 
         counters = [str(c) for c in counters]
-        if any(c == self.base_name for c in counters):
-            raise ValueError(f"counter name {self.base_name} is reserved")
+        if self._base_name in counters:
+            raise ValueError(f"counter name {self._base_name} is reserved")
 
         if len(counters) != len(set(counters)):
             raise ValueError("counters must be unique")
@@ -107,13 +131,9 @@ class Tally:
         self._counters: dict[str, int] = {str(k): 0 for k in counters}
         self._key_to_idx: dict[str, int] = {str(k): i for i, k in enumerate(counters)}
         self._idx_to_key: dict[int, str] = {i: str(k) for i, k in enumerate(counters)}
-        counters_one_up = [self.base_name]
+        counters_one_up = [self._base_name]
         counters_one_up.extend(counters[:-1])
         assert len(counters) == len(counters_one_up)
-        # self._counter_one_up: dict[str, str] = {
-        #     str(counter): str(one_up)
-        #     for counter, one_up in zip(counters, counters_one_up)
-        # }
 
     def _get_value_from_idx(self, idx: int) -> int:
         return self._counters[self._idx_to_key[idx]]
@@ -129,9 +149,7 @@ class Tally:
         if counter in self._counters:
             self._counters[counter] += increment
         else:
-            raise AttributeError(
-                f"Tally {counter} not found"
-            )  # TODO here and other places: tally or counter string?
+            raise AttributeError(f"Counter {counter} not found")
 
     # noinspection PyMissingOrEmptyDocstring
     @overload
@@ -149,12 +167,6 @@ class Tally:
         self, counter: Sequence[str], *, format_specifier: Optional[str] = None
     ) -> Union[dict[str, int], dict[str, str], int, str]:
         ...
-
-    # @overload
-    # def get_count(
-    #     self, counter: str, *, format_specifier: Optional[str] = None
-    # ) -> Union[int, str]:
-    #     ...
 
     def get_count(
         self,
@@ -181,26 +193,22 @@ class Tally:
         elif not isinstance(counter, str) and isinstance(counter, Iterable):
             for k in counter:
                 if k not in self._counters:
-                    raise AttributeError(f"Tally {k} not found")
+                    raise AttributeError(f"Counter {k} not found")
             counts = {k: self._counters[k] for k in counter}
 
         elif counter in self._counters:
             counts = self._counters[counter]
 
         else:
-            raise AttributeError(f"Tally {counter} not found")
+            raise AttributeError(f"Counter {counter} not found")
 
         # Format counts
         if format_specifier is not None and isinstance(format_specifier, str):
-            counts_formatted: Union[dict[str, str], str]
-            if isinstance(counts, dict):
-                counts_formatted = {
-                    k: format(v, format_specifier) for k, v in counts.items()
-                }
-            else:
-                counts_formatted = format(counts, format_specifier)
-            return counts_formatted
-
+            return (
+                {k: format(v, format_specifier) for k, v in counts.items()}
+                if isinstance(counts, dict)
+                else format(counts, format_specifier)
+            )
         else:
             return counts
 
@@ -258,19 +266,15 @@ class Tally:
                 fractions = self._counters[counter] / base_value
 
         else:
-            raise AttributeError(f"Tally {counter} not found")
+            raise AttributeError(f"Counter {counter} not found")
 
         # Format absolute fractions
         if format_specifier is not None and isinstance(format_specifier, str):
-            fractions_formatted: Union[dict[str, str], str]
-            if isinstance(fractions, dict):
-                fractions_formatted = {
-                    k: format(v, format_specifier) for k, v in fractions.items()
-                }
-            else:
-                fractions_formatted = format(fractions, format_specifier)
-            return fractions_formatted
-
+            return (
+                {k: format(v, format_specifier) for k, v in fractions.items()}
+                if isinstance(fractions, dict)
+                else format(fractions, format_specifier)
+            )
         else:
             return fractions
 
@@ -310,7 +314,7 @@ class Tally:
         counts = self.get_count()
         count_names = list(counts.keys())
         count_values = list(counts.values())
-        count_names_one_up = [self.base_name]
+        count_names_one_up = [self._base_name]
         count_names_one_up.extend(count_names[-1])
         count_values_one_up = [count_values[0]]
         count_values_one_up.extend(count_values[:-1])
@@ -326,7 +330,7 @@ class Tally:
                 c / c_one_up if c_one_up != 0 else float("nan")  # type: ignore
                 for c, c_one_up in zip(count_values, count_values_one_up)
             ]
-            fractions = {k: v for k, v in zip(count_names, fraction_values)}
+            fractions = dict(zip(count_names, fraction_values))
             if not isinstance(counter, str) and isinstance(counter, Iterable):
                 fractions = {k: v for k, v in fractions.items() if k in counter}
 
@@ -338,18 +342,14 @@ class Tally:
                 # mypy seems to determine "object" as the common base class for c / count_values
                 fractions = count_values[idx] / count_values_one_up[idx]  # type: ignore
         else:
-            raise AttributeError(f"Tally {counter} not found")
+            raise AttributeError(f"Counter {counter} not found")
 
         if format_specifier is not None and isinstance(format_specifier, str):
-            fractions_formatted: Union[dict[str, str], str]
-            if isinstance(fractions, dict):
-                fractions_formatted = {
-                    k: format(v, format_specifier) for k, v in fractions.items()
-                }
-            else:
-                fractions_formatted = format(fractions, format_specifier)
-            return fractions_formatted
-
+            return (
+                {k: format(v, format_specifier) for k, v in fractions.items()}
+                if isinstance(fractions, dict)
+                else format(fractions, format_specifier)
+            )
         else:
             return fractions
 
@@ -377,11 +377,11 @@ class Tally:
         """
 
         file_path = Path(file_path).resolve()
-        if format_.upper() not in self.valid_file_formats:
+        if format_.upper() not in self._valid_file_formats:
             raise ValueError(f"Unknown format {format_}")
 
         file_extension = file_path.suffix
-        if file_extension.upper() not in self.valid_file_formats[format_.upper()]:
+        if file_extension.upper() not in self._valid_file_formats[format_.upper()]:
             logger.warning(
                 f"File format {format_} does not match file extension {file_extension}, saving anyway"
             )
@@ -437,7 +437,7 @@ def determine_log_level(
 
 # Code taken from https://github.com/Delgan/loguru#entirely-compatible-with-standard-logging
 # Type annotations are my own
-class InterceptHandler(logging.Handler):  # TODO make private
+class _InterceptHandler(logging.Handler):
     """Intercept standard logging messages and forward them to loguru."""
 
     # noinspection PyMissingOrEmptyDocstring
@@ -463,7 +463,7 @@ class InterceptHandler(logging.Handler):  # TODO make private
         )
 
 
-def show_warning(message: str, *_: Any, **__: Any) -> None:  # TODO make private
+def _show_warning(message: str, *_: Any, **__: Any) -> None:
     """Redirect warnings to loguru."""
     logger.warning(message)
 
@@ -496,64 +496,40 @@ def configure_logging(
         address: the address to use for syslog, defaults to None, i.e. do not use syslog.
     """
 
-    # This is the default format used by loguru
-    # default_console_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | " \
-    #                          "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - " \
-    #                          "<level>{message}</level>"
-
-    # TODO: move default formats to class variables
-    default_console_format = "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>"
-    default_file_format = (
-        "{time:YYYY-MM-DD HH:mm:ss.SSS} | <level>{level: <8}</level> | "
-        "{name}:{function}:{line} - <level>{message}</level>"
-    )
-    default_syslog_format = (
-        "{time:YYYY-MM-DD HH:mm:ss.SSS} | <level>{level: <8}</level> | "
-        "{file}:{name}:{function}:{line} - <level>{message}</level>"
-    )
-
     # Allow for separate log levels for console and file logging
-    console_log_level: int = int(log_level)
-    file_log_level = (
-        console_log_level if file_log_level is None else int(file_log_level)
-    )
+    console_log_level = log_level
+    file_log_level = console_log_level if file_log_level is None else file_log_level
     syslog_log_level = file_log_level
 
     console_format = (
-        default_console_format if console_format is None else str(console_format)
+        DEFAULT_CONSOLE_FORMAT if console_format is None else str(console_format)
     )
-    file_format = default_file_format if file_format is None else str(file_format)
+    file_format = DEFAULT_FILE_FORMAT if file_format is None else str(file_format)
     syslog_format = (
-        default_syslog_format if syslog_format is None else str(syslog_format)
+        DEFAULT_SYSLOG_FORMAT if syslog_format is None else str(syslog_format)
     )
 
     # Determine log file path
     # To be changed with python version ≥ 3.11: A list of FrameInfo objects is returned.
     caller_file_path = Path(inspect.stack()[1].filename).resolve()
     if log_dir is None:
-        # log_dir = Path(caller_file_path.parent) / "logs"
         log_dir = guess_project_root_dir(caller_file_path=caller_file_path) / "logs"
     else:
         log_dir = Path(log_dir).resolve()
     Path(log_dir).mkdir(parents=True, exist_ok=True)
 
     if log_file is None:
-        log_file = Path(str(caller_file_path.stem) + ".log")
+        log_file = Path(f"{str(caller_file_path.stem)}.log")
 
     log_file = log_dir / log_file
-
-    rotation = str(rotation)
-    retention = str(retention)
 
     # Remove all previously added handlers
     logger.remove()
 
     # Allow for logging of headers, add log level
-    try:
+    with contextlib.suppress(TypeError):
         logger.level("HEADING", no=21, color="<red><BLACK><bold>")
         logger.__class__.heading = partialmethod(logger.__class__.log, "HEADING")  # type: ignore
-    except TypeError:  # log level already exists
-        pass
 
     # Add console handler
     logger.add(sys.stderr, level=console_log_level, format=console_format)
@@ -577,13 +553,13 @@ def configure_logging(
         logger.add(syslog_handler, level=syslog_log_level, format=syslog_format)
 
     # Redirect warnings to logger
-    warnings.showwarning = show_warning  # type: ignore
+    warnings.showwarning = _show_warning  # type: ignore
 
     # Intercept logging messages from other libraries
-    logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+    logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)
 
     logger.debug(
-        f"Logging with log level {log_level} to {log_file} with rotation {rotation} and retention {retention}"
+        f"Logging with log level {file_log_level} to {log_file} with rotation {rotation} and retention {retention}"
     )
 
 
@@ -654,31 +630,20 @@ def get_hash_code(file_path: Union[str, Path], algorithm: str = "sha256") -> int
 
     # Calculate hash code
     for file in file_list:
-        # print(file)
         if file.is_file():
             with open(file, "rb") as f:
                 for chunk in iter(lambda: f.read(hash_fn.block_size), b""):
                     hash_fn.update(chunk)
 
-    # with open(file_path, "rb") as file:
-    #     while True:
-    #         chunk = file.read(hash_fn.block_size)
-    #         if not chunk:
-    #             break
-    #         hash_fn.update(chunk)
-
     return int(hash_fn.hexdigest(), 16)
 
 
-class ArgsEncoder(json.JSONEncoder):  # TODO: make private
+class _ArgsEncoder(json.JSONEncoder):
     """JSON encoder for PosixPath (as used by pathlib)."""
 
     # noinspection PyMissingOrEmptyDocstring
     def default(self, x: Any) -> Any:
-        if isinstance(x, PosixPath):
-            return x.as_posix()
-        else:
-            return super().default(x)
+        return x.as_posix() if isinstance(x, PosixPath) else super().default(x)
 
 
 def save_commandline_arguments(
@@ -700,10 +665,10 @@ def save_commandline_arguments(
             dict_to_save.pop(key, None)
     file_path = Path(file_path).resolve()
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    # file_path.unlink(missing_ok=True)
+
     logger.debug(f"Saving command-line arguments to {file_path}...")
     with open(file_path, "w") as f:
-        json.dump(dict_to_save, f, cls=ArgsEncoder, indent=4, sort_keys=True)
+        json.dump(dict_to_save, f, cls=_ArgsEncoder, indent=4, sort_keys=True)
 
 
 def create_file_link(
@@ -747,14 +712,12 @@ def get_num_workers(spare_cpus: int = 1) -> int:
         The number of workers.
     """
 
-    if int(spare_cpus) < 0:  # replace with max(0, int(spare_cpus))?
-        spare_cpus = 0
+    spare_cpus = max(spare_cpus, 0)
     num_cpus = os.cpu_count()
     if num_cpus is None:
         num_cpus = 1
 
-    num_workers = max(num_cpus - spare_cpus, 1)
-    return num_workers
+    return max(num_cpus - spare_cpus, 1)
 
 
 def get_device() -> torch.device:
@@ -765,7 +728,6 @@ def get_device() -> torch.device:
     """
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    # device = torch.device(device)
     return torch.device(device)
 
 
@@ -776,5 +738,4 @@ def get_device_type() -> str:
         GPU type/name
     """
 
-    device_type = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"
-    return device_type
+    return torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"
