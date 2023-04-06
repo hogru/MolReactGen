@@ -29,7 +29,7 @@ torch = "^1.13.1"
 # ]
 torchmetrics = "^0.11.0"
 tqdm = "^4.64.0"
-wandb = "^0.13.0"
+wandb = "^0.14.1"
 transformers = "^4.26.0"
 datasets = "^2.9.0"
 evaluate = "^0.4.0"
