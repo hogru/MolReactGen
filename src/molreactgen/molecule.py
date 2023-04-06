@@ -55,6 +55,9 @@ def _canonicalize_molecule(
 
     Returns:
         The canonical SMILES string for the molecule. If the molecule is not valid, return None.
+
+    Raises:
+        ValueError: If the molecule is not valid and strict is True.
     """
 
     if is_smarts:
@@ -88,6 +91,7 @@ def _canonicalize_molecule(
 
 def canonicalize_smiles(
     molecule: str,
+    *,
     strict: bool = False,
     double_check: bool = False,
 ) -> Optional[str]:
@@ -100,6 +104,9 @@ def canonicalize_smiles(
 
     Returns:
         The canonical SMILES string for the molecule. If the molecule is not valid, return None.
+
+    Raises:
+        ValueError: If the molecule is not valid and strict is True.
     """
 
     return canonicalize_molecule(
@@ -130,13 +137,10 @@ def canonicalize_molecule(
 
     Returns:
         The canonical SMILES string for the molecule. If the molecule is not valid, return None.
-    """
 
-    molecule = str(molecule)
-    is_smarts = bool(is_smarts)
-    remove_atom_mapping = bool(remove_atom_mapping)
-    strict = bool(strict)
-    double_check = bool(double_check)
+    Raises:
+        ValueError: If the molecule is not valid and strict is True.
+    """
 
     rdBase.DisableLog("rdApp.error")
     canonical_molecule = _canonicalize_molecule(
@@ -159,6 +163,7 @@ def canonicalize_molecule(
 
 def canonicalize_molecules(
     molecules: Sequence[str],
+    *,
     num_workers: Optional[int] = None,
     strict: bool = False,
     double_check: bool = False,
@@ -173,6 +178,9 @@ def canonicalize_molecules(
 
     Returns:
         A list of canonical SMILES strings for the molecules. If a molecule is not valid, return None.
+
+    Raises:
+        ValueError: If the molecule is not valid and strict is True.
     """
 
     # double_check parameter is required due to a bug in RDKit
@@ -181,14 +189,11 @@ def canonicalize_molecules(
     if (
         isinstance(molecules, str)
         or not isinstance(molecules, Iterable)
-        or not all([isinstance(molecule, str) for molecule in molecules])
+        or not all(isinstance(molecule, str) for molecule in molecules)
     ):
         raise TypeError("molecules must be an iterable of strings")
 
-    if num_workers is None:
-        num_workers = get_num_workers()
-    else:
-        num_workers = int(num_workers)
+    num_workers = get_num_workers() if num_workers is None else int(num_workers)
 
     # Canonicalize molecules in parallel
     chunk_size = max(
@@ -241,19 +246,16 @@ def remove_atom_mapping(smarts: Union[str, Sequence[str]]) -> Union[str, list[st
     if isinstance(smarts, str) or not isinstance(smarts, Iterable):
         smarts = [smarts]
 
-    if not all([isinstance(s, str) for s in smarts]):
+    if not all(isinstance(s, str) for s in smarts):
         raise TypeError("All smarts must be of type str")
 
     smarts = [re.sub(r":\d+", "", str(s)) for s in smarts]
 
-    if len(smarts) == 1:
-        return smarts[0]
-    else:
-        return smarts
+    return smarts[0] if len(smarts) == 1 else smarts
 
 
 def canonicalize_template(
-    smarts: str, strict: bool = False, double_check: bool = False
+    smarts: str, *, strict: bool = False, double_check: bool = False
 ) -> Optional[str]:
     """Canonicalize a template.
 
@@ -266,10 +268,13 @@ def canonicalize_template(
 
     Returns:
         The canonical SMARTS string for the template. If the template is not valid, return None.
+
+    Raises:
+        ValueError: If the template is not valid and strict is True.
     """
 
     # this is faster than remove_atom_mapping via rdkit, so don't use it below
-    smarts = remove_atom_mapping(str(smarts))
+    smarts = remove_atom_mapping(smarts)
     # order the list of smiles + canonicalize it
     results = []
     for reaction_parts in smarts.split(">>"):
@@ -330,16 +335,15 @@ class Reaction:
             feasible: Whether the reaction template is feasible. Defaults to False.
         """
 
-        self.reaction_smarts = str(reaction_smarts)
+        self.reaction_smarts = reaction_smarts
         self.split = str(split).lower() if split is not None else None
-        self.id = str(id_)  # TODO this might be None?!
-        self.product = str(product)  # TODO this might be None?!
-        self.feasible = bool(feasible)
+        self.id = id_
+        self.product = product
+        self.feasible = feasible
         self.works_with: Optional[str] = None
         self.num_works_with: int = 0
         self.in_val_set: bool = False
         self.in_test_set: bool = False
-        # self.reactants: Optional[str] = None
 
     # noinspection PyMissingOrEmptyDocstring
     @property
@@ -352,7 +356,7 @@ class Reaction:
             raise AttributeError("reaction_smarts is already set, can not be changed")
 
         # noinspection PyAttributeOutsideInit
-        self._reaction_smarts = str(value)
+        self._reaction_smarts = value
 
     # noinspection PyMissingOrEmptyDocstring
     @cached_property
@@ -396,7 +400,7 @@ class Reaction:
             ValueError: If the criterion is unknown.
         """
 
-        criterion = str(criterion).lower()
+        criterion = criterion.lower()
         if isinstance(other, Reaction):
             if criterion == "atom_mapping":
                 return (
@@ -413,16 +417,18 @@ class Reaction:
         else:
             return False
 
-    # might think about what equality means for Reaction
+    # might further think about what equality means for Reaction
+    # That would be less strict
+    # return (
+    #     self.reaction_smarts_without_atom_mapping
+    #     == other.reaction_smarts_without_atom_mapping
+    # )
     def __eq__(self, other: Any) -> bool:
-        if isinstance(other, Reaction):
-            return self.reaction_smarts == other.reaction_smarts
-            # return (
-            #     self.reaction_smarts_without_atom_mapping
-            #     == other.reaction_smarts_without_atom_mapping
-            # )
-        else:
-            return NotImplemented
+        return (
+            self.reaction_smarts == other.reaction_smarts
+            if isinstance(other, Reaction)
+            else NotImplemented  # type: ignore
+        )
 
     def __hash__(self) -> int:
         return hash(self.reaction_smarts)
@@ -439,7 +445,7 @@ class Reaction:
             f"{class_name}"
             f"(reaction_smarts={self.reaction_smarts.__repr__()}, "
             f"split={self.split.__repr__()}, "
-            f"id={self.id})"
+            f"id={self.id.__repr__()})"
         )
 
 
@@ -480,11 +486,11 @@ class Molecule:
             ValueError: If the notation is unknown (at the moment only 'SMILES' is supported).
         """
 
-        self.smiles: str = str(smiles)
+        self.smiles = smiles
         self.id = id_
         # Currently only SMILES notation is supported
         # For other notations, e.g. SELFIES, the code needs to be amended
-        if str(notation).upper() == "SMILES":
+        if notation.upper() == "SMILES":
             self.notation: str = "SMILES"
         else:
             raise ValueError(f"{notation} is not a valid molecule notation")
@@ -503,7 +509,7 @@ class Molecule:
             raise AttributeError("smiles is already set, can not be changed")
 
         # noinspection PyAttributeOutsideInit
-        self._smiles = str(value)
+        self._smiles = value
 
     # noinspection PyMissingOrEmptyDocstring
     @cached_property
@@ -523,12 +529,12 @@ class Molecule:
         return not self.valid
 
     def __eq__(self, other: Any) -> bool:
-        if isinstance(other, Molecule):
-            self_smiles = self.canonical_smiles if self.valid else self.smiles
-            other_smiles = other.canonical_smiles if other.valid else other.smiles
-            return self_smiles == other_smiles
-        else:
+        if not isinstance(other, Molecule):
             return NotImplemented
+
+        self_smiles = self.canonical_smiles if self.valid else self.smiles
+        other_smiles = other.canonical_smiles if other.valid else other.smiles
+        return self_smiles == other_smiles
 
     def __hash__(self) -> int:
         return hash(self.canonical_smiles if self.valid else self.smiles)
