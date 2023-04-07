@@ -68,6 +68,7 @@ def read_molecules_from_file(
     Args:
         file: the path to the CSV file.
         num_molecules: the first num_molecules of molecules to provide. Defaults to None, i.e. all molecules.
+        valid_only: whether to only return valid molecules. Defaults to False.
 
     Returns:
         A list of molecules as strings.
@@ -86,7 +87,7 @@ def read_molecules_from_file(
         else:
             molecules_df = molecules_df["smiles"]
 
-    except ValueError:
+    except ValueError as e:
         try:
             molecules_df = pd.read_csv(file, usecols=["smiles"])
         except ValueError:
@@ -94,7 +95,7 @@ def read_molecules_from_file(
         if valid_only:
             raise ValueError(
                 "The 'valid_only' option is not supported for this file, check file format"
-            )
+            ) from e
 
     # Delete rows with NaN values
     molecules: list[str] = molecules_df.dropna().values.squeeze()

@@ -40,21 +40,21 @@ try:
 except ImportError:
     progressbar = False
 
-PROJECT_ROOT_DIR: Final = guess_project_root_dir()
-RAW_DATA_DIR: Final = PROJECT_ROOT_DIR / "data" / "raw"
-PREP_DATA_DIR: Final = PROJECT_ROOT_DIR / "data" / "prep"
-GZIP_FILE_EXTENSIONS: Final = (".xz", ".gz", ".bz2")
+PROJECT_ROOT_DIR: Final[Path] = guess_project_root_dir()
+RAW_DATA_DIR: Final[Path] = PROJECT_ROOT_DIR / "data" / "raw"
+PREP_DATA_DIR: Final[Path] = PROJECT_ROOT_DIR / "data" / "prep"
+GZIP_FILE_EXTENSIONS: Final[tuple[str, ...]] = (".xz", ".gz", ".bz2")
 
-VALID_DATASETS: tuple[str, ...] = (
+VALID_DATASETS: Final[tuple[str, ...]] = (
     "all",
     "debug",
     "guacamol",
     "uspto50k",
-    "usptofull",  # TODO: implement this
+    "usptofull",  # TODO: implement this dataset
     "zinc",
 )
 
-RAW_DIRS: dict[str, Path] = {
+RAW_DIRS: Final[dict[str, Path]] = {
     "debug": RAW_DATA_DIR / "debug",
     "guacamol": RAW_DATA_DIR / "guacamol",
     "uspto50k": RAW_DATA_DIR / "uspto50k",
@@ -62,7 +62,7 @@ RAW_DIRS: dict[str, Path] = {
     "zinc": RAW_DATA_DIR / "zinc",
 }
 
-PREP_DIRS: dict[str, Path] = {
+PREP_DIRS: Final[dict[str, Path]] = {
     "debug": PREP_DATA_DIR / "debug" / "csv",
     "guacamol": PREP_DATA_DIR / "guacamol" / "csv",
     "uspto50k": PREP_DATA_DIR / "uspto50k" / "csv",
@@ -71,10 +71,9 @@ PREP_DIRS: dict[str, Path] = {
 }
 
 # "pooch" is used to download the raw data from the internet and to check against the hash code
-POOCHES: dict[str, pooch.Pooch] = {
+POOCHES: Final[dict[str, pooch.Pooch]] = {
     "debug": pooch.create(
         path=RAW_DIRS["debug"].as_posix(),
-        # base_url="https://github.com/hogru/MolReactGen/tree/feature/download_data/data/raw/debug/",
         base_url="https://github.com/hogru/MolReactGen/raw/313d5981eb2a339d5baae42917ab55ba03082b7d/data/raw/debug/",
         registry={
             "debug_train.csv": None,  # We can change the debug data as we like, so no hash code
@@ -85,7 +84,6 @@ POOCHES: dict[str, pooch.Pooch] = {
     ),
     "guacamol": pooch.create(
         path=RAW_DIRS["guacamol"].as_posix(),
-        # base_url="https://figshare.com/ndownloader/files/",
         base_url="doi:10.6084/",
         registry={
             "m9.figshare.7322228.v2/guacamol_v1_train.smiles": "3c67ee945f351dbbdc02d9016da22efaffc32a39d882021b6f213d5cd60b6a80",
@@ -96,7 +94,6 @@ POOCHES: dict[str, pooch.Pooch] = {
     ),
     "uspto50k": pooch.create(
         path=RAW_DIRS["uspto50k"].as_posix(),
-        # base_url="https://github.com/ml-jku/mhn-react/blob/main/data/",
         base_url="https://github.com/ml-jku/mhn-react/raw/de0fda32f76f866835aa65a6ff857964302b2178/data/",
         registry={
             "USPTO_50k_MHN_prepro.csv.gz": "be7a15e61a8c22cd2bf48be8ce710bbe98843a60a8cf7b3d2d1b667768253c23",
@@ -104,7 +101,7 @@ POOCHES: dict[str, pooch.Pooch] = {
     ),
 }
 
-FILE_NAME_TRANSLATIONS: dict[str, str] = {
+FILE_NAME_TRANSLATIONS: Final[dict[str, str]] = {
     "m9.figshare.7322228.v2/guacamol_v1_train.smiles": "guacamol_v1_train.csv",
     "m9.figshare.7322243.v3/guacamol_v1_valid.smiles": "guacamol_v1_valid.csv",
     "m9.figshare.7322246.v2/guacamol_v1_test.smiles": "guacamol_v1_test.csv",
@@ -147,7 +144,6 @@ def _download_pooched_dataset(
     """
 
     # We have two places where the path to the raw data directory is stored. Check if they are the same.
-    # assert raw_dir.samefile(POOCHES[dataset].path)
     assert raw_dir.as_posix() == str(
         POOCHES[dataset].path
     )  # pooch.path should be a string, but isn't
@@ -181,13 +177,11 @@ def _prepare_pooched_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> Non
     """
 
     # We have two places where the path to the raw data directory is stored. Check if they are the same.
-    # assert raw_dir.samefile(POOCHES[dataset].path)
     assert raw_dir.as_posix() == str(
         POOCHES[dataset].path
     )  # pooch.path should be a string, but isn't
     prep_dir.mkdir(parents=True, exist_ok=True)
     for file in POOCHES[dataset].registry:
-        # sub_dir = Path(file).parent
         file_renamed = FILE_NAME_TRANSLATIONS.get(file, file)
         _cleanse_and_copy_data(raw_dir / file, prep_dir / file_renamed)
 
@@ -232,18 +226,10 @@ def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
         "test": "USPTO_50k_test.csv",
     }
     splits: tuple[str, ...] = ("train", "valid", "test")
-    # Historically there were two different reaction template sets, one with atom mapping and one without
-    # We will use the one with atom mapping, but keep the code for the other one for reference / just in case
-    # dirs = ["with_mapping", "without_mapping"]
-    # columns: list[str] = [
-    # "reaction_smarts_with_atom_mapping",
-    # "reaction_smarts_without_atom_mapping",
-    # ]
     column: str = "reaction_smarts_with_atom_mapping"
 
     # Read raw data, rename/append columns
-    df: dict[str, pd.DataFrame] = dict()
-    df["raw"] = pd.read_csv(raw_file, header=0)
+    df: dict[str, pd.DataFrame] = {"raw": pd.read_csv(raw_file, header=0)}
     df["all"] = df["raw"][["id", "split", "prod_smiles", "reaction_smarts"]]
     df["all"].rename(
         columns={
@@ -253,27 +239,18 @@ def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
         },
         inplace=True,
     )
-    # df["all"]["reaction_smarts_without_atom_mapping"] = remove_atom_mapping(
-    #     df["all"]["reaction_smarts_with_atom_mapping"]
-    # )
 
     # Prepare "known" reactions from validation and test set (can include duplicates)
     df["known"] = df["all"][df["all"]["split"].isin(["valid", "test"])].copy()
 
     # Prepare train, validation, and test set and save in corresponding files
-    # for sub_dir, column in zip(dirs, columns):
-    # (prep_dir / sub_dir).mkdir(parents=True, exist_ok=True)
-    # file_name = prep_dir / sub_dir / files["known"]
     file_name = prep_dir / files["known"]
     df["known"].to_csv(file_name, header=True, index=False)
     logger.debug(
-        # f"Save {len(df['known'])} known reactions (including duplicates) to {sub_dir}/{file_name.name}..."
         f"Save {len(df['known'])} known reactions (including duplicates) to {file_name.name}..."
     )
     for split in splits:
-        # file_name = prep_dir / sub_dir / files[split]
         file_name = prep_dir / files[split]
-        # df[split] = df["all"][df["all"]["split"] == split][[column]].copy()
         df[split] = df["all"][df["all"]["split"] == split][[column]].copy()
         # Remove duplicates
         len_before = len(df[split])
@@ -285,16 +262,12 @@ def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
         if split == "train":
             # Remove entries that are also in the "known" set
             len_before = len(df[split])
-            df[split] = df[split][
-                # ~df[split][column].isin(df["known"][column])
-                ~df[split][column].isin(df["known"][column])
-            ].copy()
+            df[split] = df[split][~df[split][column].isin(df["known"][column])].copy()
             len_after = len(df[split])
             logger.debug(
                 f"Remove {len_before - len_after} reactions from train set that are also in the "
                 f"validation and/or test set, {len_after} rows left..."
             )
-        # logger.debug(f"Save {split} reactions to {sub_dir}/{file_name.name}...")
         logger.debug(f"Save {split} reactions to {file_name.name} ...")
         df[split].to_csv(file_name, header=False, index=False)
 
@@ -309,28 +282,21 @@ def _prepare_uspto_50k_dataset(raw_dir: Path, prep_dir: Path) -> None:
 
 # noinspection PyUnusedLocal
 def _prepare_uspto_full_dataset(raw_dir: Path, prep_dir: Path) -> None:
-    # raise NotImplementedError(
-    #     "Preparation of the full USPTO dataset is not yet implemented."
-    # )
     logger.warning("Dataset usptofull preparation is not yet implemented, skipping...")
 
 
 # noinspection PyUnusedLocal
 def _download_uspto_full_dataset(raw_dir: Path, enforce_download: bool) -> None:
     # _download_pooched_dataset("uspto50k", raw_dir, enforce_download)
-    # raise NotImplementedError(
-    #     "Download of the full USPTO dataset is not yet implemented."
-    # )
     logger.warning("Dataset usptofull download is not yet implemented, skipping...")
 
 
 def _download_zinc_dataset(raw_dir: Path, enforce_download: bool) -> None:
     file = "zinc.tab"
     raw_dir.mkdir(parents=True, exist_ok=True)
-    if enforce_download:
-        if (raw_dir / file).exists():
-            logger.info(f"Deleting file {file}...")
-            (raw_dir / file).unlink()
+    if enforce_download and (raw_dir / file).exists():
+        logger.info(f"Deleting file {file}...")
+        (raw_dir / file).unlink()
 
     if (raw_dir / file).is_file():
         logger.info(f"File {file} already exists, skipping download...")
@@ -352,7 +318,7 @@ def _prepare_zinc_dataset(raw_dir: Path, prep_dir: Path) -> None:
 
 
 # Can define this dictionary only once the functions are defined
-DOWNLOAD_FNS: dict[str, Callable[[Path, bool], None]] = {
+DOWNLOAD_FNS: Final[dict[str, Callable[[Path, bool], None]]] = {
     "debug": _download_debug_dataset,
     "guacamol": _download_guacamol_dataset,
     "uspto50k": _download_uspto_50k_dataset,
@@ -383,14 +349,14 @@ def download_dataset(
     download_fn = DOWNLOAD_FNS.get(dataset, None)
     if download_fn is None:
         raise ValueError(f"Invalid dataset: {dataset}")
-    else:
-        enforce_str = " (force deleting cached files)" if enforce_download else ""
-        logger.info(f"Downloading dataset {dataset} to {raw_dir}{enforce_str}...")
-        return download_fn(raw_dir, enforce_download)
+
+    enforce_str = " (force deleting cached files)" if enforce_download else ""
+    logger.info(f"Downloading dataset {dataset} to {raw_dir}{enforce_str}...")
+    return download_fn(raw_dir, enforce_download)
 
 
 # Can define this dictionary only once the functions are defined
-PREPARE_FNS: dict[str, Callable[[Path, Path], None]] = {
+PREPARE_FNS: Final[dict[str, Callable[[Path, Path], None]]] = {
     "debug": _prepare_debug_dataset,
     "guacamol": _prepare_guacamol_dataset,
     "uspto50k": _prepare_uspto_50k_dataset,
@@ -414,9 +380,9 @@ def prepare_dataset(dataset: str, raw_dir: Path, prep_dir: Path) -> None:
     prepare_fn = PREPARE_FNS.get(dataset, None)
     if prepare_fn is None:
         raise ValueError(f"Invalid dataset: {dataset}")
-    else:
-        logger.info(f"Preparing dataset {dataset} from {raw_dir} into {prep_dir}...")
-        return prepare_fn(raw_dir, prep_dir)
+
+    logger.info(f"Preparing dataset {dataset} from {raw_dir} into {prep_dir}...")
+    return prepare_fn(raw_dir, prep_dir)
 
 
 @logger.catch
