@@ -39,19 +39,21 @@ from tokenizers.trainers import (  # type: ignore
 from transformers import BatchEncoding, PreTrainedTokenizerFast
 
 # Tokenizer related
-DATASET_COLUMN_NAME: Final = "items"
-DELETED_TOKEN_PREFIX: Final = "§§§_"
-BOS_TOKEN: Final = "^"
-EOS_TOKEN: Final = "_"
-PAD_TOKEN: Final = " "
-UNK_TOKEN: Final = "§"
-ADD_TOKEN: Final = "°"  # Not sure if needed at all; might be used to map special model tokens to like CLS, SEP etc.
-MODEL_MAX_LENGTH: Final = 1024
+DATASET_COLUMN_NAME: Final[str] = "items"
+DELETED_TOKEN_PREFIX: Final[str] = "§§§_"
+BOS_TOKEN: Final[str] = "^"
+EOS_TOKEN: Final[str] = "_"
+PAD_TOKEN: Final[str] = " "
+UNK_TOKEN: Final[str] = "§"
+ADD_TOKEN: Final[
+    str
+] = "°"  # Not sure if needed at all; might be used to map special model tokens to like CLS, SEP etc.
+MODEL_MAX_LENGTH: Final[int] = 1024
 
-REGEX_INPUT: Final = {
+# noinspection SpellCheckingInspection
+REGEX_INPUT: Final[dict[str, str]] = {
     # everything within brackets becomes a single token; might play with that, alternative below
     "bracket": r"\[[^\]]+]",
-    # "bracket": r"\[|\]",
     "atom_a": r"A[cglmrstu]?",
     "atom_b": r"B[aeihkr]?",
     "atom_c": r"C[adeflmorsu]?",
@@ -94,9 +96,11 @@ REGEX_INPUT: Final = {
 }
 
 # replace() is just a safety net against double "|" in the RegEx
-REGEX_PATTERN_SMARTS: Final = "|".join(REGEX_INPUT.values()).replace("||", "|")
-REGEX_PATTERN_ATOM: Final = REGEX_PATTERN_SMARTS.replace(r"\[[^\]]+]", r"\[|\]")
-MIN_VOCAB_SIZE_UNIGRAM: Final = 44  # for comparison with SMARTS + WORDLEVEL tokenizer, which has 44 non-special tokens
+REGEX_PATTERN_SMARTS: Final[str] = "|".join(REGEX_INPUT.values()).replace("||", "|")
+REGEX_PATTERN_ATOM: Final[str] = REGEX_PATTERN_SMARTS.replace(r"\[[^\]]+]", r"\[|\]")
+MIN_VOCAB_SIZE_UNIGRAM: Final[
+    int
+] = 44  # for comparison with SMARTS + WORDLEVEL tokenizer, which has 44 non-special tokens
 
 
 logger = logging.getLogger(__name__)
@@ -128,13 +132,8 @@ def _filter_invalid_tokenizer_combos(
     if algorithm == "WORDLEVEL" and vocab_size != 0:
         raise ValueError(f"Algorithm {algorithm} must be used with a vocab size of 0")
 
-    # if algorithm == "UNIGRAM" and vocab_size < MIN_VOCAB_SIZE_UNIGRAM:
-    #     raise ValueError(
-    #         f"Algorithm {algorithm} must be used with a vocab size of at least {MIN_VOCAB_SIZE_UNIGRAM}"
-    #     )
 
-
-def token_in_regex(token: str, regex: str) -> bool:  # TODO: make this private
+def _token_in_regex(token: str, regex: str) -> bool:
     """Checks whether a token matches a given regex.
 
     Used to check whether a special token like BOS is part of the regex pattern.
@@ -148,14 +147,9 @@ def token_in_regex(token: str, regex: str) -> bool:  # TODO: make this private
         True if the token is part of the regex pattern, False otherwise.
     """
 
-    token = str(token)
-    regex = str(regex)
     regex_pattern = re.compile(regex)
     found = regex_pattern.findall(token)
-    if len(found) > 0:
-        return True
-    else:
-        return False
+    return len(found) > 0
 
 
 def get_tokenizer(
@@ -171,8 +165,6 @@ def get_tokenizer(
     pad_token: str = PAD_TOKEN,
     unk_token: str = UNK_TOKEN,
     regex_pattern: Optional[str] = None,
-    # byte_level: bool = False,  # TODO: can this be removed? If no, add to docstring
-    # save_path: str = "./tokenizers/",
 ) -> PreTrainedTokenizerFast:
     """Get a Hugging Face fast tokenizer with the given parameters.
 
@@ -197,14 +189,12 @@ def get_tokenizer(
         ValueError: If the given argument combination is invalid.
     """
 
-    pre_tokenizer = str(pre_tokenizer).upper()
-    algorithm = str(algorithm).upper()
+    pre_tokenizer = pre_tokenizer.upper()
+    algorithm = algorithm.upper()
     vocab_size = max(
-        0, int(vocab_size)
+        0, vocab_size
     )  # Zero works with all algorithms except Unigram (runs "infinitely")
-    model_max_length = int(model_max_length)
-    min_frequency = max(1, int(min_frequency))
-    # byte_level = bool(byte_level)
+    min_frequency = max(1, min_frequency)
 
     _filter_invalid_tokenizer_combos(pre_tokenizer, algorithm, vocab_size)
 
@@ -234,24 +224,15 @@ def get_tokenizer(
     # Check if special tokens are part of the regex pattern
     if pre_tokenizer in ("ATOM", "SMARTS"):
         for token in special_tokens:
-            if token_in_regex(token, regex_pattern):
+            if _token_in_regex(token, regex_pattern):
                 raise ValueError(
                     f"Special token '{token}' invalid, can be parsed by '{pre_tokenizer}' regular expression"
                 )
 
     regex_pattern = Regex(regex_pattern)
 
-    # elif tokenizer == "SMARTS":
-    #     for token in special_tokens:
-    #         if token_in_regex(token, smarts_regex_pattern):
-    #             raise ValueError(
-    #                 f"Special token '{token}' invalid, can be parsed by '{tokenizer}' regular expression"
-    #             )
-    #     regex_pattern = Regex(smarts_regex_pattern)
-    #
-    # else:
-    #     raise ValueError(f"Unknown tokenizer '{tokenizer}'")
-
+    # Lots of disabling of PyCharm warnings here, because the Hugging Face Tokenizer API seems to be
+    # a bit inconsistent with the documentation
     tokenizer: Tokenizer
 
     # Train the tokenizer
@@ -262,10 +243,13 @@ def get_tokenizer(
                 f"tokenizer algorithm, setting min frequency to 1."
             )
             min_frequency = 1
+        # noinspection PyArgumentList
         tokenizer = Tokenizer(WordLevel(unk_token=unk_token))
+        # noinspection PyPropertyAccess
         tokenizer.pre_tokenizer = Split(
             pattern=regex_pattern, behavior="isolated", invert=False
         )
+        # noinspection PyArgumentList
         trainer = WordLevelTrainer(
             special_tokens=special_tokens,
             min_frequency=min_frequency,
@@ -274,10 +258,9 @@ def get_tokenizer(
         tokenizer.train_from_iterator(train_source, trainer=trainer)
 
     elif algorithm == "BPE":
+        # noinspection PyArgumentList
         tokenizer = Tokenizer(BPE(unk_token=unk_token))
-        # tokenizer.pre_tokenizer = Split(
-        #     pattern=regex_pattern, behavior="contiguous", invert=False
-        # )
+        # noinspection PyArgumentList
         trainer = BpeTrainer(
             vocab_size=vocab_size,
             special_tokens=special_tokens,
@@ -287,13 +270,16 @@ def get_tokenizer(
         tokenizer.train_from_iterator(train_source, trainer=trainer)
 
     elif algorithm == "WORDPIECE":
+        # noinspection PyArgumentList
         tokenizer = Tokenizer(WordPiece(unk_token=unk_token))
+        # noinspection PyArgumentList
         trainer = WordPieceTrainer(
             vocab_size=vocab_size,
             special_tokens=special_tokens,
             min_frequency=min_frequency,
             show_progress=True,
         )
+        # noinspection PyPropertyAccess
         tokenizer.decoder = decoders.WordPiece(prefix="##", cleanup=False)
         tokenizer.train_from_iterator(train_source, trainer=trainer)
 
@@ -305,10 +291,9 @@ def get_tokenizer(
             logger.warning(
                 f"Vocab size deemed too small for Unigram, increasing from {old_vocab_size} to {vocab_size}"
             )
+        # noinspection PyArgumentList
         tokenizer = Tokenizer(Unigram())
-        # tokenizer.pre_tokenizer = Split(
-        #     pattern=regex_pattern, behavior="isolated", invert=False
-        # )
+        # noinspection PyArgumentList
         trainer = UnigramTrainer(
             vocab_size=vocab_size,
             special_tokens=special_tokens,
@@ -317,52 +302,12 @@ def get_tokenizer(
         )
         tokenizer.train_from_iterator(train_source, trainer=trainer)
 
-    # SentencePiece is poorly documented on HuggingFace
-    # see code at https://github.com/huggingface/tokenizers/tree/main/bindings/python/py_src/tokenizers/implementations
-    # elif algorithm == "SENTENCEPIECE_BPE":
-    #     tokenizer = SentencePieceBPETokenizer(
-    #         unk_token=unk_token, add_prefix_space=False
-    #     )
-    #     # SentencePieceBPETokenizer sets the normalizer to NFKC by default
-    #     # Not needed, but doesn't hurt; can't set to None
-    #     # tokenizer.normalizer = None
-    #     # tokenizer.pre_tokenizer = Split(
-    #     #     pattern=regex_pattern, behavior="isolated", invert=False
-    #     # )
-    #     tokenizer.train_from_iterator(
-    #         train_source,
-    #         vocab_size=vocab_size,
-    #         min_frequency=min_frequency,
-    #         show_progress=True,
-    #         # limit_alphabet=1000,  # might make configurable, default=1000
-    #         special_tokens=special_tokens,
-    #     )
-    #
-    # elif algorithm == "SENTENCEPIECE_UNIGRAM":
-    #     old_vocab_size = vocab_size
-    #     vocab_size = max(MIN_VOCAB_SIZE_UNIGRAM, vocab_size)
-    #     if vocab_size > old_vocab_size:
-    #         logger.warning(
-    #             f"Vocab size deemed too small for unigram tokenizer, increasing from {old_vocab_size} to {vocab_size}"
-    #         )
-    #     tokenizer = SentencePieceUnigramTokenizer(add_prefix_space=False)
-    #     # SentencePieceUnigramTokenizers sets the normalizer to [Nmt, NFKC, Replace(Regex(" {2,}"), " ")] by default
-    #     # tokenizer.normalizer = None
-    #     # tokenizer.pre_tokenizer = Split(
-    #     #     pattern=regex_pattern, behavior="isolated", invert=False
-    #     # )
-    #     tokenizer.train_from_iterator(
-    #         train_source,
-    #         vocab_size=vocab_size,
-    #         show_progress=True,
-    #         special_tokens=special_tokens,
-    #         unk_token=unk_token,
-    #     )
-
     else:
         raise ValueError(f"Unknown tokenization algorithm: {algorithm}")
 
     # Enclose tokens in special tokens BOS and EOS
+    # noinspection PyPropertyAccess
+    # noinspection PyArgumentList
     tokenizer.post_processor = TemplateProcessing(
         single=bos_token + " $A " + eos_token,
         special_tokens=[
@@ -370,9 +315,6 @@ def get_tokenizer(
             (eos_token, tokenizer.token_to_id(eos_token)),
         ],
     )
-
-    # file_path = Path(save_path) / ((algorithm + ".json").lower())
-    # file_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Save the tokenizer and load it again as a fast tokenizer
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as f:
@@ -402,11 +344,11 @@ def enclose_function(
     """Enclose each string in the batch with the start and end token.
 
     Intended to be used with Hugging Face datasets' map function.
-    For our custom tokenizers enclosing is done via the tokenizer's post processor.
+    For our custom tokenizers enclosing is done via the tokenizer´s post processor.
     For the pre-trained tokenizers this is done via this function. The pre-trained tokenizers might already
-    implement a post processor and we can't add another one (no sequence of post processors).
+    implement a post processor, and we can't add another one (no sequence of post processors).
     In this case we add the BOS and EOS tokens to the data instead.
-    The BOS and EOS tokens are non-special tokens from the tokenizer's "perspective".
+    The BOS and EOS tokens are non-special tokens from the tokenizer´s "perspective".
 
     Args:
         batch: A batch of data
@@ -437,11 +379,7 @@ def tokenize_function(
         The batch encoded by the tokenizer
     """
 
-    # since this will be pickled to avoid _LazyModule error in Hasher force logger loading before tokenize_function
-    # tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_utils_base")
-    # with CaptureLogger(tok_logger) as cl:
-
-    outputs = tokenizer(
+    return tokenizer(
         batch[DATASET_COLUMN_NAME],
         add_special_tokens=True,
         padding=True,
@@ -453,14 +391,6 @@ def tokenize_function(
         # Raises a warning which can be ignored
         return_special_tokens_mask=True,
     )
-    # clm input could be much longer than block_size
-    # if "Token indices sequence length is longer than the" in cl.out:
-    #     tok_logger.warning(
-    #             "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits"
-    #             " before being passed to the model."
-    #     )
-
-    return outputs
 
 
 def get_modified_vocab(
@@ -473,7 +403,7 @@ def get_modified_vocab(
 ) -> dict[str, int]:
     """Maps a tokenizer´s vocabulary into a new pre-trained tokenizer.
 
-    The mapping is based on the frequency of the tokens in the original tokenizer's vocabulary.
+    The mapping is based on the frequency of the tokens in the original tokenizer´s vocabulary.
     The mapping applied linear from the original (small) vocab into to the new (large) vocab.
 
     Args:
@@ -505,7 +435,7 @@ def get_modified_vocab(
             f"the length of tokenizer_original ({len(vocab_original)})"
         )
 
-    if int(start_idx) < 0:
+    if start_idx < 0:
         raise ValueError("start_idx must be a positive number")
 
     end_idx = len(vocab_original) - 2 if end_idx is None else int(end_idx)
@@ -523,7 +453,7 @@ def get_modified_vocab(
         vocab_modified = vocab_original.copy()
         mapping_d: int = end_idx
         mapping_k: float = (end_idx - start_idx) / modified_freq.most_common(1)[0][1]
-        print(f"Linear mapping: y = -{mapping_k}x + {mapping_d}")
+        logger.debug(f"Linear mapping: y = -{mapping_k}x + {mapping_d}")
 
         # These sets are used to
         # (a) check that we do not double assign indices
@@ -535,6 +465,15 @@ def get_modified_vocab(
         # Helper function that uses the linear function to map from
         # the token token_frequency to a token in the (to be built) modified gpt2 tokenizer
         def map_from_to(from_: int) -> int:
+            """Maps a token index from the original tokenizer to a token index in the modified tokenizer.
+
+            Args:
+                from_: The token index in the original tokenizer
+
+            Returns:
+                The token index in the modified tokenizer
+            """
+
             to = int(-mapping_k * from_ + mapping_d) - 1
             while (to := to + 1) in indices_used:
                 pass
@@ -551,13 +490,11 @@ def get_modified_vocab(
             idx_original = vocab_modified.pop(token_modified, None)
             if idx_original is not None:
                 indices_deleted.add(idx_original)
-                # print(f"Change token {token_modified} with idx {idx_original}")
-                # vocab_modified[token_modified + TOKEN_SUFFIX] = idx_original
 
             # Map its count / frequency to the gpt2 tokenizer vocab
             idx_new = map_from_to(count)
 
-            print(f"Token {token_modified} gets an ID of {idx_new}")
+            logger.debug(f"Token {token_modified} gets an ID of {idx_new}")
             # Replace the original token at this index with the new token
             token_original = tokenizer_original.convert_ids_to_tokens(idx_new)
             vocab_modified.pop(token_original, None)
@@ -566,7 +503,7 @@ def get_modified_vocab(
         # Replace all deleted tokens with a dummy token to ensure a contiguous vocabulary
         indices_deleted -= indices_used
         for idx in sorted(indices_deleted):
-            print(
+            logger.debug(
                 f"Overwrite original token {tokenizer_original.convert_ids_to_tokens(idx)} "
                 f"at ID {idx} with {DELETED_TOKEN_PREFIX+str(idx)}"
             )
@@ -581,7 +518,7 @@ def get_modified_vocab(
     return vocab_modified
 
 
-def get_merges(tokenizer: PreTrainedTokenizerFast) -> list[str]:  # TODO: make private
+def get_merges(tokenizer: PreTrainedTokenizerFast) -> list[str]:
     """Get the merge information from a tokenizer´s algorithm.
 
     Args:
