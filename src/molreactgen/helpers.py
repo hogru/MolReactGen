@@ -366,7 +366,9 @@ class Tally:
         with open(file_path, "w") as f:
             json.dump(dict_to_save, f)
 
-    def save_to_file(self, file_path: PathLike[str], format_: str = "json") -> None:
+    def save_to_file(
+        self, file_path: Union[PathLike, str], format_: str = "json"
+    ) -> None:
         """Save the counters to a file.
 
         Currently only JSON format is supported.
@@ -475,8 +477,8 @@ def configure_logging(
     file_format: Optional[str] = None,
     syslog_format: Optional[str] = None,
     file_log_level: Optional[int] = None,
-    log_dir: Optional[PathLike[str]] = None,
-    log_file: Optional[PathLike[str]] = None,
+    log_dir: Optional[Union[PathLike, str]] = None,
+    log_file: Optional[Union[PathLike, str]] = None,
     rotation: str = "1 day",
     retention: str = "7 days",
     address: Optional[tuple[str, int]] = None,
@@ -569,7 +571,7 @@ def configure_logging(
 
 
 def guess_project_root_dir(
-    caller_file_path: Optional[PathLike[str]] = None,
+    caller_file_path: Optional[Union[PathLike, str]] = None,
     signs_for_root_dir: Iterable[str] = SIGNS_FOR_ROOT_DIR,
 ) -> Path:
     """Guess the project´s root directory.
@@ -648,7 +650,7 @@ class _ArgsEncoder(json.JSONEncoder):
 
 def save_commandline_arguments(
     args: argparse.Namespace,
-    file_path: PathLike[str],
+    file_path: Union[PathLike, str],
     keys_to_remove: Optional[Iterable[str]] = None,
 ) -> None:
     """Save command-line arguments to a JSON file.
@@ -672,8 +674,8 @@ def save_commandline_arguments(
 
 
 def create_file_link(
-    from_file_path: PathLike[str],
-    to_file_path: PathLike[str],
+    from_file_path: Union[PathLike, str],
+    to_file_path: Union[PathLike, str],
     hard_link: bool = False,
 ) -> None:
     """Create a link from a file to another file.
