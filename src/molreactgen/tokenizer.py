@@ -446,6 +446,7 @@ def get_modified_vocab(
             f"{len(vocab_original)}, the length of tokenizer_original"
         )
 
+    # TODO implement additional mapping strategies, currently only 'linear' is supported
     if mapping_strategy.upper() == "LINEAR":
         # Build linear mapping from modified_freq to vocab_original
         # The most frequent element in modified_freq gets the start_idx
