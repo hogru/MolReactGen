@@ -41,7 +41,7 @@ from typing import Any, Final, Optional, Sequence, Union
 
 # Most of Hugging Face has poor type hints, trying to avoid mypy errors
 import datasets  # type: ignore
-import evaluate
+import evaluate  # type: ignore
 import torch
 import transformers  # type: ignore
 from datasets import Dataset, DatasetDict, Features, Value, load_dataset
@@ -619,7 +619,7 @@ def main() -> None:
     transformers.utils.logging.enable_explicit_format()
 
     # Log a small summary on each process
-    logger.heading("Configuring training...")
+    logger.heading("Configuring training...")  # type: ignore
     logger.info(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu} "
         + f"distributed training: {training_args.local_rank != -1}, 16-bits training: {training_args.fp16}"
