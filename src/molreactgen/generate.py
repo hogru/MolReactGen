@@ -441,7 +441,7 @@ def create_and_save_generation_config(
             min_new_tokens=min_length,
             max_new_tokens=max_length,
             pad_token_id=tokenizer.pad_token_id,
-            eos_token_id=stopping_criteria,
+            # eos_token_id=stopping_criteria,  # This is already set in the config file, can't overwrite it
             num_beams=num_beams,
             early_stopping=early_stopping,
             temperature=temperature,
