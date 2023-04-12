@@ -565,6 +565,39 @@ def configure_logging(
     )
 
 
+def configure_hf_logging(log_level: int = logging.INFO) -> None:
+    """Configure logging for Hugging Face libraries.
+
+    Args:
+        log_level: the log level to use, defaults to logging.INFO.
+    """
+
+    if "datasets" in sys.modules:
+        logger.debug("Configuring Hugging Face datasets logging...")
+        import datasets
+
+        datasets.utils.logging.set_verbosity(log_level)
+        datasets.utils.logging.enable_progress_bar()
+        datasets.utils.logging.disable_propagation()
+
+    if "evaluate" in sys.modules:
+        logger.debug("Configuring Hugging Face evaluate logging...")
+        import evaluate
+
+        evaluate.utils.logging.set_verbosity(log_level)
+        evaluate.utils.logging.enable_progress_bar()
+        evaluate.utils.logging.disable_propagation()
+
+    if "transformers" in sys.modules:
+        logger.debug("Configuring Hugging Face transformers logging...")
+        import transformers
+
+        transformers.utils.logging.set_verbosity(log_level)
+        transformers.utils.logging.disable_default_handler()
+        # transformers.utils.logging.enable_explicit_format()
+        transformers.utils.logging.enable_progress_bar()
+
+
 ###############################################################################
 # File related                                                                #
 ###############################################################################

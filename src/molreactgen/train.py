@@ -40,13 +40,11 @@ from random import randint
 from typing import Any, Final, Optional, Sequence, Union
 
 # Most of Hugging Face has poor type hints, trying to avoid mypy errors
-import datasets  # type: ignore
 import evaluate  # type: ignore
 import torch
-import transformers  # type: ignore
-from datasets import Dataset, DatasetDict, Features, Value, load_dataset
+from datasets import Dataset, DatasetDict, Features, Value, load_dataset  # type: ignore
 from loguru import logger
-from transformers import (
+from transformers import (  # type: ignore
     CONFIG_MAPPING,
     MODEL_FOR_CAUSAL_LM_MAPPING,
     AutoConfig,
@@ -72,6 +70,7 @@ from transformers.utils.versions import require_version  # type: ignore
 import wandb
 from molreactgen.generate import create_and_save_generation_config
 from molreactgen.helpers import (
+    configure_hf_logging,
     configure_logging,
     create_file_link,
     guess_project_root_dir,
@@ -611,12 +610,13 @@ def main() -> None:
     # TODO Remove papertrail logging
     # noinspection SpellCheckingInspection
     configure_logging(log_level, address=("logs3.papertrailapp.com", 32501))
-    datasets.utils.logging.set_verbosity(log_level)
-    datasets.utils.logging.disable_progress_bar()
-    evaluate.utils.logging.set_verbosity(log_level)
-    transformers.utils.logging.set_verbosity(log_level)
-    transformers.utils.logging.enable_default_handler()
-    transformers.utils.logging.enable_explicit_format()
+    configure_hf_logging(log_level)
+    # datasets.utils.logging.set_verbosity(log_level)
+    # datasets.utils.logging.disable_progress_bar()
+    # evaluate.utils.logging.set_verbosity(log_level)
+    # transformers.utils.logging.set_verbosity(log_level)
+    # transformers.utils.logging.enable_default_handler()
+    # transformers.utils.logging.enable_explicit_format()
 
     # Log a small summary on each process
     logger.heading("Configuring training...")  # type: ignore
@@ -1091,6 +1091,24 @@ def main() -> None:
             job_type="train",
             anonymous="allow",
         )
+        if wandb.run is not None:
+            logger.info(
+                f"Logging to wandb run with name {wandb.run.name} and id {wandb.run.id}..."
+            )
+            wandb.log(
+                {
+                    "pre_tokenizer": data_args.pre_tokenizer,
+                    "algorithm": data_args.algorithm,
+                    "vocab_size": data_args.vocab_size,
+                    "vocab_size (actual)": tokenizer.vocab_size
+                    - len(tokenizer.all_special_tokens),
+                    "vocab_min_frequency": data_args.vocab_min_frequency,
+                    "early_stopping": additional_args.early_stopping_patience
+                    is not None,
+                    "early_stopping_patience": additional_args.early_stopping_patience,
+                    # "label_smoothing": additional_args.label_smoothing,
+                }
+            )
     else:
         os.environ["WANDB_DISABLED"] = "true"
 
