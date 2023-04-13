@@ -14,7 +14,7 @@ from codetiming import Timer
 from humanfriendly import format_timespan  # type: ignore
 from loguru import logger
 
-from molreactgen.evaluate import (
+from molreactgen.assess import (
     get_stats_from_molecules,
     read_molecules_from_file,
     save_stats_to_file,
