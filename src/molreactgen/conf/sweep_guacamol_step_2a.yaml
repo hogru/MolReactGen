@@ -1,0 +1,22 @@
+command:
+  - python3
+  - ${program}
+  - --config_file
+  - conf/guacamol.args
+  - ${args}
+program: train.py
+method: grid
+metric:
+  name: eval/loss
+  goal: minimize
+parameters:
+  pre_tokenizer:
+    value:
+  algorithm:
+    value:
+  vocab_size:
+    value:
+  per_device_train_batch_size:
+    value: 64
+  learning_rate:
+    values: [0.0025, 0.0005, 0.0001]
