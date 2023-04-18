@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Final, Optional, Union
 
 import pandas as pd  # type: ignore
+import torch
 from loguru import logger
 from rdchiral.main import (  # type: ignore
     rdchiralReactants,
@@ -296,7 +297,7 @@ def create_and_save_generation_config(
             min_new_tokens=min_length,
             max_new_tokens=max_length,
             pad_token_id=tokenizer.pad_token_id,
-            eos_token_id=stopping_criteria,
+            # eos_token_id=stopping_criteria,
             num_beams=num_beams,
             early_stopping=early_stopping,
             temperature=temperature,
@@ -911,6 +912,9 @@ def main() -> None:
     logger.debug(f"Temperature: {temperature}")
     if temperature <= 0:
         raise ValueError(f"Temperature must be greater than 0, not {temperature}")
+
+    # TODO Do this properly
+    torch.manual_seed(42)
 
     # Create text generation pipeline
     logger.info("Setting up generation configuration...")
