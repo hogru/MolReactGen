@@ -4749,14 +4749,14 @@ test = ["covdefaults (>=2.2.2)", "coverage (>=7.1)", "coverage-enable-subprocess
 
 [[package]]
 name = "wandb"
-version = "0.13.11"
+version = "0.14.2"
 description = "A CLI and library for interacting with the Weights and Biases API."
 category = "main"
 optional = false
 python-versions = ">=3.6"
 files = [
-    {file = "wandb-0.13.11-py3-none-any.whl", hash = "sha256:e584ac7fb0097fba8a030d5aedc5fea157286aba69a2e6e6e689b794155fcc8f"},
-    {file = "wandb-0.13.11.tar.gz", hash = "sha256:f2b065d1c732e8e1828fabe720dc82f12e6109d0d2bbfbcccc17eaefae0fd7c9"},
+    {file = "wandb-0.14.2-py3-none-any.whl", hash = "sha256:99bdb40587c3300d97ca4bb464c0dd1ac9608dbd5fbd06e19083a197469c1268"},
+    {file = "wandb-0.14.2.tar.gz", hash = "sha256:27ff1f78c247b313608e199dd0c784e84e56f305b2d58b0eda938dcc1f4c2460"},
 ]
 
 [package.dependencies]
@@ -4778,6 +4778,7 @@ setuptools = "*"
 typing-extensions = {version = "*", markers = "python_version < \"3.10\""}
 
 [package.extras]
+async = ["httpx (>=0.22.0)"]
 aws = ["boto3"]
 azure = ["azure-storage-blob"]
 gcp = ["google-cloud-storage"]
@@ -5120,4 +5121,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.10"
-content-hash = "fad51e75382b36d02b69ad845092c11b98ad78e2451e3d470e29a298368665de"
+content-hash = "324e10829d3d45c6b6fdf698e4c93d9dee87f9c0ddda04a38fa939a8695cea70"
