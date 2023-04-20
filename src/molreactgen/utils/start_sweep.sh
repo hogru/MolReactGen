@@ -4,8 +4,8 @@
 # Current directory should contain the python training script
 
 TRAIN_FILE="train.py"
-DISABLE_FLAPPING=true
-MAX_INITIAL_FAILURES=1
+DISABLE_FLAPPING=false
+MAX_INITIAL_FAILURES=2
 WAIT_TIME=15
 
 if [ -z "$1" ]; then
@@ -30,4 +30,4 @@ echo "-- Waiting for $WAIT_TIME second(s)..."
 sleep "$WAIT_TIME"
 
 echo "-- Starting wandb agent..."
-echo "wandb agent hogru/MolReactGen/$1"
+wandb agent "hogru/MolReactGen/$1"

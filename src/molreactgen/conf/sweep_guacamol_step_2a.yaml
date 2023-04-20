@@ -11,12 +11,12 @@ metric:
   goal: minimize
 parameters:
   pre_tokenizer:
-    value:
+    value: char
   algorithm:
-    value:
+    value: unigram
   vocab_size:
-    value:
+    value: 88
   per_device_train_batch_size:
-    value: 64
+    values: [64, 256]
   learning_rate:
     values: [0.0025, 0.0005, 0.0001]
