@@ -7,17 +7,22 @@ import datetime
 import json
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, Optional, Union
+from typing import Any, Final, Iterable, Optional, Union
 
 # import pandas as pd  # type: ignore
 from codetiming import Timer
 from humanfriendly import format_timespan  # type: ignore
 from loguru import logger
+from rich.console import Console
+from rich.table import Table
 
+import wandb
 from molreactgen.helpers import configure_logging, determine_log_level
 from molreactgen.tokenizer import REGEX_PATTERN_ATOM, REGEX_PATTERN_SMARTS
+from molreactgen.train import WANDB_PROJECT_NAME
 
 # Global variables, defaults
 DEFAULT_OUTPUT_FILE_NAME: Final[str] = "./metrics.csv"
@@ -32,6 +37,12 @@ class Metric:
     dtype: type
     value: Any
     formatter: str = ""
+    _ref: str = ""
+    _idx: int = 0
+    _getter: Optional[Callable] = None
+
+    def __hash__(self) -> int:
+        return hash(self.column_name)
 
 
 class Experiment:
@@ -43,6 +54,8 @@ class Experiment:
         "num_epochs": "_get_num_epochs",
         "batch_size": "_get_batch_size",
         "lr": "_get_lr",
+        "wandb_run_id": "_get_wandb_run_id",
+        "wandb_run_name": "_get_wandb_run_name",
         "train_loss": "_get_train_loss",
         "val_loss": "_get_val_loss",
         "val_acc": "_get_val_acc",
@@ -61,6 +74,10 @@ class Experiment:
         "known_val_rts": "_get_known_val",
         "known_test_rts": "_get_known_test",
     }
+
+    _indices: dict[str, int] = {}
+    for _idx, _getter in enumerate(_getters, start=1):
+        _indices[_getter] = _idx
 
     def __init__(self, directory: Union[str, os.PathLike]) -> None:
         self.directory: Path = Path(directory).resolve()
@@ -101,6 +118,18 @@ class Experiment:
                 dtype=float,
                 value=None,
                 formatter=".4f",
+            ),
+            "wandb_run_id": Metric(
+                column_name="wandb_run_id",
+                scope="wandb",
+                dtype=str,
+                value=None,
+            ),
+            "wandb_run_name": Metric(
+                column_name="wandb_run_name",
+                scope="wandb",
+                dtype=str,
+                value=None,
             ),
             "train_loss": Metric(
                 column_name="training_loss",
@@ -220,22 +249,22 @@ class Experiment:
             ),
         }
 
+        self._init_metrics()
+
         # TODO add the following metrics
         # Step 1:
-        # wandb: run name, run id, sweep id (if applicable) (map via output directory)
+        # wandb: sweep id (if applicable) (map via output directory)
         #
         # Step 2:
         # generation reaction templates: validity, uniqueness, feasibility, known x 3
         # model: type, layers, heads, hidden_dim
         # dataset: name, ...
 
+    def _init_metrics(self) -> None:
+        """Initialize the metrics."""
+
         if self._metrics.keys() != self._getters.keys():
             raise RuntimeError("The keys of metrics and getters must be equal")
-
-        # if any(
-        #     not callable(getattr(self, getter, False))
-        #     for getter in self._getters.values()
-        # ):
 
         for getter in self._getters.values():
             if not callable(getattr(self, getter, False)):
@@ -244,11 +273,16 @@ class Experiment:
                     f"Getter {getter} does not exist or is not callable."
                 )
 
+        for idx, getter in enumerate(self._getters, start=1):
+            # self._metrics[getter]._idx = idx
+            self._metrics[getter]._ref = getter
+            self._metrics[getter]._getter = getattr(self, self._getters[getter])
+
     @staticmethod
     def _is_valid_directory(path: Path) -> bool:
         """Check if a directory is a valid directory."""
 
-        if not isinstance(path, Path) or not path.is_dir() or path.is_symlink():
+        if not isinstance(path, Path) or (not path.is_dir()) or path.is_symlink():
             return False
 
         return (
@@ -392,6 +426,40 @@ class Experiment:
         pattern = re.compile(r"(^\s*)-(\s*learning_rate:\s*)(\d*\.\d*)", re.MULTILINE)
         match = pattern.search(content)
         return None if match is None else float(match[3])
+
+    @staticmethod
+    def _get_wandb_run_id(path: Path) -> Optional[str]:
+        """Get the wandb run id."""
+
+        api = wandb.Api()
+        entity = api.default_entity
+        runs = api.runs("/".join((entity, WANDB_PROJECT_NAME)))
+        return next(
+            (
+                run.id
+                for run in runs
+                if Path(run.config.get("output_dir", "")).stem == path.stem
+            ),
+            None,
+        )
+
+    @staticmethod
+    def _get_wandb_run_name(path: Path) -> Optional[str]:
+        """Get the wandb run name."""
+
+        # TODO very inefficient, but would need to cache some information
+        #  or get rid of one function == one metric
+        api = wandb.Api()
+        entity = api.default_entity
+        runs = api.runs("/".join((entity, WANDB_PROJECT_NAME)))
+        return next(
+            (
+                run.name
+                for run in runs
+                if Path(run.config.get("output_dir", "")).stem == path.stem
+            ),
+            None,
+        )
 
     @staticmethod
     def _get_train_loss(path: Path) -> Optional[float]:
@@ -628,6 +696,12 @@ class Experiment:
         return {k: v for k, v in self._metrics.items() if v.scope == "model"}
 
     @property
+    def wandb_metrics(self) -> Optional[dict[str, Any]]:
+        """Get the model metrics."""
+
+        return {k: v for k, v in self._metrics.items() if v.scope == "wandb"}
+
+    @property
     def evaluation_mols_metrics(self) -> Optional[dict[str, Any]]:
         """Get the evaluation molecules metrics."""
 
@@ -681,6 +755,22 @@ class Experiment:
     def generated_reaction_templates_directory(self) -> Optional[Path]:
         return self.directory if self.has_generated_reaction_templates else None
 
+    @property
+    def generated_directory(self) -> Optional[Path]:
+        if self.has_generated_molecules and not self.has_generated_reaction_templates:
+            return self.generated_molecules_directory
+        elif self.has_generated_reaction_templates and not self.has_generated_molecules:
+            return self.generated_reaction_templates_directory
+        elif (
+            not self.has_generated_molecules
+            and not self.has_generated_reaction_templates
+        ):
+            return None
+        else:
+            raise RuntimeError(
+                "This experiment contains both generated molecules and reaction templates"
+            )
+
     @staticmethod
     def get_creation_date(
         path: Path, formatter: str = "%Y-%m-%d %H:%M"
@@ -693,55 +783,89 @@ class Experiment:
         creation_date = datetime.datetime.fromtimestamp(os.path.getctime(path))
         return creation_date, format(creation_date, formatter)
 
+    @classmethod
+    def get_sort_idx(cls, metric: str) -> int:
+        return cls._indices.get(metric, 999999)
+
     @property
     def available_metrics(self) -> tuple[str]:
         available_metrics: dict[str, Any] = {}
         if self.has_model:
             available_metrics = (
-                self.tokenizer_metrics | self.model_metrics | self.training_metrics
+                self.tokenizer_metrics
+                | self.model_metrics
+                | self.training_metrics
+                | self.wandb_metrics
             )
+
         if self.has_generated_molecules:
             available_metrics |= self.evaluation_mols_metrics
+
         if self.has_generated_reaction_templates:
             available_metrics |= self.evaluation_rts_metrics
+
         return tuple(available_metrics.keys())
 
-    def get_metric(self, metric: str) -> Metric:
-        getter = getattr(self, self._getters[metric])
-        if metric not in self._metrics.keys() or not callable(getter):
-            raise AttributeError(f"Metric {metric} is not available")
-
-        try:
-            if self.has_model and (
-                metric in self.tokenizer_metrics
-                or metric in self.model_metrics
-                or metric in self.training_metrics
-            ):
-                directory = self.model_directory
-            elif (
-                self.has_generated_molecules and metric in self.evaluation_mols_metrics
-            ):
-                directory = self.generated_molecules_directory
-            elif (
-                self.has_generated_reaction_templates
-                and metric in self.evaluation_rts_metrics
-            ):
-                directory = self.generated_reaction_templates_directory
+    def get_metric(
+        self,
+        metric: str,
+        raise_error_on_none: bool = False,
+        raise_error_if_not_available: bool = True,
+    ) -> Optional[Metric]:
+        # getter = getattr(self, self._getters[metric])
+        metric_ = self._metrics.get(metric, None)
+        if metric_ is None:
+            if raise_error_if_not_available:
+                raise AttributeError(f"Metric {metric} is not available")
             else:
-                raise ValueError(f"Metric {metric} is not available")
+                return None
 
-            value = getter(directory)
-            if value is not None and not isinstance(value, self._metrics[metric].dtype):
-                logger.warning(
-                    f"Metric {metric} has the wrong type: "
-                    f"expected {self._metrics[metric].dtype}, got {type(value)}"
+        getter = self._metrics[metric]._getter
+        # getter = self._metrics[.get("metric].getter
+        if not callable(getter):
+            # if metric not in self._metrics.keys() or not callable(getter):
+            if raise_error_if_not_available:
+                raise AttributeError(
+                    f"Can not determine value of metric {metric} (no getter)"
                 )
+            else:
+                return None
 
-        except (NameError, TypeError):
-            logger.warning(
-                f"Could not get metric {metric} for experiment in {self.directory}"
+        # try:
+        if self.has_model and (
+            metric in self.tokenizer_metrics
+            or metric in self.model_metrics
+            or metric in self.training_metrics
+            or metric in self.wandb_metrics
+        ):
+            directory = self.model_directory
+        elif self.has_generated_molecules and metric in self.evaluation_mols_metrics:
+            directory = self.generated_molecules_directory
+        elif (
+            self.has_generated_reaction_templates
+            and metric in self.evaluation_rts_metrics
+        ):
+            directory = self.generated_reaction_templates_directory
+        else:
+            raise AttributeError(
+                f"Can not determine value of metric {metric} (no directory)"
             )
-            value = None
+
+        value = getter(directory)
+        if value is None and raise_error_on_none:
+            raise ValueError(f"Metric {metric} is None")
+
+        if value is not None and not isinstance(value, self._metrics[metric].dtype):
+            logger.warning(
+                f"Metric {metric} has the wrong type: "
+                f"expected {self._metrics[metric].dtype}, got {type(value)}"
+            )
+
+        # except (NameError, TypeError):
+        #     logger.warning(
+        #         f"Could not get metric {metric} for experiment in {self.directory}"
+        #     )
+        #     value = None
 
         self._metrics[metric].value = value
         return self._metrics[metric]
@@ -763,24 +887,45 @@ class Experiment:
         return f"Experiment in {self.directory}"
 
 
-# TODO needs to be one level "up"; it's a list of experiments with a dict of metrics
-def collect_metrics(
-    directory: Union[str, os.PathLike]
-) -> dict[str, Any]:  # TODO replace Any with a more specific type
-    """Collect metrics from a number of files and save them to a single file.
+def collect_experiments(directory: Union[str, os.PathLike]) -> list[Experiment]:
+    """Collect experiments from a directory and return a list of Experiments in from that directory.
 
     Args:
-        directory: the directory to collect metrics from.
+        directory: the directory to collect experiments from.
+
+    Returns:
+        a list of experiments.
+    """
+
+    directory = Path(directory).resolve()
+    dirs = [
+        d for d in sorted(directory.rglob("*")) if d.is_dir() and not d.is_symlink()
+    ]
+    experiments = [Experiment(d) for d in dirs]
+    return [e for e in experiments if e.valid]
+
+
+def collect_metrics(
+    experiments: Union[Experiment, Iterable[Experiment]]
+) -> dict[Experiment, list[Metric]]:
+    """Collect metrics from a number of experiments.
+
+    Args:
+        experiments: the experiment(s) to collect metrics from.
 
     Returns:
         a dict with the collected metrics.
     """
 
-    directory = Path(directory).resolve()
+    if isinstance(experiments, Experiment):
+        experiments = [experiments]
 
-    experiments = [Experiment(d) for d in sorted(directory.rglob("*"))]
-    experiments = [e for e in experiments if e.valid]
+    if any(not isinstance(e, Experiment) for e in experiments):
+        raise TypeError("experiments must be an (Iterable of type) Experiment")
+
+    metrics: dict[Experiment, list[Metric]] = {}
     for exp in experiments:
+        metrics[exp]: list[Metric] = []
         none_metrics: list[str] = []
         print(f"Looking at Experiment in {exp.directory}")
         if exp.has_generated_molecules:
@@ -805,17 +950,56 @@ def collect_metrics(
                 none_metrics.append(m)
             else:
                 print(f"{m}: {format(metric.value, metric.formatter)}, ", end="")
+            metrics[exp].append(metric)
         print()
 
         if none_metrics:
             print(f"Metrics with None value: {none_metrics}")
 
         print("----------------------------------------")
+        # TODO print number if directories with metrics
+
+    return metrics
+
+
+def print_metrics(
+    experiment_metrics: dict[Experiment, list[Metric]],
+    title: str = "Experiment Results",
+) -> None:
+    """Print metrics from a number of experiments."""
+
+    available_metrics = {
+        m._ref for e in experiment_metrics for m in experiment_metrics[e]
+    }
+    e = next(iter(experiment_metrics))
+    available_metrics = sorted(available_metrics, key=lambda m: e.get_sort_idx(m))
+
+    table = Table(title=title)
+    table.add_column("Generated directory", justify="left", header_style="bold")
+    table.add_column("Model directory", justify="left", header_style="bold")
+    for m in available_metrics:
+        table.add_column(m, justify="right", header_style="bold", min_width=len(m))
+
+    for e in experiment_metrics:
+        gen_dir = None if e.generated_directory is None else e.generated_directory.stem
+        model_dir = None if e.model_directory is None else e.model_directory.stem
+        row = [gen_dir, model_dir]
+        for m in available_metrics:
+            metric = e.get_metric(m, raise_error_if_not_available=False)
+            row.append(None) if metric.value is None else row.append(
+                format(metric.value, metric.formatter)
+            )
+        table.add_row(*row)
+
+    console = Console()
+    console.print(table)
 
 
 @logger.catch
 def main() -> None:
     """Collect metrics from a number of files and save them to a single file."""
+
+    # TODO allow for selection of metrics / scopes (wandb is expensive)
 
     # Prepare argument parser
     parser = argparse.ArgumentParser(
@@ -873,7 +1057,9 @@ def main() -> None:
         text=lambda secs: f"Metrics collected in {format_timespan(secs)}",
         logger=logger.info,
     ):
-        _ = collect_metrics(directory_path)
+        experiments = collect_experiments(directory_path)
+        metrics = collect_metrics(experiments)
+        print_metrics(metrics)
 
         # TODO output metrics, with rich table? (R&D)
 
