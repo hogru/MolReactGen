@@ -503,6 +503,8 @@ class Experiment:
     def _get_wandb_run_id(path: Path) -> Optional[str]:
         """Get the wandb run id."""
 
+        return "0"
+
         api = wandb.Api()
         entity = api.default_entity
         runs = api.runs("/".join((entity, WANDB_PROJECT_NAME)))
@@ -518,6 +520,8 @@ class Experiment:
     @staticmethod
     def _get_wandb_run_name(path: Path) -> Optional[str]:
         """Get the wandb run name."""
+
+        return "Empty"
 
         # TODO very inefficient, but would need to cache some information
         #  or get rid of one function == one metric
@@ -1025,9 +1029,9 @@ def _get_available_metrics(
 ) -> tuple[str, ...]:
     """Get all available metrics from a number of experiments."""
 
-    available_metrics: list[str] = []
+    available_metrics: set[str] = set()
     for e in experiments:
-        available_metrics.extend(e.available_metrics)
+        available_metrics |= set(e.available_metrics)
 
     e = next(iter(experiments))
 
@@ -1102,11 +1106,7 @@ def print_experiments(
             #     )
             row = _build_row_from_experiment(e, available_metrics)
             table.add_row(*row)
-
-        progress.update(
-            task,
-            advance=1,
-        )
+            progress.advance(task)
 
     logger.debug("Printing table...")
     console = Console()
@@ -1116,7 +1116,7 @@ def print_experiments(
 def save_experiments(
     experiments: Union[Experiment, Iterable[Experiment]],
     file_path: Union[str, os.PathLike],
-    file_format: str = "csv",
+    file_format: str = "ALL",
 ) -> None:
     if isinstance(experiments, Experiment):
         experiments = [experiments]
@@ -1124,33 +1124,34 @@ def save_experiments(
     if any(not isinstance(e, Experiment) for e in experiments):
         raise TypeError("experiments must be an (Iterable of type) Experiment")
 
+    file_path = Path(file_path).resolve()
+
+    if file_format not in {"ALL", "CSV", "JSON", "MD"}:
+        raise ValueError("file_format must be one of 'ALL', 'CSV', 'MD', 'JSON'")
+
     logger.debug("Collecting available metrics...")
     available_metrics = _get_available_metrics(experiments)
 
     logger.debug("Adding rows...")
     rows = []
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        MofNCompleteColumn(),
-        TaskProgressColumn(),
-        TimeRemainingColumn(elapsed_when_finished=True),
-        refresh_per_second=5,
-    ) as progress:
-        task = progress.add_task(
-            "Collecting metrics...",
-            total=len(experiments),
-        )
+    # with Progress(
+    #     SpinnerColumn(),
+    #     TextColumn("[progress.description]{task.description}"),
+    #     BarColumn(),
+    #     MofNCompleteColumn(),
+    #     TaskProgressColumn(),
+    #     TimeRemainingColumn(elapsed_when_finished=True),
+    #     refresh_per_second=5,
+    # ) as progress:
+    #     task = progress.add_task(
+    #         "Collecting metrics...",
+    #         total=len(experiments),
+    #     )
 
-        for e in experiments:
-            row = _build_row_from_experiment(e, available_metrics)
-            rows.append(row)
-
-        progress.update(
-            task,
-            advance=1,
-        )
+    for e in experiments:
+        row = _build_row_from_experiment(e, available_metrics)
+        rows.append(row)
+        # progress.advance(task)
 
     # TODO Use column_names but at this point I deal with metrics as strings only (not Metric objects)
     logger.debug("Building table...")
@@ -1158,13 +1159,17 @@ def save_experiments(
         rows, columns=["Generated directory", "Model directory", *available_metrics]
     )
 
-    logger.debug("Saving table...")
-    if file_format.upper() == "CSV":
-        df.to_csv(file_path, index=False)
-    elif file_format.upper() == "MD":
-        df.to_markdown(file_path, index=False)
-    else:
-        raise ValueError(f"Unknown file format: {file_format}")
+    logger.debug("Saving file(s)...")
+    if file_format.upper() in {"CSV", "ALL"}:
+        df.to_csv(file_path.with_suffix(".csv"), index=False)
+
+    if file_format.upper() in {"JSON", "ALL"}:
+        df.to_json(
+            file_path.with_suffix(".json"), orient="index", double_precision=3, indent=2
+        )
+
+    if file_format.upper() in {"MD", "ALL"}:
+        df.to_markdown(file_path.with_suffix(".md"), index=False)
 
 
 @logger.catch
@@ -1236,12 +1241,10 @@ def main() -> None:
         logger.info("Printing experiment results...")
         print_experiments(experiments, title="Experiment Results")
 
-        logger.info(f"Saving experiments to {output_file_path}.csv")
-        save_experiments(experiments, f"{output_file_path}.csv", file_format="csv")
-        logger.info(f"Saving experiments to {output_file_path}.md")
-        save_experiments(experiments, f"{output_file_path}.md", file_format="md")
-
-        logger.info("Done")
+        logger.info(
+            f"Saving experiments to {output_file_path} as CSV, JSON and Markdown"
+        )
+        save_experiments(experiments, f"{output_file_path}")
 
 
 if __name__ == "__main__":
