@@ -725,7 +725,11 @@ def main() -> None:
             len(tokenizer_pretrained)
             - len(tokenizer_pretrained.all_special_tokens)
             - len(delta_counter)
+            - 2  # BOS and EOS as part of the data (non-special tokens)
         )
+        end_idx = int(
+            round(end_idx * 0.99, 0)
+        )  # Leave some room for close to 0 frequency tokens
 
         # Add BOS and EOS frequencies
         item_count = len(data_iterator)
