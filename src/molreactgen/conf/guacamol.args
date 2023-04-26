@@ -1,2 +1,3 @@
+--config_overrides n_positions=128,n_embd=144,n_layer=12,n_head=12
 --random_seed false
 --fp16 true
