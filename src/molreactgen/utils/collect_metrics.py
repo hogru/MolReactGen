@@ -363,7 +363,10 @@ class Experiment:
 
         try:
             with open(path / "all_results.json") as f:
-                return int(json.load(f)["epoch"])
+                # Hugging Face reports the number of epochs as a float
+                # Sometimes the number is very close to the number of epochs, but not exactly
+                # Therefore, we round the number of epochs
+                return int(round(json.load(f)["epoch"], 0))
         except (FileNotFoundError, KeyError):
             return None
 
