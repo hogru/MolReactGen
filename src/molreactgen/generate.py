@@ -289,37 +289,42 @@ def create_and_save_generation_config(
         early_stopping = False
     do_sample = True
 
-    if (model_file_path / DEFAULT_GENERATION_CONFIG_FILE_NAME).is_file():
-        generation_config, unused_kwargs = GenerationConfig.from_pretrained(
-            model_file_path,
-            do_sample=do_sample,
-            num_return_sequences=num_to_generate_in_pipeline,
-            min_new_tokens=min_length,
-            max_new_tokens=max_length,
-            pad_token_id=tokenizer.pad_token_id,
-            # eos_token_id=stopping_criteria,
-            num_beams=num_beams,
-            early_stopping=early_stopping,
-            temperature=temperature,
-            length_penalty=0.0,  # does neither promote nor penalize long sequences
-            return_unused_kwargs=True,
-        )
-        if len(unused_kwargs) > 0:
-            logger.warning(f"Unused kwargs for GenerationConfig: {list(unused_kwargs)}")
+    # TODO Include again once I resolve the following issue:
+    # The pre-trained GPT-2 model has an eos_token_id of 50256, but the fine-tuned model
+    # needs different stopping criteria. The problem is, that HF does not like overwriting it
+    # Therefore I always create a new GenerationConfig (instead of reading and changing it)
 
-    else:
-        generation_config = GenerationConfig(
-            do_sample=do_sample,
-            num_return_sequences=num_to_generate_in_pipeline,
-            min_new_tokens=min_length,
-            max_new_tokens=max_length,
-            pad_token_id=tokenizer.pad_token_id,
-            eos_token_id=stopping_criteria,
-            num_beams=num_beams,
-            early_stopping=early_stopping,
-            temperature=temperature,
-            length_penalty=0.0,  # does neither promote nor penalize long sequences
-        )
+    # if (model_file_path / DEFAULT_GENERATION_CONFIG_FILE_NAME).is_file():
+    #     generation_config, unused_kwargs = GenerationConfig.from_pretrained(
+    #         model_file_path,
+    #         do_sample=do_sample,
+    #         num_return_sequences=num_to_generate_in_pipeline,
+    #         min_new_tokens=min_length,
+    #         max_new_tokens=max_length,
+    #         pad_token_id=tokenizer.pad_token_id,
+    #         # eos_token_id=stopping_criteria,
+    #         num_beams=num_beams,
+    #         early_stopping=early_stopping,
+    #         temperature=temperature,
+    #         length_penalty=0.0,  # does neither promote nor penalize long sequences
+    #         return_unused_kwargs=True,
+    #     )
+    #     if len(unused_kwargs) > 0:
+    #         logger.warning(f"Unused kwargs for GenerationConfig: {list(unused_kwargs)}")
+    #
+    # else:
+    generation_config = GenerationConfig(
+        do_sample=do_sample,
+        num_return_sequences=num_to_generate_in_pipeline,
+        min_new_tokens=min_length,
+        max_new_tokens=max_length,
+        pad_token_id=tokenizer.pad_token_id,
+        eos_token_id=stopping_criteria,
+        num_beams=num_beams,
+        early_stopping=early_stopping,
+        temperature=temperature,
+        length_penalty=0.0,  # does neither promote nor penalize long sequences
+    )
 
     if overwrite_pretrained_config:
         generation_config.save_pretrained(model_file_path)
