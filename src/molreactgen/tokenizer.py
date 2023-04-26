@@ -16,7 +16,6 @@ from typing import Any, Final, Optional, Sequence, Union
 
 # Most of Hugging Face has poor type hints, trying to avoid mypy errors
 import transformers  # type: ignore
-from tokenizers import Regex, Tokenizer, decoders  # type: ignore
 from tokenizers.models import BPE, Unigram, WordLevel, WordPiece  # type: ignore
 from tokenizers.pre_tokenizers import Split  # type: ignore
 from tokenizers.processors import TemplateProcessing  # type: ignore
@@ -27,6 +26,8 @@ from tokenizers.trainers import (  # type: ignore
     WordPieceTrainer,
 )
 from transformers import BatchEncoding, PreTrainedTokenizerFast
+
+from tokenizers import Regex, Tokenizer, decoders  # type: ignore
 
 # Tokenizer related
 DATASET_COLUMN_NAME: Final = "items"
@@ -392,11 +393,12 @@ def get_modified_vocab(
     if int(start_idx) < 0:
         raise ValueError("start_idx must be a positive number")
 
-    end_idx = len(vocab_original) - 2 if end_idx is None else int(end_idx)
+    end_idx = len(vocab_original) if end_idx is None else int(end_idx)
 
-    if not 0 < end_idx < len(vocab_original):
+    if not start_idx + len(modified_freq) < end_idx < len(vocab_original):
         raise ValueError(
-            f"end_idx must be a positive number and smaller than "
+            f"end_idx must be a positive number, be larger than start_idx plus the length "
+            f"of the new vocabulary and smaller than "
             f"{len(vocab_original)}, the length of tokenizer_original"
         )
 
@@ -429,7 +431,7 @@ def get_modified_vocab(
             return to
 
         idx_original: Optional[int]
-        # Go over all tokens in modfied_freq and do the following
+        # Go over all tokens in modified_freq and do the following
         for token_modified, count in modified_freq.most_common(None):
             # Delete the original entry from the vocab (if it exists) and remember its index
             idx_original = vocab_modified.pop(token_modified, None)
