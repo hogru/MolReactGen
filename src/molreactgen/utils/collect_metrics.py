@@ -13,8 +13,6 @@ from pathlib import Path
 from typing import Any, Final, Iterable, Optional, Union
 
 import pandas as pd  # type: ignore
-
-# import pandas as pd  # type: ignore
 from codetiming import Timer
 from humanfriendly import format_timespan  # type: ignore
 from loguru import logger
@@ -30,10 +28,11 @@ from rich.progress import (
 )
 from rich.table import Table
 
-import wandb
+# import wandb
 from molreactgen.helpers import configure_logging, determine_log_level
 from molreactgen.tokenizer import REGEX_PATTERN_ATOM, REGEX_PATTERN_SMARTS
-from molreactgen.train import WANDB_PROJECT_NAME
+
+# from molreactgen.train import WANDB_PROJECT_NAME
 
 # Global variables, defaults
 DEFAULT_OUTPUT_FILE_NAME: Final[str] = "./metrics"
@@ -103,6 +102,7 @@ class Metric:
     ref: str = ""
     idx: int = 0
     getter: Optional[Callable] = None
+    retrieved: bool = False
 
     def __hash__(self) -> int:
         return hash(self.column_name)
@@ -127,7 +127,7 @@ class Experiment:
         "test_perplexity": "_get_test_perplexity",
         "validity_mols": "_get_validity_mols",
         "uniqueness_mols": "_get_uniqueness_mols",
-        "novelty_mols": "_get_novelty",
+        "novelty_mols": "_get_novelty_mols",
         "fcd_mols": "_get_fcd",
         "fcd_g_mols": "_get_fcd_g",
         "validity_rts": "_get_validity_rts",
@@ -340,60 +340,70 @@ class Experiment:
             self._metrics[getter].ref = getter
             self._metrics[getter].getter = getattr(self, self._getters[getter])
 
-    @staticmethod
-    def _is_valid_directory(path: Path) -> bool:
-        """Check if a directory is a valid directory."""
+    @property
+    def directory(self) -> str:
+        return self._directory
 
-        if not isinstance(path, Path) or (not path.is_dir()) or path.is_symlink():
+    @directory.setter
+    def directory(self, value: str) -> None:
+        if hasattr(self, "_directory"):
+            raise AttributeError("directory is already set, can not be changed")
+
+        # noinspection PyAttributeOutsideInit
+        self._directory = value
+
+    def _is_valid_directory(self) -> bool:
+        """Check if the directory is valid."""
+
+        if (
+            not isinstance(self.directory, Path)
+            or (not self.directory.is_dir())
+            or self.directory.is_symlink()
+        ):
             return False
 
         return (
-            not path.stem.startswith(CHECKPOINT_FILE)
-            or not (path / SCHEDULER_FILE).is_file()
+            not self.directory.stem.startswith(CHECKPOINT_FILE)
+            or not (self.directory / SCHEDULER_FILE).is_file()
         )
 
-    @staticmethod
-    def _is_model_directory(path: Path) -> bool:
-        """Check if a directory is a model directory."""
+    def _is_model_directory(self) -> bool:
+        """Check if the directory is a model directory."""
 
-        return Experiment._is_valid_directory(path) and (path / MODEL_FILE).is_file()
+        return self._is_valid_directory() and (self.directory / MODEL_FILE).is_file()
 
-    @staticmethod
-    def _is_generated_molecules_directory(path: Path) -> bool:
-        """Check if a directory holds generated molecules."""
+    def _is_generated_molecules_directory(self) -> bool:
+        """Check if the directory holds generated molecules."""
 
         return (
-            Experiment._is_valid_directory(path)
-            and (path / GENERATED_SMILES_FILE).is_file()
+            self._is_valid_directory()
+            and (self.directory / GENERATED_SMILES_FILE).is_file()
         )
 
-    @staticmethod
-    def _is_generated_reaction_templates_directory(path: Path) -> bool:
-        """Check if a directory holds generated reaction templates."""
+    def _is_generated_reaction_templates_directory(self) -> bool:
+        """Check if the directory holds generated reaction templates."""
 
         return (
-            Experiment._is_valid_directory(path)
-            and (path / GENERATED_SMARTS_FILE).is_file()
+            self._is_valid_directory()
+            and (self.directory / GENERATED_SMARTS_FILE).is_file()
         )
 
-    @staticmethod
-    def _is_evaluated_directory(path: Path) -> bool:
-        """Check if a directory has been evaluated."""
+    def _is_evaluated_directory(self) -> bool:
+        """Check if the directory has been evaluated."""
 
         return (
-            Experiment._is_generated_molecules_directory(path)
-            and (path / EVALUATED_FILE).is_file()
+            self._is_generated_molecules_directory()
+            and (self.directory / EVALUATED_FILE).is_file()
         ) or (
-            Experiment._is_generated_reaction_templates_directory(path)
-            and (path / GENERATION_STATS_FILE).is_file()
+            self._is_generated_reaction_templates_directory()
+            and (self.directory / GENERATION_STATS_FILE).is_file()
         )
 
-    @staticmethod
-    def _get_pre_tokenizer(path: Path) -> Optional[str]:
+    def _get_pre_tokenizer(self) -> Optional[str]:
         """Get the pre-tokenizer."""
 
         try:
-            with open(path / TOKENIZER_FILE) as f:
+            with open(self.model_directory / TOKENIZER_FILE) as f:
                 tokenizer = json.load(f)
         except FileNotFoundError:
             return None
@@ -432,22 +442,20 @@ class Experiment:
 
         return None
 
-    @staticmethod
-    def _get_algorithm(path: Path) -> Optional[str]:
+    def _get_algorithm(self) -> Optional[str]:
         """Get the tokenization algorithm."""
 
         try:
-            with open(path / TOKENIZER_FILE) as f:
+            with open(self.model_directory / TOKENIZER_FILE) as f:
                 return json.load(f)[TOKENIZER_MODEL_KEY][TOKENIZER_TYPE_KEY]
         except (FileNotFoundError, KeyError):
             return None
 
-    @staticmethod
-    def _get_vocab_size(path: Path) -> Optional[int]:
+    def _get_vocab_size(self) -> Optional[int]:
         """Get the vocabulary size (without special tokens)."""
 
         try:
-            with open(path / TOKENIZER_FILE) as f:
+            with open(self.model_directory / TOKENIZER_FILE) as f:
                 tokenizer = json.load(f)
         except FileNotFoundError:
             return None
@@ -459,12 +467,11 @@ class Experiment:
         except KeyError:
             return None
 
-    @staticmethod
-    def _get_num_epochs(path: Path) -> Optional[int]:
+    def _get_num_epochs(self) -> Optional[int]:
         """Get the number of epochs."""
 
         try:
-            with open(path / ALL_RESULTS_FILE) as f:
+            with open(self.model_directory / ALL_RESULTS_FILE) as f:
                 # Hugging Face reports the number of epochs as a float
                 # Sometimes the number is very close to the number of epochs, but not exactly
                 # Therefore, we round the number of epochs
@@ -473,12 +480,11 @@ class Experiment:
         except (FileNotFoundError, KeyError):
             return None
 
-    @staticmethod
-    def _get_batch_size(path: Path) -> Optional[int]:
+    def _get_batch_size(self) -> Optional[int]:
         """Get the batch size."""
 
         try:
-            content = Path(path / README_FILE).read_text()
+            content = Path(self.model_directory / README_FILE).read_text()
         except FileNotFoundError:
             return None
 
@@ -486,12 +492,11 @@ class Experiment:
         match = pattern.search(content)
         return None if match is None else int(match[3])
 
-    @staticmethod
-    def _get_lr(path: Path) -> Optional[float]:
+    def _get_lr(self) -> Optional[float]:
         """Get the learning rate."""
 
         try:
-            content = Path(path / README_FILE).read_text()
+            content = Path(self.model_directory / README_FILE).read_text()
         except FileNotFoundError:
             return None
 
@@ -499,70 +504,65 @@ class Experiment:
         match = pattern.search(content)
         return None if match is None else float(match[3])
 
-    @staticmethod
-    def _get_wandb_run_id(path: Path) -> Optional[str]:
+    def _get_wandb_run_id(self) -> Optional[str]:
         """Get the wandb run id."""
 
         return "0"
 
-        api = wandb.Api()
-        entity = api.default_entity
-        runs = api.runs("/".join((entity, WANDB_PROJECT_NAME)))
-        return next(
-            (
-                run.id
-                for run in runs
-                if Path(run.config.get(WANDB_OUTPUT_DIR, "")).stem == path.stem
-            ),
-            None,
-        )
+        # api = wandb.Api()
+        # entity = api.default_entity
+        # runs = api.runs("/".join((entity, WANDB_PROJECT_NAME)))
+        # return next(
+        #     (
+        #         run.id
+        #         for run in runs
+        #         if Path(run.config.get(WANDB_OUTPUT_DIR, "")).stem == path.stem
+        #     ),
+        #     None,
+        # )
 
-    @staticmethod
-    def _get_wandb_run_name(path: Path) -> Optional[str]:
+    def _get_wandb_run_name(self) -> Optional[str]:
         """Get the wandb run name."""
 
         return "Empty"
 
         # TODO very inefficient, but would need to cache some information
         #  or get rid of one function == one metric
-        api = wandb.Api()
-        entity = api.default_entity
-        runs = api.runs("/".join((entity, WANDB_PROJECT_NAME)))
-        return next(
-            (
-                run.name
-                for run in runs
-                if Path(run.config.get(WANDB_OUTPUT_DIR, "")).stem == path.stem
-            ),
-            None,
-        )
+        # api = wandb.Api()
+        # entity = api.default_entity
+        # runs = api.runs("/".join((entity, WANDB_PROJECT_NAME)))
+        # return next(
+        #     (
+        #         run.name
+        #         for run in runs
+        #         if Path(run.config.get(WANDB_OUTPUT_DIR, "")).stem == path.stem
+        #     ),
+        #     None,
+        # )
 
-    @staticmethod
-    def _get_train_loss(path: Path) -> Optional[float]:
+    def _get_train_loss(self) -> Optional[float]:
         """Get the last training loss."""
 
         try:
-            with open(path / ALL_RESULTS_FILE) as f:
+            with open(self.model_directory / ALL_RESULTS_FILE) as f:
                 return json.load(f)[TRAIN_LOSS_KEY]
         except (FileNotFoundError, KeyError):
             return None
 
-    @staticmethod
-    def _get_val_loss(path: Path) -> Optional[float]:
+    def _get_val_loss(self) -> Optional[float]:
         """Get the validation loss."""
 
         try:
-            with open(path / TRAINER_STATE_FILE) as f:
+            with open(self.model_directory / TRAINER_STATE_FILE) as f:
                 return json.load(f)[VAL_LOSS_KEY]
         except (FileNotFoundError, KeyError):
             return None
 
-    @staticmethod
-    def _get_val_acc(path: Path) -> Optional[float]:
+    def _get_val_acc(self) -> Optional[float]:
         """Get the validation accuracy."""
 
         try:
-            with open(path / TRAINER_STATE_FILE) as f:
+            with open(self.model_directory / TRAINER_STATE_FILE) as f:
                 log_history = json.load(f)[LOG_HISTORY_KEY]
                 return next(
                     (
@@ -570,188 +570,152 @@ class Experiment:
                         for log in reversed(log_history)
                         if EVAL_ACC_KEY in log
                     )
-                    # log_history[-1]["eval_accuracy"],
                 )
         except (FileNotFoundError, KeyError):
             return None
 
-    @staticmethod
-    def _get_test_loss(path: Path) -> Optional[float]:
+    def _get_test_loss(self) -> Optional[float]:
         """Get the test loss."""
 
         try:
-            with open(path / ALL_RESULTS_FILE) as f:
+            with open(self.model_directory / ALL_RESULTS_FILE) as f:
                 return json.load(f)[TEST_LOSS_KEY]
         except (FileNotFoundError, KeyError):
             return None
 
-    @staticmethod
-    def _get_test_acc(path: Path) -> Optional[float]:
+    def _get_test_acc(self) -> Optional[float]:
         """Get the test accuracy."""
 
         try:
-            with open(path / ALL_RESULTS_FILE) as f:
+            with open(self.model_directory / ALL_RESULTS_FILE) as f:
                 return json.load(f)[TEST_ACC_KEY]
         except (FileNotFoundError, KeyError):
             return None
 
-    @staticmethod
-    def _get_test_perplexity(path: Path) -> Optional[float]:
-        """Get the test loss."""
+    def _get_test_perplexity(self) -> Optional[float]:
+        """Get the test perplexity."""
 
         try:
-            with open(path / ALL_RESULTS_FILE) as f:
+            with open(self.model_directory / ALL_RESULTS_FILE) as f:
                 return json.load(f)[TEST_PPL_KEY]
         except (FileNotFoundError, KeyError):
             return None
 
-    @staticmethod
-    def _get_validity_mols(path: Path) -> Optional[float]:
-        """Get the validity of the generated items."""
+    def _get_validity_mols(self) -> Optional[float]:
+        """Get the validity of the generated molecules."""
 
         try:
-            with open(path / EVALUATED_FILE) as f:
+            with open(self.generated_molecules_directory / EVALUATED_FILE) as f:
                 return json.load(f)[MOLS_VALIDITY_KEY]
         except (FileNotFoundError, KeyError):
             return None
 
-    @staticmethod
-    def _get_uniqueness_mols(path: Path) -> Optional[float]:
-        """Get the uniqueness of the generated items."""
+    def _get_uniqueness_mols(self) -> Optional[float]:
+        """Get the uniqueness of the generated molecules."""
 
         try:
-            with open(path / EVALUATED_FILE) as f:
+            with open(self.generated_molecules_directory / EVALUATED_FILE) as f:
                 return json.load(f)[MOLS_UNIQUENESS_KEY]
         except (FileNotFoundError, KeyError):
             return None
 
-    @staticmethod
-    def _get_novelty(path: Path) -> Optional[float]:
-        """Get the novelty of the generated items."""
+    def _get_novelty_mols(self) -> Optional[float]:
+        """Get the novelty of the generated molecules."""
 
         try:
-            with open(path / EVALUATED_FILE) as f:
+            with open(self.generated_molecules_directory / EVALUATED_FILE) as f:
                 return json.load(f)[MOLS_NOVELTY_KEY]
         except (FileNotFoundError, KeyError):
             return None
 
-    @staticmethod
-    def _get_fcd(path: Path) -> Optional[float]:
-        """Get the FCD of the generated items."""
+    def _get_fcd(self) -> Optional[float]:
+        """Get the FCD of the generated molecules."""
 
         try:
-            with open(path / EVALUATED_FILE) as f:
+            with open(self.generated_molecules_directory / EVALUATED_FILE) as f:
                 return json.load(f)[MOLS_FCD_KEY]
         except (FileNotFoundError, KeyError):
             return None
 
-    @staticmethod
-    def _get_fcd_g(path: Path) -> Optional[float]:
-        """Get the FCD (Guacamol style)  of the generated items."""
+    def _get_fcd_g(self) -> Optional[float]:
+        """Get the FCD (Guacamol style)  of the generated molecules."""
 
         try:
-            with open(path / EVALUATED_FILE) as f:
+            with open(self.generated_molecules_directory / EVALUATED_FILE) as f:
                 return json.load(f)[MOLS_FCD_GUACAMOL_KEY]
         except (FileNotFoundError, KeyError):
             return None
 
-    @staticmethod
-    def _read_generation_file(path: Path) -> Optional[dict[str, Any]]:
+    def _read_generation_file(self) -> Optional[dict[str, Any]]:
         """Read the generation file."""
 
         try:
-            with open(path / GENERATION_STATS_FILE) as f:
+            with open(
+                self.generated_reaction_templates_directory / GENERATION_STATS_FILE
+            ) as f:
                 return json.load(f)
         except FileNotFoundError:
             return None
 
-    @staticmethod
-    def _get_validity_rts(path: Path) -> Optional[float]:
+    def _get_validity_rts(self) -> Optional[float]:
         """Get the validity of the generated reaction templates."""
 
-        getter = getattr(Experiment, "_read_generation_file", None)
-        if callable(getter):
-            generation_stats = getter(path)
+        generation_stats = self._read_generation_file()
 
-            try:
-                return generation_stats[RTS_VALIDITY_KEY]
-            except KeyError:
-                return None
+        try:
+            return generation_stats[RTS_VALIDITY_KEY]
+        except (KeyError, TypeError):
+            return None
 
-        return None
-
-    @staticmethod
-    def _get_uniqueness_rts(path: Path) -> Optional[float]:
+    def _get_uniqueness_rts(self) -> Optional[float]:
         """Get the uniqueness of the generated reaction_templates."""
 
-        getter = getattr(Experiment, "_read_generation_file", None)
-        if callable(getter):
-            generation_stats = getter(path)
+        generation_stats = self._read_generation_file()
 
-            try:
-                return generation_stats[RTS_UNIQUENESS_KEY]
-            except KeyError:
-                return None
+        try:
+            return generation_stats[RTS_UNIQUENESS_KEY]
+        except (KeyError, TypeError):
+            return None
 
-        return None
-
-    @staticmethod
-    def _get_feasibility(path: Path) -> Optional[float]:
+    def _get_feasibility(self) -> Optional[float]:
         """Get the feasibility of the generated reaction templates."""
 
-        getter = getattr(Experiment, "_read_generation_file", None)
-        if callable(getter):
-            generation_stats = getter(path)
+        generation_stats = self._read_generation_file()
 
-            try:
-                return generation_stats[RTS_FEASIBILITY_KEY]
-            except KeyError:
-                return None
+        try:
+            return generation_stats[RTS_FEASIBILITY_KEY]
+        except (KeyError, TypeError):
+            return None
 
-        return None
-
-    @staticmethod
-    def _get_known_either(path: Path) -> Optional[int]:
+    def _get_known_either(self) -> Optional[int]:
         """Get the reaction templates known from either validation or test set."""
 
-        getter = getattr(Experiment, "_read_generation_file", None)
-        if callable(getter):
-            generation_stats = getter(path)
+        generation_stats = self._read_generation_file()
 
-            try:
-                return generation_stats[RTS_KNOWN_EITHER_KEY]
-            except KeyError:
-                return None
+        try:
+            return generation_stats[RTS_KNOWN_EITHER_KEY]
+        except (KeyError, TypeError):
+            return None
 
-        return None
-
-    @staticmethod
-    def _get_known_val(path: Path) -> Optional[int]:
+    def _get_known_val(self) -> Optional[int]:
         """Get the reaction templates known from the validation set."""
-        getter = getattr(Experiment, "_read_generation_file", None)
-        if callable(getter):
-            generation_stats = getter(path)
 
-            try:
-                return generation_stats[RTS_KNOWN_VAL_KEY]
-            except KeyError:
-                return None
+        generation_stats = self._read_generation_file()
 
-        return None
+        try:
+            return generation_stats[RTS_KNOWN_VAL_KEY]
+        except (KeyError, TypeError):
+            return None
 
-    @staticmethod
-    def _get_known_test(path: Path) -> Optional[int]:
+    def _get_known_test(self) -> Optional[int]:
         """Get the reaction templates known from the test set."""
-        getter = getattr(Experiment, "_read_generation_file", None)
-        if callable(getter):
-            generation_stats = getter(path)
 
-            try:
-                return generation_stats[RTS_KNOWN_TEST_KEY]
-            except KeyError:
-                return None
+        generation_stats = self._read_generation_file()
 
-        return None
+        try:
+            return generation_stats[RTS_KNOWN_TEST_KEY]
+        except (KeyError, TypeError):
+            return None
 
     @property
     def tokenizer_metrics(self) -> Optional[dict[str, Any]]:
@@ -791,23 +755,23 @@ class Experiment:
 
     @property
     def valid(self) -> bool:
-        return self._is_valid_directory(self.directory)
+        return self._is_valid_directory()
 
     @property
     def has_model(self) -> bool:
-        return self._is_model_directory(self.directory)
+        return self._is_model_directory()
 
     @property
     def has_generated_molecules(self) -> bool:
-        return self._is_generated_molecules_directory(self.directory)
+        return self._is_generated_molecules_directory()
 
     @property
     def has_generated_reaction_templates(self) -> bool:
-        return self._is_generated_reaction_templates_directory(self.directory)
+        return self._is_generated_reaction_templates_directory()
 
     @property
     def has_evaluation(self) -> bool:
-        return self._is_evaluated_directory(self.directory)
+        return self._is_evaluated_directory()
 
     @property
     def model_directory(self) -> Optional[Path]:
@@ -816,9 +780,11 @@ class Experiment:
         elif (
             (self.has_generated_molecules or self.has_generated_reaction_templates)
             and (self.directory / MODEL_LINK_TO_FILE).is_symlink()
-            and self._is_model_directory(
-                (self.directory / MODEL_LINK_TO_FILE).resolve()
-            )
+            # That would be a nice check, but I would need to create an experiment to check this
+            # (or copy the code)
+            # and self._is_model_directory(
+            #     (self.directory / MODEL_LINK_TO_FILE).resolve()
+            # )
         ):
             return (self.directory / MODEL_LINK_TO_FILE).resolve()
         else:
@@ -845,16 +811,16 @@ class Experiment:
                 "This experiment contains both generated molecules and reaction templates"
             )
 
-    @staticmethod
     def get_creation_date(
-        path: Path, formatter: str = "%Y-%m-%d %H:%M"
+        self, formatter: str = "%Y-%m-%d %H:%M"
     ) -> tuple[datetime.datetime, str]:
         """Get the creation date of an experiment."""
 
         # This is platform specific, but I don't care for now
         # see also https://stackoverflow.com/questions/237079/how-do-i-get-file-creation-and-modification-date-times
-        path = Path(path).resolve()
-        creation_date = datetime.datetime.fromtimestamp(os.path.getctime(path))
+        creation_date = datetime.datetime.fromtimestamp(
+            os.path.getctime(self.directory)
+        )
         return creation_date, format(creation_date, formatter)
 
     @classmethod
@@ -886,7 +852,6 @@ class Experiment:
         raise_error_on_none: bool = False,
         raise_error_if_not_available: bool = True,
     ) -> Optional[Metric]:
-        # getter = getattr(self, self._getters[metric])
         metric_ = self._metrics.get(metric, None)
         if metric_ is None:
             if raise_error_if_not_available:
@@ -895,9 +860,7 @@ class Experiment:
                 return None
 
         getter = self._metrics[metric].getter
-        # getter = self._metrics[.get("metric].getter
         if not callable(getter):
-            # if metric not in self._metrics.keys() or not callable(getter):
             if raise_error_if_not_available:
                 raise AttributeError(
                     f"Can not determine value of metric {metric} (no getter)"
@@ -906,26 +869,29 @@ class Experiment:
                 return None
 
         # try:
-        if self.has_model and (
-            metric in self.tokenizer_metrics
-            or metric in self.model_metrics
-            or metric in self.training_metrics
-            or metric in self.wandb_metrics
-        ):
-            directory = self.model_directory
-        elif self.has_generated_molecules and metric in self.evaluation_mols_metrics:
-            directory = self.generated_molecules_directory
-        elif (
-            self.has_generated_reaction_templates
-            and metric in self.evaluation_rts_metrics
-        ):
-            directory = self.generated_reaction_templates_directory
-        else:
-            raise AttributeError(
-                f"Can not determine value of metric {metric} (no directory)"
-            )
+        # if self.has_model and (
+        #     metric in self.tokenizer_metrics
+        #     or metric in self.model_metrics
+        #     or metric in self.training_metrics
+        #     or metric in self.wandb_metrics
+        # ):
+        #     directory = self.model_directory
+        # elif self.has_generated_molecules and metric in self.evaluation_mols_metrics:
+        #     directory = self.generated_molecules_directory
+        # elif (
+        #     self.has_generated_reaction_templates
+        #     and metric in self.evaluation_rts_metrics
+        # ):
+        #     directory = self.generated_reaction_templates_directory
+        # else:
+        #     raise AttributeError(
+        #         f"Can not determine value of metric {metric} (no directory)"
+        #     )
 
-        value = getter(directory)
+        if metric_.retrieved is True:
+            return metric_
+
+        value = getter()
         if value is None and raise_error_on_none:
             raise ValueError(f"Metric {metric} is None")
 
@@ -935,13 +901,8 @@ class Experiment:
                 f"expected {self._metrics[metric].dtype}, got {type(value)}"
             )
 
-        # except (NameError, TypeError):
-        #     logger.warning(
-        #         f"Could not get metric {metric} for experiment in {self.directory}"
-        #     )
-        #     value = None
-
         self._metrics[metric].value = value
+        self._metrics[metric].retrieved = True
         return self._metrics[metric]
 
     def __eq__(self, other: object) -> bool:
@@ -975,53 +936,53 @@ def collect_experiments(directory: Union[str, os.PathLike]) -> list[Experiment]:
 
 
 # TODO delete this once everything works
-def collect_metrics(
-    experiments: Union[Experiment, Iterable[Experiment]]
-) -> dict[Experiment, list[Metric]]:
-    """Collect metrics from a number of experiments."""
-
-    if isinstance(experiments, Experiment):
-        experiments = [experiments]
-
-    if any(not isinstance(e, Experiment) for e in experiments):
-        raise TypeError("experiments must be an (Iterable of type) Experiment")
-
-    metrics: dict[Experiment, list[Metric]] = {}
-    for exp in experiments:
-        metrics[exp]: list[Metric] = []
-        none_metrics: list[str] = []
-        print(f"Looking at Experiment in {exp.directory}")
-        if exp.has_generated_molecules:
-            print(
-                f"Generated molecules dir: {exp.generated_molecules_directory.stem}, "
-                f"created at {exp.get_creation_date(exp.generated_molecules_directory)[1]}"
-            )
-        if exp.has_generated_reaction_templates:
-            print(
-                f"Generated reaction templates dir: {exp.generated_reaction_templates_directory.stem}, "
-                f"created at {exp.get_creation_date(exp.generated_reaction_templates_directory)[1]}"
-            )
-        if exp.has_model:
-            print(
-                f"Model dir: {exp.model_directory.stem}, "
-                f"created at {exp.get_creation_date(exp.model_directory)[1]}"
-            )
-
-        for m in exp.available_metrics:
-            metric = exp.get_metric(m)
-            if metric.value is None:
-                none_metrics.append(m)
-            else:
-                print(f"{m}: {format(metric.value, metric.formatter)}, ", end="")
-            metrics[exp].append(metric)
-        print()
-
-        if none_metrics:
-            print(f"Metrics with None value: {none_metrics}")
-
-        print("----------------------------------------")
-
-    return metrics
+# def collect_metrics(
+#     experiments: Union[Experiment, Iterable[Experiment]]
+# ) -> dict[Experiment, list[Metric]]:
+#     """Collect metrics from a number of experiments."""
+#
+#     if isinstance(experiments, Experiment):
+#         experiments = [experiments]
+#
+#     if any(not isinstance(e, Experiment) for e in experiments):
+#         raise TypeError("experiments must be an (Iterable of type) Experiment")
+#
+#     metrics: dict[Experiment, list[Metric]] = {}
+#     for exp in experiments:
+#         metrics[exp]: list[Metric] = []
+#         none_metrics: list[str] = []
+#         print(f"Looking at Experiment in {exp.directory}")
+#         if exp.has_generated_molecules:
+#             print(
+#                 f"Generated molecules dir: {exp.generated_molecules_directory.stem}, "
+#                 f"created at {exp.get_creation_date(exp.generated_molecules_directory)[1]}"
+#             )
+#         if exp.has_generated_reaction_templates:
+#             print(
+#                 f"Generated reaction templates dir: {exp.generated_reaction_templates_directory.stem}, "
+#                 f"created at {exp.get_creation_date(exp.generated_reaction_templates_directory)[1]}"
+#             )
+#         if exp.has_model:
+#             print(
+#                 f"Model dir: {exp.model_directory.stem}, "
+#                 f"created at {exp.get_creation_date(exp.model_directory)[1]}"
+#             )
+#
+#         for m in exp.available_metrics:
+#             metric = exp.get_metric(m)
+#             if metric.value is None:
+#                 none_metrics.append(m)
+#             else:
+#                 print(f"{m}: {format(metric.value, metric.formatter)}, ", end="")
+#             metrics[exp].append(metric)
+#         print()
+#
+#         if none_metrics:
+#             print(f"Metrics with None value: {none_metrics}")
+#
+#         print("----------------------------------------")
+#
+#     return metrics
 
 
 def _get_available_metrics(
@@ -1041,6 +1002,8 @@ def _get_available_metrics(
 def _build_row_from_experiment(
     experiment: Experiment, metrics: Iterable[str]
 ) -> tuple[Any, ...]:
+    """Build a row from an experiment for printing / saving it."""
+
     gen_dir = (
         None
         if experiment.generated_directory is None
@@ -1096,14 +1059,6 @@ def print_experiments(
         )
 
         for e in experiments:
-            # gen_dir = None if e.generated_directory is None else e.generated_directory.stem
-            # model_dir = None if e.model_directory is None else e.model_directory.stem
-            # row = [gen_dir, model_dir]
-            # for m in available_metrics:
-            #     metric = e.get_metric(m, raise_error_if_not_available=False)
-            #     row.append(None) if metric.value is None else row.append(
-            #         format(metric.value, metric.formatter)
-            #     )
             row = _build_row_from_experiment(e, available_metrics)
             table.add_row(*row)
             progress.advance(task)
