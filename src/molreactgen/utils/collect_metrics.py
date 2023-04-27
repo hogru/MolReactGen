@@ -83,7 +83,9 @@ MOLS_VALIDITY_KEY: Final[str] = "Validity"
 MOLS_UNIQUENESS_KEY: Final[str] = "Uniqueness"
 MOLS_NOVELTY_KEY: Final[str] = "Novelty"
 MOLS_FCD_KEY: Final[str] = "FCD"
-MOLS_FCD_GUACAMOL_KEY: Final[str] = "FCD Guacamol"
+MOLS_FCD_GUACAMOL_KEY: Final[str] = "FCD GuacaMol"
+RTS_COUNT_KEY: Final[str] = "counts"
+RTS_FRAC_KEY: Final[str] = "relative_fractions"
 RTS_VALIDITY_KEY: Final[str] = "valid"
 RTS_UNIQUENESS_KEY: Final[str] = "unique"
 RTS_FEASIBILITY_KEY: Final[str] = "feasible"
@@ -341,13 +343,16 @@ class Experiment:
             self._metrics[getter].getter = getattr(self, self._getters[getter])
 
     @property
-    def directory(self) -> str:
+    def directory(self) -> Path:
         return self._directory
 
     @directory.setter
-    def directory(self, value: str) -> None:
+    def directory(self, value: Path) -> None:
         if hasattr(self, "_directory"):
             raise AttributeError("directory is already set, can not be changed")
+
+        if not isinstance(value, Path):
+            raise TypeError("directory must be a pathlib.Path object")
 
         # noinspection PyAttributeOutsideInit
         self._directory = value
@@ -405,7 +410,7 @@ class Experiment:
         try:
             with open(self.model_directory / TOKENIZER_FILE) as f:
                 tokenizer = json.load(f)
-        except FileNotFoundError:
+        except (FileNotFoundError, TypeError):
             return None
 
         try:
@@ -448,7 +453,7 @@ class Experiment:
         try:
             with open(self.model_directory / TOKENIZER_FILE) as f:
                 return json.load(f)[TOKENIZER_MODEL_KEY][TOKENIZER_TYPE_KEY]
-        except (FileNotFoundError, KeyError):
+        except (FileNotFoundError, KeyError, TypeError):
             return None
 
     def _get_vocab_size(self) -> Optional[int]:
@@ -457,7 +462,7 @@ class Experiment:
         try:
             with open(self.model_directory / TOKENIZER_FILE) as f:
                 tokenizer = json.load(f)
-        except FileNotFoundError:
+        except (FileNotFoundError, TypeError):
             return None
 
         try:
@@ -477,7 +482,7 @@ class Experiment:
                 # Therefore, we round the number of epochs
                 return int(round(json.load(f)[EPOCH_KEY], 0))
 
-        except (FileNotFoundError, KeyError):
+        except (FileNotFoundError, TypeError, KeyError):
             return None
 
     def _get_batch_size(self) -> Optional[int]:
@@ -485,7 +490,7 @@ class Experiment:
 
         try:
             content = Path(self.model_directory / README_FILE).read_text()
-        except FileNotFoundError:
+        except (FileNotFoundError, TypeError):
             return None
 
         pattern = re.compile(rf"(^\s*)-(\s*{BATCH_SIZE_KEY}\s*)(\d*)", re.MULTILINE)
@@ -497,7 +502,7 @@ class Experiment:
 
         try:
             content = Path(self.model_directory / README_FILE).read_text()
-        except FileNotFoundError:
+        except (FileNotFoundError, TypeError):
             return None
 
         pattern = re.compile(rf"(^\s*)-(\s*{LR_KEY}\s*)(\d*\.\d*)", re.MULTILINE)
@@ -546,7 +551,7 @@ class Experiment:
         try:
             with open(self.model_directory / ALL_RESULTS_FILE) as f:
                 return json.load(f)[TRAIN_LOSS_KEY]
-        except (FileNotFoundError, KeyError):
+        except (FileNotFoundError, TypeError, KeyError):
             return None
 
     def _get_val_loss(self) -> Optional[float]:
@@ -555,7 +560,7 @@ class Experiment:
         try:
             with open(self.model_directory / TRAINER_STATE_FILE) as f:
                 return json.load(f)[VAL_LOSS_KEY]
-        except (FileNotFoundError, KeyError):
+        except (FileNotFoundError, TypeError, KeyError):
             return None
 
     def _get_val_acc(self) -> Optional[float]:
@@ -571,7 +576,7 @@ class Experiment:
                         if EVAL_ACC_KEY in log
                     )
                 )
-        except (FileNotFoundError, KeyError):
+        except (FileNotFoundError, TypeError, KeyError):
             return None
 
     def _get_test_loss(self) -> Optional[float]:
@@ -580,7 +585,7 @@ class Experiment:
         try:
             with open(self.model_directory / ALL_RESULTS_FILE) as f:
                 return json.load(f)[TEST_LOSS_KEY]
-        except (FileNotFoundError, KeyError):
+        except (FileNotFoundError, TypeError, KeyError):
             return None
 
     def _get_test_acc(self) -> Optional[float]:
@@ -589,7 +594,7 @@ class Experiment:
         try:
             with open(self.model_directory / ALL_RESULTS_FILE) as f:
                 return json.load(f)[TEST_ACC_KEY]
-        except (FileNotFoundError, KeyError):
+        except (FileNotFoundError, TypeError, KeyError):
             return None
 
     def _get_test_perplexity(self) -> Optional[float]:
@@ -598,7 +603,7 @@ class Experiment:
         try:
             with open(self.model_directory / ALL_RESULTS_FILE) as f:
                 return json.load(f)[TEST_PPL_KEY]
-        except (FileNotFoundError, KeyError):
+        except (FileNotFoundError, TypeError, KeyError):
             return None
 
     def _get_validity_mols(self) -> Optional[float]:
@@ -607,7 +612,7 @@ class Experiment:
         try:
             with open(self.generated_molecules_directory / EVALUATED_FILE) as f:
                 return json.load(f)[MOLS_VALIDITY_KEY]
-        except (FileNotFoundError, KeyError):
+        except (FileNotFoundError, TypeError, KeyError):
             return None
 
     def _get_uniqueness_mols(self) -> Optional[float]:
@@ -616,7 +621,7 @@ class Experiment:
         try:
             with open(self.generated_molecules_directory / EVALUATED_FILE) as f:
                 return json.load(f)[MOLS_UNIQUENESS_KEY]
-        except (FileNotFoundError, KeyError):
+        except (FileNotFoundError, TypeError, KeyError):
             return None
 
     def _get_novelty_mols(self) -> Optional[float]:
@@ -625,7 +630,7 @@ class Experiment:
         try:
             with open(self.generated_molecules_directory / EVALUATED_FILE) as f:
                 return json.load(f)[MOLS_NOVELTY_KEY]
-        except (FileNotFoundError, KeyError):
+        except (FileNotFoundError, TypeError, KeyError):
             return None
 
     def _get_fcd(self) -> Optional[float]:
@@ -634,7 +639,7 @@ class Experiment:
         try:
             with open(self.generated_molecules_directory / EVALUATED_FILE) as f:
                 return json.load(f)[MOLS_FCD_KEY]
-        except (FileNotFoundError, KeyError):
+        except (FileNotFoundError, TypeError, KeyError):
             return None
 
     def _get_fcd_g(self) -> Optional[float]:
@@ -643,7 +648,7 @@ class Experiment:
         try:
             with open(self.generated_molecules_directory / EVALUATED_FILE) as f:
                 return json.load(f)[MOLS_FCD_GUACAMOL_KEY]
-        except (FileNotFoundError, KeyError):
+        except (FileNotFoundError, TypeError, KeyError):
             return None
 
     def _read_generation_file(self) -> Optional[dict[str, Any]]:
@@ -654,7 +659,7 @@ class Experiment:
                 self.generated_reaction_templates_directory / GENERATION_STATS_FILE
             ) as f:
                 return json.load(f)
-        except FileNotFoundError:
+        except (FileNotFoundError, TypeError):
             return None
 
     def _get_validity_rts(self) -> Optional[float]:
@@ -663,7 +668,7 @@ class Experiment:
         generation_stats = self._read_generation_file()
 
         try:
-            return generation_stats[RTS_VALIDITY_KEY]
+            return generation_stats[RTS_FRAC_KEY][RTS_VALIDITY_KEY]
         except (KeyError, TypeError):
             return None
 
@@ -673,7 +678,7 @@ class Experiment:
         generation_stats = self._read_generation_file()
 
         try:
-            return generation_stats[RTS_UNIQUENESS_KEY]
+            return generation_stats[RTS_FRAC_KEY][RTS_UNIQUENESS_KEY]
         except (KeyError, TypeError):
             return None
 
@@ -683,7 +688,7 @@ class Experiment:
         generation_stats = self._read_generation_file()
 
         try:
-            return generation_stats[RTS_FEASIBILITY_KEY]
+            return generation_stats[RTS_FRAC_KEY][RTS_FEASIBILITY_KEY]
         except (KeyError, TypeError):
             return None
 
@@ -693,7 +698,7 @@ class Experiment:
         generation_stats = self._read_generation_file()
 
         try:
-            return generation_stats[RTS_KNOWN_EITHER_KEY]
+            return generation_stats[RTS_COUNT_KEY][RTS_KNOWN_EITHER_KEY]
         except (KeyError, TypeError):
             return None
 
@@ -703,7 +708,7 @@ class Experiment:
         generation_stats = self._read_generation_file()
 
         try:
-            return generation_stats[RTS_KNOWN_VAL_KEY]
+            return generation_stats[RTS_COUNT_KEY][RTS_KNOWN_VAL_KEY]
         except (KeyError, TypeError):
             return None
 
@@ -713,7 +718,7 @@ class Experiment:
         generation_stats = self._read_generation_file()
 
         try:
-            return generation_stats[RTS_KNOWN_TEST_KEY]
+            return generation_stats[RTS_COUNT_KEY][RTS_KNOWN_TEST_KEY]
         except (KeyError, TypeError):
             return None
 
