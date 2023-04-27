@@ -929,6 +929,7 @@ def main() -> None:
         max_length=max_length,
         num_beams=num_beams,
         temperature=temperature,
+        overwrite_pretrained_config=True,
     )
 
     logger.info("Loading model (with updated generation config)...")
