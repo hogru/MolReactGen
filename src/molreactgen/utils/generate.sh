@@ -32,8 +32,10 @@ echo "== Generating $NUM_MOLS molecules for each model in $1"
 echo "-- Reference file: $KNOWN_FILE"
 echo
 
+
+
 for dir in $(find "$1" -mindepth 0 -maxdepth 1 -type d); do
-  if [ -f "$dir/$MODEL_FILE" ] && [ ! -f "$dir/$OPTIM_FILE" ]; then
+  if [ -f "$dir"/"$MODEL_FILE" ] && [ ! -f "$dir"/"$OPTIM_FILE" ]; then
     echo "---- Starting generation at $(date +%T) with model in $dir ..."
     python generate.py smiles \
     --model "$dir" \
