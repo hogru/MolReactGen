@@ -30,7 +30,11 @@ from rich.table import Table
 
 # import wandb
 from molreactgen.helpers import configure_logging, determine_log_level
-from molreactgen.tokenizer import REGEX_PATTERN_ATOM, REGEX_PATTERN_SMARTS
+from molreactgen.tokenizer import (
+    REGEX_PATTERN_ATOM,
+    REGEX_PATTERN_CHAR,
+    REGEX_PATTERN_SMARTS,
+)
 
 # from molreactgen.train import WANDB_PROJECT_NAME
 
@@ -48,9 +52,11 @@ PRE_TOKENIZER_TYPE_KEY: Final[str] = "type"
 PRE_TOKENIZER_PATTERN_KEY: Final[str] = "pattern"
 PRE_TOKENIZER_REGEX_KEY: Final[str] = "Regex"
 PRE_TOKENIZER_SPLIT_KEY: Final[str] = "SPLIT"
+PRE_TOKENIZER_BYTELEVEL_KEY: Final[str] = "BYTELEVEL"
 PRE_TOKENIZER_CHAR_TYPE: Final[str] = "Char"
 PRE_TOKENIZER_ATOM_TYPE: Final[str] = "Atom"
 PRE_TOKENIZER_SMARTS_TYPE: Final[str] = "Smarts"
+PRE_TOKENIZER_BYTELEVEL_TYPE: Final[str] = "ByteLevel"
 TOKENIZER_MODEL_KEY: Final[str] = "model"
 TOKENIZER_TYPE_KEY: Final[str] = "type"
 TOKENIZER_VOCAB_KEY: Final[str] = "vocab"
@@ -414,7 +420,23 @@ class Experiment:
             return None
 
         try:
-            if tokenizer[PRE_TOKENIZER_KEY] is None:
+            if (
+                tokenizer[PRE_TOKENIZER_KEY] is not None
+                and tokenizer[PRE_TOKENIZER_KEY][PRE_TOKENIZER_TYPE_KEY].upper()
+                == PRE_TOKENIZER_BYTELEVEL_KEY
+            ):
+                return PRE_TOKENIZER_BYTELEVEL_TYPE
+        except KeyError:
+            return None
+
+        try:
+            if (
+                tokenizer[PRE_TOKENIZER_KEY] is None
+                or tokenizer[PRE_TOKENIZER_KEY][PRE_TOKENIZER_PATTERN_KEY][
+                    PRE_TOKENIZER_REGEX_KEY
+                ]
+                == REGEX_PATTERN_CHAR
+            ):
                 return PRE_TOKENIZER_CHAR_TYPE
         except KeyError:
             return None
@@ -760,11 +782,17 @@ class Experiment:
 
     @property
     def valid(self) -> bool:
-        return self._is_valid_directory()
+        # return self._is_valid_directory()
+        return (
+            self._is_model_directory()
+            or self._is_generated_molecules_directory()
+            or self._is_generated_reaction_templates_directory()
+        )
 
     @property
     def has_model(self) -> bool:
         return self._is_model_directory()
+        # return self.has_model is not None
 
     @property
     def has_generated_molecules(self) -> bool:
@@ -834,8 +862,9 @@ class Experiment:
 
     @property
     def available_metrics(self) -> tuple[str]:
-        available_metrics: dict[str, Any] = {}
-        if self.has_model:
+        available_metrics: dict[str, Any] = {}  # TODO replace with set
+        # if self.has_model:
+        if self.model_directory is not None:
             available_metrics = (
                 self.tokenizer_metrics
                 | self.model_metrics
@@ -999,24 +1028,43 @@ def _get_available_metrics(
     for e in experiments:
         available_metrics |= set(e.available_metrics)
 
-    e = next(iter(experiments))
+    try:
+        e = next(iter(experiments))
+    except StopIteration:
+        return ()
 
     return tuple(sorted(available_metrics, key=lambda m: e.get_sort_idx(m)))
 
 
 def _build_row_from_experiment(
-    experiment: Experiment, metrics: Iterable[str]
+    experiment: Experiment, metrics: Iterable[str], report_dir_stem: bool = True
 ) -> tuple[Any, ...]:
     """Build a row from an experiment for printing / saving it."""
 
-    gen_dir = (
-        None
-        if experiment.generated_directory is None
-        else experiment.generated_directory.stem
-    )
-    model_dir = (
-        None if experiment.model_directory is None else experiment.model_directory.stem
-    )
+    if experiment.generated_directory is None:
+        gen_dir = None
+    elif report_dir_stem:
+        gen_dir = experiment.generated_directory.stem
+    else:
+        gen_dir = experiment.generated_directory
+
+    # gen_dir = (
+    #     None
+    #     if experiment.generated_directory is None
+    #     else experiment.generated_directory.stem
+    # )
+
+    if experiment.model_directory is None:
+        model_dir = None
+    elif report_dir_stem:
+        model_dir = experiment.model_directory.stem
+    else:
+        model_dir = experiment.model_directory
+
+    # model_dir = (
+    #     None if experiment.model_directory is None else experiment.model_directory.stem
+    # )
+
     row = [gen_dir, model_dir]
     for m in metrics:
         metric = experiment.get_metric(m, raise_error_if_not_available=False)
@@ -1078,6 +1126,9 @@ def save_experiments(
     file_path: Union[str, os.PathLike],
     file_format: str = "ALL",
 ) -> None:
+    def convert_to_str(value: Any) -> str:
+        return str(value)
+
     if isinstance(experiments, Experiment):
         experiments = [experiments]
 
@@ -1109,7 +1160,7 @@ def save_experiments(
     #     )
 
     for e in experiments:
-        row = _build_row_from_experiment(e, available_metrics)
+        row = _build_row_from_experiment(e, available_metrics, report_dir_stem=False)
         rows.append(row)
         # progress.advance(task)
 
@@ -1124,8 +1175,14 @@ def save_experiments(
         df.to_csv(file_path.with_suffix(".csv"), index=False)
 
     if file_format.upper() in {"JSON", "ALL"}:
+        # with open(file_path.with_suffix(".json"), "w") as f:
+        #     json.dump(df.values.tolist(), f, cls=PathEncoder, indent=4)
         df.to_json(
-            file_path.with_suffix(".json"), orient="index", double_precision=3, indent=2
+            file_path.with_suffix(".json"),
+            orient="index",
+            double_precision=3,
+            indent=2,
+            default_handler=convert_to_str,
         )
 
     if file_format.upper() in {"MD", "ALL"}:
@@ -1184,6 +1241,9 @@ def main() -> None:
     directory_path = Path(args.directory).resolve()
     output_file_path = Path(args.output).resolve()
 
+    if not directory_path.is_dir():
+        raise ValueError(f"Directory '{directory_path}' does not exist")
+
     logger.debug(f"Directory path: {directory_path}")
     logger.debug(f"Output file path: {output_file_path}")
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1196,7 +1256,9 @@ def main() -> None:
     ):
         logger.info(f"Collecting metrics from {directory_path}...")
         experiments = collect_experiments(directory_path)
-        # metrics = collect_metrics(experiments)
+        if len(experiments) == 0:
+            logger.warning("No experiments found")
+            return
         logger.info(f"Found {len(experiments)} experiment(s)")
         logger.info("Printing experiment results...")
         print_experiments(experiments, title="Experiment Results")
