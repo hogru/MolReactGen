@@ -29,7 +29,6 @@ import datasets
 import evaluate  # type: ignore
 import torch
 import transformers  # type: ignore
-import wandb
 from datasets import Dataset, DatasetDict, Features, Value, load_dataset  # type: ignore
 from loguru import logger
 from transformers import (
@@ -55,6 +54,7 @@ from transformers.trainer_utils import get_last_checkpoint  # type: ignore
 from transformers.utils import check_min_version  # type: ignore
 from transformers.utils.versions import require_version  # type: ignore
 
+import wandb
 from molreactgen.generate import create_and_save_generation_config
 from molreactgen.helpers import configure_logging, guess_project_root_dir
 from molreactgen.tokenizer import (
@@ -1075,7 +1075,7 @@ def main() -> None:
             perplexity = math.exp(metrics["test_loss"])
         except OverflowError:
             perplexity = float("inf")
-        metrics["perplexity"] = perplexity
+        metrics["perplexity"] = perplexity  # TODO "tag" with test
         trainer.log_metrics("test", metrics)
         trainer.save_metrics("test", metrics)
 
@@ -1088,7 +1088,9 @@ def main() -> None:
 
     # Create default generation config
     _ = create_and_save_generation_config(
-        Path(trainer.args.output_dir), split_into_chunks=False
+        Path(trainer.args.output_dir),
+        split_into_chunks=False,
+        overwrite_pretrained_config=True,
     )
 
     # Prepare metadata for the model/dataset card
