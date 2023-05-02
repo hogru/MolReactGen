@@ -16,6 +16,7 @@ from typing import Any, Final, Optional, Sequence, Union
 
 # Most of Hugging Face has poor type hints, trying to avoid mypy errors
 import transformers  # type: ignore
+from tokenizers import Regex, Tokenizer, decoders  # type: ignore
 from tokenizers.models import BPE, Unigram, WordLevel, WordPiece  # type: ignore
 from tokenizers.pre_tokenizers import Split  # type: ignore
 from tokenizers.processors import TemplateProcessing  # type: ignore
@@ -26,8 +27,6 @@ from tokenizers.trainers import (  # type: ignore
     WordPieceTrainer,
 )
 from transformers import BatchEncoding, PreTrainedTokenizerFast
-
-from tokenizers import Regex, Tokenizer, decoders  # type: ignore
 
 # Tokenizer related
 DATASET_COLUMN_NAME: Final = "items"
@@ -85,6 +84,7 @@ REGEX_INPUT: Final = {
 }
 
 # replace() is just a safety net against double "|" in the RegEx
+REGEX_PATTERN_CHAR: Final[str] = ""
 REGEX_PATTERN_SMARTS: Final = "|".join(REGEX_INPUT.values()).replace("||", "|")
 REGEX_PATTERN_ATOM: Final = REGEX_PATTERN_SMARTS.replace(r"\[[^\]]+]", r"\[|\]")
 MIN_VOCAB_SIZE_UNIGRAM: Final = 44  # for comparison with SMARTS + WORDLEVEL tokenizer, which has 44 non-special tokens
@@ -158,7 +158,7 @@ def get_tokenizer(
 
     if regex_pattern is None:
         if pre_tokenizer == "CHAR":
-            regex_pattern = ""
+            regex_pattern = REGEX_PATTERN_CHAR
         elif pre_tokenizer == "ATOM":
             regex_pattern = REGEX_PATTERN_ATOM
         elif pre_tokenizer == "SMARTS":
