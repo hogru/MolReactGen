@@ -1,6 +1,11 @@
 # coding=utf-8
 # src/molreactgen/utils/collect_metrics.py
-"""Collect experiment metrics from a number of files and save them to a single file."""
+"""Collect experiment metrics from a number of files and save them to a single file.
+
+The code is specific to this project. It is not intended to be used as a general
+purpose tool. By adding functionality over time it has become a bit messy.
+I live with that for now.
+"""
 
 import argparse
 import datetime
@@ -17,19 +22,9 @@ from codetiming import Timer
 from humanfriendly import format_timespan  # type: ignore
 from loguru import logger
 from rich.console import Console
-
-# from rich.progress import (
-#     BarColumn,
-#     MofNCompleteColumn,
-#     Progress,
-#     SpinnerColumn,
-#     TaskProgressColumn,
-#     TextColumn,
-#     TimeRemainingColumn,
-# )
 from rich.table import Table
 
-import wandb
+import wandb  # type: ignore
 from molreactgen.helpers import configure_logging, determine_log_level
 from molreactgen.tokenizer import (
     REGEX_PATTERN_ATOM,
@@ -46,7 +41,25 @@ SCOPE_MODEL: Final[str] = "model"
 SCOPE_WANDB: Final[str] = "wandb"
 SCOPE_MOLS_EVAL: Final[str] = "evaluation_mols"
 SCOPE_RTS_EVAL: Final[str] = "evaluation_rts"
+
+# File names
 TOKENIZER_FILE: Final[str] = "tokenizer.json"
+CONFIG_FILE: Final[str] = "config.json"
+CHECKPOINT_FILE: Final[str] = "checkpoint-"
+SCHEDULER_FILE: Final[str] = "scheduler.pt"
+MODEL_FILE: Final[str] = "pytorch_model.bin"
+TRAINER_STATE_FILE: Final[str] = "trainer_state.json"
+ALL_RESULTS_FILE: Final[str] = "all_results.json"
+README_FILE: Final[str] = "README.md"
+MODEL_LINK_TO_FILE: Final[str] = "link_to_model"
+GENERATED_SMILES_FILE: Final[str] = "generated_smiles.csv"
+GENERATED_SMARTS_FILE: Final[
+    str
+] = "generated_reaction_templates.csv"  # inconsistent naming, but kept for backwards compatibility
+GENERATION_STATS_FILE: Final[str] = "generation_stats.json"
+EVALUATED_FILE: Final[str] = "evaluation.json"
+
+# Keys and Values in JSON files
 PRE_TOKENIZER_KEY: Final[str] = "pre_tokenizer"
 PRE_TOKENIZER_TYPE_KEY: Final[str] = "type"
 PRE_TOKENIZER_PATTERN_KEY: Final[str] = "pattern"
@@ -61,30 +74,17 @@ TOKENIZER_MODEL_KEY: Final[str] = "model"
 TOKENIZER_TYPE_KEY: Final[str] = "type"
 TOKENIZER_VOCAB_KEY: Final[str] = "vocab"
 TOKENIZER_ADDED_TOKENS_KEY: Final[str] = "added_tokens"
-BATCH_SIZE_KEY: Final[str] = "train_batch_size:"
-LR_KEY: Final[str] = "learning_rate:"
-CHECKPOINT_FILE: Final[str] = "checkpoint-"
-SCHEDULER_FILE: Final[str] = "scheduler.pt"
-MODEL_FILE: Final[str] = "pytorch_model.bin"
-MODEL_LINK_TO_FILE: Final[str] = "link_to_model"
-TRAINER_STATE_FILE: Final[str] = "trainer_state.json"
-ALL_RESULTS_FILE: Final[str] = "all_results.json"
-README_FILE: Final[str] = "README.md"
+MODEL_LAYER_KEY: Final[str] = "n_layer"
+MODEL_HEAD_KEY: Final[str] = "n_head"
+MODEL_HIDDEN_DIM_KEY: Final[str] = "n_embd"
 EPOCH_KEY: Final[str] = "epoch"
 TRAIN_LOSS_KEY: Final[str] = "train_loss"
 VAL_LOSS_KEY: Final[str] = "best_metric"
-TEST_LOSS_KEY: Final[str] = "test_loss"
-LOG_HISTORY_KEY: Final[str] = "log_history"
 EVAL_ACC_KEY: Final[str] = "eval_accuracy"
+TEST_LOSS_KEY: Final[str] = "test_loss"
 TEST_ACC_KEY: Final[str] = "test_accuracy"
 TEST_PPL_KEY: Final[str] = "perplexity"  # TODO change key to test_perplexity
-WANDB_OUTPUT_DIR: Final[str] = "output_dir"
-GENERATED_SMILES_FILE: Final[str] = "generated_smiles.csv"
-GENERATED_SMARTS_FILE: Final[
-    str
-] = "generated_reaction_templates.csv"  # TODO inconsistent naming
-EVALUATED_FILE: Final[str] = "evaluation.json"
-GENERATION_STATS_FILE: Final[str] = "generation_stats.json"
+LOG_HISTORY_KEY: Final[str] = "log_history"
 MOLS_VALIDITY_KEY: Final[str] = "Validity"
 MOLS_UNIQUENESS_KEY: Final[str] = "Uniqueness"
 MOLS_NOVELTY_KEY: Final[str] = "Novelty"
@@ -99,11 +99,18 @@ RTS_KNOWN_EITHER_KEY: Final[str] = "known"
 RTS_KNOWN_VAL_KEY: Final[str] = "known_from_valid_set"
 RTS_KNOWN_TEST_KEY: Final[str] = "known_from_test_set"
 
+# Search strings in MD files
+BATCH_SIZE_KEY: Final[str] = "train_batch_size:"
+LR_KEY: Final[str] = "learning_rate:"
+
+# Wandb related
+WANDB_OUTPUT_DIR: Final[str] = "output_dir"
+
 
 @dataclass
 class Metric:
     column_name: str
-    scope: str  # TODO might change to Enum
+    scope: str  # might change to Enum
     dtype: type
     value: Any
     formatter: str = ""
@@ -138,8 +145,8 @@ class WandbMetrics:
     def read_metrics(self) -> dict[str, WandbMetric]:
         self._runs = self._api.runs("/".join((self._entity, self._project_name)))
         return {
-            run.id: WandbMetric(
-                run.name, Path(run.config.get(WANDB_OUTPUT_DIR, "")).stem
+            run.id: WandbMetric(  # type: ignore
+                run.name, Path(run.config.get(WANDB_OUTPUT_DIR, "")).stem  # type: ignore
             )
             for run in self._runs
         }
@@ -201,6 +208,9 @@ class Experiment:
         "pre_tokenizer": "_get_pre_tokenizer",
         "algorithm": "_get_algorithm",
         "vocab_size": "_get_vocab_size",
+        "layers": "_get_layers",
+        "heads": "_get_heads",
+        "hidden_dim": "_get_hidden_dim",
         "num_epochs": "_get_num_epochs",
         "batch_size": "_get_batch_size",
         "lr": "_get_lr",
@@ -211,7 +221,7 @@ class Experiment:
         "val_acc": "_get_val_acc",
         "test_loss": "_get_test_loss",
         "test_acc": "_get_test_acc",
-        "test_perplexity": "_get_test_perplexity",
+        "test_ppl": "_get_test_perplexity",
         "validity_mols": "_get_validity_mols",
         "uniqueness_mols": "_get_uniqueness_mols",
         "novelty_mols": "_get_novelty_mols",
@@ -232,10 +242,18 @@ class Experiment:
     def __init__(
         self,
         directory: Union[str, os.PathLike],
-        wandb_metrics: Optional[WandbMetrics] = None,
+        tokenizer_scope: bool = True,
+        model_scope: bool = True,
+        train_scope: bool = True,
+        eval_scope: bool = True,
+        wandb_scope: Optional[WandbMetrics] = None,
     ) -> None:
         self.directory: Path = Path(directory).resolve()
-        self._wandb_metrics = wandb_metrics
+        self._tokenizer_scope = tokenizer_scope
+        self._model_scope = model_scope
+        self._train_scope = train_scope
+        self._eval_scope = eval_scope
+        self._wandb_scope = wandb_scope
         self._metrics: dict[str, Metric] = {
             "pre_tokenizer": Metric(
                 column_name="pre_tokenizer",
@@ -252,6 +270,24 @@ class Experiment:
             "vocab_size": Metric(
                 column_name="vocab_size",
                 scope="tokenizer",
+                dtype=int,
+                value=None,
+            ),
+            "layers": Metric(
+                column_name="num_layers",
+                scope="model",
+                dtype=int,
+                value=None,
+            ),
+            "heads": Metric(
+                column_name="num_heads",
+                scope="model",
+                dtype=int,
+                value=None,
+            ),
+            "hidden_dim": Metric(
+                column_name="hidden_dim",
+                scope="model",
                 dtype=int,
                 value=None,
             ),
@@ -321,7 +357,7 @@ class Experiment:
                 value=None,
                 formatter=".3f",
             ),
-            "test_perplexity": Metric(
+            "test_ppl": Metric(
                 column_name="test_perplexity",
                 scope="training",
                 dtype=float,
@@ -406,15 +442,6 @@ class Experiment:
 
         self._init_metrics()
 
-        # TODO add the following metrics
-        # Step 1:
-        # wandb: sweep id (if applicable) (map via output directory)
-        #
-        # Step 2:
-        # generation reaction templates: validity, uniqueness, feasibility, known x 3
-        # model: type, layers, heads, hidden_dim
-        # dataset: name, ...
-
     def _init_metrics(self) -> None:
         """Initialize the metrics."""
 
@@ -498,7 +525,7 @@ class Experiment:
         """Get the pre-tokenizer."""
 
         try:
-            with open(self.model_directory / TOKENIZER_FILE) as f:
+            with open(self.model_directory / TOKENIZER_FILE) as f:  # type: ignore
                 tokenizer = json.load(f)
         except (FileNotFoundError, TypeError):
             return None
@@ -557,7 +584,7 @@ class Experiment:
         """Get the tokenization algorithm."""
 
         try:
-            with open(self.model_directory / TOKENIZER_FILE) as f:
+            with open(self.model_directory / TOKENIZER_FILE) as f:  # type: ignore
                 return json.load(f)[TOKENIZER_MODEL_KEY][TOKENIZER_TYPE_KEY]
         except (FileNotFoundError, KeyError, TypeError):
             return None
@@ -566,7 +593,7 @@ class Experiment:
         """Get the vocabulary size (without special tokens)."""
 
         try:
-            with open(self.model_directory / TOKENIZER_FILE) as f:
+            with open(self.model_directory / TOKENIZER_FILE) as f:  # type: ignore
                 tokenizer = json.load(f)
         except (FileNotFoundError, TypeError):
             return None
@@ -578,11 +605,41 @@ class Experiment:
         except KeyError:
             return None
 
+    def _get_layers(self) -> Optional[int]:
+        """Get the number of layers."""
+
+        try:
+            with open(self.model_directory / CONFIG_FILE) as f:  # type: ignore
+                return json.load(f)[MODEL_LAYER_KEY]
+
+        except (FileNotFoundError, TypeError, KeyError):
+            return None
+
+    def _get_heads(self) -> Optional[int]:
+        """Get the number of heads."""
+
+        try:
+            with open(self.model_directory / CONFIG_FILE) as f:  # type: ignore
+                return json.load(f)[MODEL_HEAD_KEY]
+
+        except (FileNotFoundError, TypeError, KeyError):
+            return None
+
+    def _get_hidden_dim(self) -> Optional[int]:
+        """Get the hidden dimension size."""
+
+        try:
+            with open(self.model_directory / CONFIG_FILE) as f:  # type: ignore
+                return json.load(f)[MODEL_HIDDEN_DIM_KEY]
+
+        except (FileNotFoundError, TypeError, KeyError):
+            return None
+
     def _get_num_epochs(self) -> Optional[int]:
         """Get the number of epochs."""
 
         try:
-            with open(self.model_directory / ALL_RESULTS_FILE) as f:
+            with open(self.model_directory / ALL_RESULTS_FILE) as f:  # type: ignore
                 # Hugging Face reports the number of epochs as a float
                 # Sometimes the number is very close to the number of epochs, but not exactly
                 # Therefore, we round the number of epochs
@@ -595,7 +652,7 @@ class Experiment:
         """Get the batch size."""
 
         try:
-            content = Path(self.model_directory / README_FILE).read_text()
+            content = Path(self.model_directory / README_FILE).read_text()  # type: ignore
         except (FileNotFoundError, TypeError):
             return None
 
@@ -607,7 +664,7 @@ class Experiment:
         """Get the learning rate."""
 
         try:
-            content = Path(self.model_directory / README_FILE).read_text()
+            content = Path(self.model_directory / README_FILE).read_text()  # type: ignore
         except (FileNotFoundError, TypeError):
             return None
 
@@ -618,24 +675,24 @@ class Experiment:
     def _get_wandb_run_id(self) -> Optional[str]:
         """Get the wandb run id."""
 
-        if self._wandb_metrics is None or self.model_directory is None:
+        if self._wandb_scope is None or self.model_directory is None:
             return None
 
-        return self._wandb_metrics.get_run_id(self.model_directory)
+        return self._wandb_scope.get_run_id(self.model_directory)
 
     def _get_wandb_run_name(self) -> Optional[str]:
         """Get the wandb run name."""
 
-        if self._wandb_metrics is None or self.model_directory is None:
+        if self._wandb_scope is None or self.model_directory is None:
             return None
 
-        return self._wandb_metrics.get_run_name(self.model_directory)
+        return self._wandb_scope.get_run_name(self.model_directory)
 
     def _get_train_loss(self) -> Optional[float]:
         """Get the last training loss."""
 
         try:
-            with open(self.model_directory / ALL_RESULTS_FILE) as f:
+            with open(self.model_directory / ALL_RESULTS_FILE) as f:  # type: ignore
                 return json.load(f)[TRAIN_LOSS_KEY]
         except (FileNotFoundError, TypeError, KeyError):
             return None
@@ -644,7 +701,7 @@ class Experiment:
         """Get the validation loss."""
 
         try:
-            with open(self.model_directory / TRAINER_STATE_FILE) as f:
+            with open(self.model_directory / TRAINER_STATE_FILE) as f:  # type: ignore
                 return json.load(f)[VAL_LOSS_KEY]
         except (FileNotFoundError, TypeError, KeyError):
             return None
@@ -653,7 +710,7 @@ class Experiment:
         """Get the validation accuracy."""
 
         try:
-            with open(self.model_directory / TRAINER_STATE_FILE) as f:
+            with open(self.model_directory / TRAINER_STATE_FILE) as f:  # type: ignore
                 log_history = json.load(f)[LOG_HISTORY_KEY]
                 return next(
                     (
@@ -669,7 +726,7 @@ class Experiment:
         """Get the test loss."""
 
         try:
-            with open(self.model_directory / ALL_RESULTS_FILE) as f:
+            with open(self.model_directory / ALL_RESULTS_FILE) as f:  # type: ignore
                 return json.load(f)[TEST_LOSS_KEY]
         except (FileNotFoundError, TypeError, KeyError):
             return None
@@ -678,7 +735,7 @@ class Experiment:
         """Get the test accuracy."""
 
         try:
-            with open(self.model_directory / ALL_RESULTS_FILE) as f:
+            with open(self.model_directory / ALL_RESULTS_FILE) as f:  # type: ignore
                 return json.load(f)[TEST_ACC_KEY]
         except (FileNotFoundError, TypeError, KeyError):
             return None
@@ -687,7 +744,7 @@ class Experiment:
         """Get the test perplexity."""
 
         try:
-            with open(self.model_directory / ALL_RESULTS_FILE) as f:
+            with open(self.model_directory / ALL_RESULTS_FILE) as f:  # type: ignore
                 return json.load(f)[TEST_PPL_KEY]
         except (FileNotFoundError, TypeError, KeyError):
             return None
@@ -696,7 +753,7 @@ class Experiment:
         """Get the validity of the generated molecules."""
 
         try:
-            with open(self.generated_molecules_directory / EVALUATED_FILE) as f:
+            with open(self.generated_molecules_directory / EVALUATED_FILE) as f:  # type: ignore
                 return json.load(f)[MOLS_VALIDITY_KEY]
         except (FileNotFoundError, TypeError, KeyError):
             return None
@@ -705,7 +762,7 @@ class Experiment:
         """Get the uniqueness of the generated molecules."""
 
         try:
-            with open(self.generated_molecules_directory / EVALUATED_FILE) as f:
+            with open(self.generated_molecules_directory / EVALUATED_FILE) as f:  # type: ignore
                 return json.load(f)[MOLS_UNIQUENESS_KEY]
         except (FileNotFoundError, TypeError, KeyError):
             return None
@@ -714,7 +771,7 @@ class Experiment:
         """Get the novelty of the generated molecules."""
 
         try:
-            with open(self.generated_molecules_directory / EVALUATED_FILE) as f:
+            with open(self.generated_molecules_directory / EVALUATED_FILE) as f:  # type: ignore
                 return json.load(f)[MOLS_NOVELTY_KEY]
         except (FileNotFoundError, TypeError, KeyError):
             return None
@@ -723,7 +780,7 @@ class Experiment:
         """Get the FCD of the generated molecules."""
 
         try:
-            with open(self.generated_molecules_directory / EVALUATED_FILE) as f:
+            with open(self.generated_molecules_directory / EVALUATED_FILE) as f:  # type: ignore
                 return json.load(f)[MOLS_FCD_KEY]
         except (FileNotFoundError, TypeError, KeyError):
             return None
@@ -732,7 +789,7 @@ class Experiment:
         """Get the FCD (Guacamol style)  of the generated molecules."""
 
         try:
-            with open(self.generated_molecules_directory / EVALUATED_FILE) as f:
+            with open(self.generated_molecules_directory / EVALUATED_FILE) as f:  # type: ignore
                 return json.load(f)[MOLS_FCD_GUACAMOL_KEY]
         except (FileNotFoundError, TypeError, KeyError):
             return None
@@ -742,7 +799,7 @@ class Experiment:
 
         try:
             with open(
-                self.generated_reaction_templates_directory / GENERATION_STATS_FILE
+                self.generated_reaction_templates_directory / GENERATION_STATS_FILE  # type: ignore
             ) as f:
                 return json.load(f)
         except (FileNotFoundError, TypeError):
@@ -754,7 +811,7 @@ class Experiment:
         generation_stats = self._read_generation_file()
 
         try:
-            return generation_stats[RTS_FRAC_KEY][RTS_VALIDITY_KEY]
+            return generation_stats[RTS_FRAC_KEY][RTS_VALIDITY_KEY]  # type: ignore
         except (KeyError, TypeError):
             return None
 
@@ -764,7 +821,7 @@ class Experiment:
         generation_stats = self._read_generation_file()
 
         try:
-            return generation_stats[RTS_FRAC_KEY][RTS_UNIQUENESS_KEY]
+            return generation_stats[RTS_FRAC_KEY][RTS_UNIQUENESS_KEY]  # type: ignore
         except (KeyError, TypeError):
             return None
 
@@ -774,7 +831,7 @@ class Experiment:
         generation_stats = self._read_generation_file()
 
         try:
-            return generation_stats[RTS_FRAC_KEY][RTS_FEASIBILITY_KEY]
+            return generation_stats[RTS_FRAC_KEY][RTS_FEASIBILITY_KEY]  # type: ignore
         except (KeyError, TypeError):
             return None
 
@@ -784,7 +841,7 @@ class Experiment:
         generation_stats = self._read_generation_file()
 
         try:
-            return generation_stats[RTS_COUNT_KEY][RTS_KNOWN_EITHER_KEY]
+            return generation_stats[RTS_COUNT_KEY][RTS_KNOWN_EITHER_KEY]  # type: ignore
         except (KeyError, TypeError):
             return None
 
@@ -794,7 +851,7 @@ class Experiment:
         generation_stats = self._read_generation_file()
 
         try:
-            return generation_stats[RTS_COUNT_KEY][RTS_KNOWN_VAL_KEY]
+            return generation_stats[RTS_COUNT_KEY][RTS_KNOWN_VAL_KEY]  # type: ignore
         except (KeyError, TypeError):
             return None
 
@@ -804,42 +861,42 @@ class Experiment:
         generation_stats = self._read_generation_file()
 
         try:
-            return generation_stats[RTS_COUNT_KEY][RTS_KNOWN_TEST_KEY]
+            return generation_stats[RTS_COUNT_KEY][RTS_KNOWN_TEST_KEY]  # type: ignore
         except (KeyError, TypeError):
             return None
 
     @property
-    def tokenizer_metrics(self) -> Optional[dict[str, Any]]:
+    def tokenizer_metrics(self) -> dict[str, Any]:
         """Get the tokenizer metrics."""
 
         return {k: v for k, v in self._metrics.items() if v.scope == SCOPE_TOKENIZER}
 
     @property
-    def training_metrics(self) -> Optional[dict[str, Any]]:
-        """Get the training metrics."""
-
-        return {k: v for k, v in self._metrics.items() if v.scope == SCOPE_TRAINING}
-
-    @property
-    def model_metrics(self) -> Optional[dict[str, Any]]:
+    def model_metrics(self) -> dict[str, Any]:
         """Get the model metrics."""
 
         return {k: v for k, v in self._metrics.items() if v.scope == SCOPE_MODEL}
 
     @property
-    def wandb_metrics(self) -> Optional[dict[str, Any]]:
+    def training_metrics(self) -> dict[str, Any]:
+        """Get the training metrics."""
+
+        return {k: v for k, v in self._metrics.items() if v.scope == SCOPE_TRAINING}
+
+    @property
+    def wandb_metrics(self) -> dict[str, Any]:
         """Get the model metrics."""
 
         return {k: v for k, v in self._metrics.items() if v.scope == SCOPE_WANDB}
 
     @property
-    def evaluation_mols_metrics(self) -> Optional[dict[str, Any]]:
+    def evaluation_mols_metrics(self) -> dict[str, Any]:
         """Get the evaluation molecules metrics."""
 
         return {k: v for k, v in self._metrics.items() if v.scope == SCOPE_MOLS_EVAL}
 
     @property
-    def evaluation_rts_metrics(self) -> Optional[dict[str, Any]]:
+    def evaluation_rts_metrics(self) -> dict[str, Any]:
         """Get the evaluation reaction templates metrics."""
 
         return {k: v for k, v in self._metrics.items() if v.scope == SCOPE_RTS_EVAL}
@@ -925,20 +982,22 @@ class Experiment:
         return cls._indices.get(metric, 999999)
 
     @property
-    def available_metrics(self) -> tuple[str]:
+    def available_metrics(self) -> tuple[str, ...]:
         available_metrics: dict[str, Any] = {}  # TODO replace with sorted set
-        # if self.has_model:
         if self.model_directory is not None:
-            available_metrics = (
-                self.tokenizer_metrics | self.model_metrics | self.training_metrics
-            )
-            if self._wandb_metrics is not None:  # TODO change confusing variable names
+            if self._tokenizer_scope:
+                available_metrics |= self.tokenizer_metrics
+            if self._model_scope:
+                available_metrics |= self.model_metrics
+            if self._train_scope:
+                available_metrics |= self.training_metrics
+            if self._wandb_scope is not None:
                 available_metrics |= self.wandb_metrics
 
-        if self.has_generated_molecules:
+        if self.has_generated_molecules and self._eval_scope:
             available_metrics |= self.evaluation_mols_metrics
 
-        if self.has_generated_reaction_templates:
+        if self.has_generated_reaction_templates and self._eval_scope:
             available_metrics |= self.evaluation_rts_metrics
 
         return tuple(available_metrics.keys())
@@ -965,26 +1024,6 @@ class Experiment:
             else:
                 return None
 
-        # try:
-        # if self.has_model and (
-        #     metric in self.tokenizer_metrics
-        #     or metric in self.model_metrics
-        #     or metric in self.training_metrics
-        #     or metric in self._wandb_metrics
-        # ):
-        #     directory = self.model_directory
-        # elif self.has_generated_molecules and metric in self.evaluation_mols_metrics:
-        #     directory = self.generated_molecules_directory
-        # elif (
-        #     self.has_generated_reaction_templates
-        #     and metric in self.evaluation_rts_metrics
-        # ):
-        #     directory = self.generated_reaction_templates_directory
-        # else:
-        #     raise AttributeError(
-        #         f"Can not determine value of metric {metric} (no directory)"
-        #     )
-
         if metric_.retrieved is True:
             return metric_
 
@@ -1006,7 +1045,7 @@ class Experiment:
         return (
             self.directory == other.directory
             if isinstance(other, Experiment)
-            else NotImplemented
+            else NotImplemented  # type: ignore
         )
 
     def __hash__(self) -> int:
@@ -1022,7 +1061,9 @@ class Experiment:
 
 
 def collect_experiments(
-    directory: Union[str, os.PathLike], wandb_metrics: Optional[WandbMetrics] = None
+    directory: Union[str, os.PathLike],
+    args: argparse.Namespace,
+    wandb_metrics: Optional[WandbMetrics] = None,
 ) -> list[Experiment]:
     """Collect experiments from a directory and return a list of Experiments in from that directory."""
 
@@ -1030,64 +1071,22 @@ def collect_experiments(
     dirs = [
         d for d in sorted(directory.rglob("*")) if d.is_dir() and not d.is_symlink()
     ]
-    experiments = [Experiment(d, wandb_metrics) for d in dirs]
+    experiments = [
+        Experiment(
+            d, args.tokenizer, args.model, args.train, args.evaluate, wandb_metrics
+        )
+        for d in dirs
+    ]
     return [e for e in experiments if e.valid]
-
-
-# TODO delete this once everything works
-# def collect_metrics(
-#     experiments: Union[Experiment, Iterable[Experiment]]
-# ) -> dict[Experiment, list[Metric]]:
-#     """Collect metrics from a number of experiments."""
-#
-#     if isinstance(experiments, Experiment):
-#         experiments = [experiments]
-#
-#     if any(not isinstance(e, Experiment) for e in experiments):
-#         raise TypeError("experiments must be an (Iterable of type) Experiment")
-#
-#     metrics: dict[Experiment, list[Metric]] = {}
-#     for exp in experiments:
-#         metrics[exp]: list[Metric] = []
-#         none_metrics: list[str] = []
-#         print(f"Looking at Experiment in {exp.directory}")
-#         if exp.has_generated_molecules:
-#             print(
-#                 f"Generated molecules dir: {exp.generated_molecules_directory.stem}, "
-#                 f"created at {exp.get_creation_date(exp.generated_molecules_directory)[1]}"
-#             )
-#         if exp.has_generated_reaction_templates:
-#             print(
-#                 f"Generated reaction templates dir: {exp.generated_reaction_templates_directory.stem}, "
-#                 f"created at {exp.get_creation_date(exp.generated_reaction_templates_directory)[1]}"
-#             )
-#         if exp.has_model:
-#             print(
-#                 f"Model dir: {exp.model_directory.stem}, "
-#                 f"created at {exp.get_creation_date(exp.model_directory)[1]}"
-#             )
-#
-#         for m in exp.available_metrics:
-#             metric = exp.get_metric(m)
-#             if metric.value is None:
-#                 none_metrics.append(m)
-#             else:
-#                 print(f"{m}: {format(metric.value, metric.formatter)}, ", end="")
-#             metrics[exp].append(metric)
-#         print()
-#
-#         if none_metrics:
-#             print(f"Metrics with None value: {none_metrics}")
-#
-#         print("----------------------------------------")
-#
-#     return metrics
 
 
 def _get_available_metrics(
     experiments: Union[Experiment, Iterable[Experiment]]
 ) -> tuple[str, ...]:
     """Get all available metrics from a number of experiments."""
+
+    if isinstance(experiments, Experiment):
+        experiments = [experiments]
 
     available_metrics: set[str] = set()
     for e in experiments:
@@ -1106,6 +1105,7 @@ def _build_row_from_experiment(
 ) -> tuple[Any, ...]:
     """Build a row from an experiment for printing / saving it."""
 
+    gen_dir: Optional[Union[str, os.PathLike]]
     if experiment.generated_directory is None:
         gen_dir = None
     elif report_dir_stem:
@@ -1119,6 +1119,7 @@ def _build_row_from_experiment(
     #     else experiment.generated_directory.stem
     # )
 
+    model_dir: Optional[Union[str, os.PathLike]]
     if experiment.model_directory is None:
         model_dir = None
     elif report_dir_stem:
@@ -1133,9 +1134,9 @@ def _build_row_from_experiment(
     row = [gen_dir, model_dir]
     for m in metrics:
         metric = experiment.get_metric(m, raise_error_if_not_available=False)
-        row.append(None) if metric.value is None else row.append(
-            format(metric.value, metric.formatter)
-        )
+        row.append(None) if metric is None or metric.value is None or not isinstance(
+            metric.formatter, str
+        ) else row.append(format(metric.value, metric.formatter))
     return tuple(row)
 
 
@@ -1189,9 +1190,10 @@ def print_experiments(
     #     )
 
     for e in experiments:
-        row = _build_row_from_experiment(e, available_metrics)
-        table.add_row(*row)
-        # progress.advance(task)
+        if e.valid:
+            row = _build_row_from_experiment(e, available_metrics)
+            table.add_row(*row)
+            # progress.advance(task)
 
     logger.debug("Printing table...")
     console = Console()
@@ -1270,8 +1272,6 @@ def save_experiments(
 def main() -> None:
     """Collect metrics from a number of files and save them to a single file."""
 
-    # TODO allow for selection of metrics / scopes (wandb is expensive)
-
     # Prepare argument parser
     parser = argparse.ArgumentParser(
         description="Collect metrics from a number of files and save them to a single file."
@@ -1290,22 +1290,52 @@ def main() -> None:
         help="file path to save the metrics to, default: '%(default)s'.",
     )
     parser.add_argument(
+        "-a",
+        "--all",
+        action="store_true",
+        help="if specified, collect all metrics.",
+    )
+    parser.add_argument(
+        "-e",
+        "--evaluate",
+        action="store_true",
+        help="if specified, collect evaluation metrics.",
+    )
+    parser.add_argument(
+        "-k",
+        "--tokenizer",
+        action="store_true",
+        help="if specified, collect tokenizer metrics.",
+    )
+    parser.add_argument(
+        "-m",
+        "--model",
+        action="store_true",
+        help="if specified, collect model metrics.",
+    )
+    parser.add_argument(
+        "-t",
+        "--train",
+        action="store_true",
+        help="if specified, collect train metrics.",
+    )
+    parser.add_argument(
         "-w",
         "--wandb",
         action="store_true",
         help="if specified, collect wandb metrics.",
     )
     parser.add_argument(
-        "--verbose",
         "-v",
+        "--verbose",
         dest="log_level",
         action="append_const",
         const=-1,
         help="increase verbosity from default.",
     )
     parser.add_argument(
-        "--quiet",
         "-q",
+        "--quiet",
         dest="log_level",
         action="append_const",
         const=1,
@@ -1337,6 +1367,13 @@ def main() -> None:
         text=lambda secs: f"Metrics collected in {format_timespan(secs)}",
         logger=logger.info,
     ):
+        if args.all:
+            args.tokenizer = True
+            args.model = True
+            args.train = True
+            args.wandb = True
+            args.evaluate = True
+
         if args.wandb:
             logger.info("Collecting wandb metrics...")
             wandb_metrics = WandbMetrics()
@@ -1344,7 +1381,7 @@ def main() -> None:
             wandb_metrics = None
 
         logger.info(f"Collecting metrics from {directory_path}...")
-        experiments = collect_experiments(directory_path, wandb_metrics)
+        experiments = collect_experiments(directory_path, args, wandb_metrics)
         if len(experiments) == 0:
             logger.warning("No experiments found")
             return
