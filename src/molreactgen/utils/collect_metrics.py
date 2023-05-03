@@ -17,26 +17,26 @@ from codetiming import Timer
 from humanfriendly import format_timespan  # type: ignore
 from loguru import logger
 from rich.console import Console
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    SpinnerColumn,
-    TaskProgressColumn,
-    TextColumn,
-    TimeRemainingColumn,
-)
+
+# from rich.progress import (
+#     BarColumn,
+#     MofNCompleteColumn,
+#     Progress,
+#     SpinnerColumn,
+#     TaskProgressColumn,
+#     TextColumn,
+#     TimeRemainingColumn,
+# )
 from rich.table import Table
 
-# import wandb
+import wandb
 from molreactgen.helpers import configure_logging, determine_log_level
 from molreactgen.tokenizer import (
     REGEX_PATTERN_ATOM,
     REGEX_PATTERN_CHAR,
     REGEX_PATTERN_SMARTS,
 )
-
-# from molreactgen.train import WANDB_PROJECT_NAME
+from molreactgen.train import WANDB_PROJECT_NAME
 
 # Global variables, defaults
 DEFAULT_OUTPUT_FILE_NAME: Final[str] = "./metrics"
@@ -116,6 +116,85 @@ class Metric:
         return hash(self.column_name)
 
 
+@dataclass
+class WandbMetric:
+    # run_id: str
+    run_name: str
+    output_dir: str
+
+
+class WandbMetrics:
+    def __init__(
+        self, entity: Optional[str] = None, project_name: Optional[str] = None
+    ) -> None:
+        self._api = wandb.Api()
+        self._entity = self._api.default_entity if entity is None else entity
+        self._project_name = (
+            WANDB_PROJECT_NAME if project_name is None else project_name
+        )
+        self._runs: dict[str, WandbMetric] = {}
+        self._metrics = self.read_metrics()
+
+    def read_metrics(self) -> dict[str, WandbMetric]:
+        self._runs = self._api.runs("/".join((self._entity, self._project_name)))
+        return {
+            run.id: WandbMetric(
+                run.name, Path(run.config.get(WANDB_OUTPUT_DIR, "")).stem
+            )
+            for run in self._runs
+        }
+
+    def get_run_id(
+        self,
+        output_dir: Union[str, os.PathLike],
+        raise_error_if_ambiguous: bool = False,
+    ) -> Optional[str]:
+        output_dir = Path(output_dir).stem
+        run_ids = [
+            run_id
+            for run_id, metric in self._metrics.items()
+            if metric.output_dir == output_dir
+        ]
+        if not run_ids:
+            return None
+
+        if len(run_ids) > 1:
+            if raise_error_if_ambiguous:
+                raise ValueError(
+                    f"Found multiple runs with output_dir {output_dir}: {run_ids}"
+                )
+            logger.debug(f"Found multiple runs with output_dir {output_dir}: {run_ids}")
+            return "Multiple"
+
+        return run_ids[0]
+
+    def get_run_name(
+        self,
+        output_dir: Union[str, os.PathLike],
+        raise_error_if_ambiguous: bool = False,
+    ) -> Optional[str]:
+        output_dir = Path(output_dir).stem
+        run_names = [
+            metric.run_name
+            for metric in self._metrics.values()
+            if metric.output_dir == output_dir
+        ]
+        if not run_names:
+            return None
+
+        if len(run_names) > 1:
+            if raise_error_if_ambiguous:
+                raise ValueError(
+                    f"Found multiple runs with output_dir {output_dir}: {run_names}"
+                )
+            logger.debug(
+                f"Found multiple runs with output_dir {output_dir}: {run_names}"
+            )
+            return "Multiple"
+
+        return run_names[0]
+
+
 class Experiment:
     # _getters: dict[str, Callable[[Path], Any]] = {
     _getters: dict[str, str] = {
@@ -150,8 +229,13 @@ class Experiment:
     for _idx, _getter in enumerate(_getters, start=1):
         _indices[_getter] = _idx
 
-    def __init__(self, directory: Union[str, os.PathLike]) -> None:
+    def __init__(
+        self,
+        directory: Union[str, os.PathLike],
+        wandb_metrics: Optional[WandbMetrics] = None,
+    ) -> None:
         self.directory: Path = Path(directory).resolve()
+        self._wandb_metrics = wandb_metrics
         self._metrics: dict[str, Metric] = {
             "pre_tokenizer": Metric(
                 column_name="pre_tokenizer",
@@ -534,38 +618,18 @@ class Experiment:
     def _get_wandb_run_id(self) -> Optional[str]:
         """Get the wandb run id."""
 
-        return "0"
+        if self._wandb_metrics is None or self.model_directory is None:
+            return None
 
-        # api = wandb.Api()
-        # entity = api.default_entity
-        # runs = api.runs("/".join((entity, WANDB_PROJECT_NAME)))
-        # return next(
-        #     (
-        #         run.id
-        #         for run in runs
-        #         if Path(run.config.get(WANDB_OUTPUT_DIR, "")).stem == path.stem
-        #     ),
-        #     None,
-        # )
+        return self._wandb_metrics.get_run_id(self.model_directory)
 
     def _get_wandb_run_name(self) -> Optional[str]:
         """Get the wandb run name."""
 
-        return "Empty"
+        if self._wandb_metrics is None or self.model_directory is None:
+            return None
 
-        # TODO very inefficient, but would need to cache some information
-        #  or get rid of one function == one metric
-        # api = wandb.Api()
-        # entity = api.default_entity
-        # runs = api.runs("/".join((entity, WANDB_PROJECT_NAME)))
-        # return next(
-        #     (
-        #         run.name
-        #         for run in runs
-        #         if Path(run.config.get(WANDB_OUTPUT_DIR, "")).stem == path.stem
-        #     ),
-        #     None,
-        # )
+        return self._wandb_metrics.get_run_name(self.model_directory)
 
     def _get_train_loss(self) -> Optional[float]:
         """Get the last training loss."""
@@ -862,15 +926,14 @@ class Experiment:
 
     @property
     def available_metrics(self) -> tuple[str]:
-        available_metrics: dict[str, Any] = {}  # TODO replace with set
+        available_metrics: dict[str, Any] = {}  # TODO replace with sorted set
         # if self.has_model:
         if self.model_directory is not None:
             available_metrics = (
-                self.tokenizer_metrics
-                | self.model_metrics
-                | self.training_metrics
-                | self.wandb_metrics
+                self.tokenizer_metrics | self.model_metrics | self.training_metrics
             )
+            if self._wandb_metrics is not None:  # TODO change confusing variable names
+                available_metrics |= self.wandb_metrics
 
         if self.has_generated_molecules:
             available_metrics |= self.evaluation_mols_metrics
@@ -907,7 +970,7 @@ class Experiment:
         #     metric in self.tokenizer_metrics
         #     or metric in self.model_metrics
         #     or metric in self.training_metrics
-        #     or metric in self.wandb_metrics
+        #     or metric in self._wandb_metrics
         # ):
         #     directory = self.model_directory
         # elif self.has_generated_molecules and metric in self.evaluation_mols_metrics:
@@ -958,14 +1021,16 @@ class Experiment:
         return f"{class_name} in {self.directory}"
 
 
-def collect_experiments(directory: Union[str, os.PathLike]) -> list[Experiment]:
+def collect_experiments(
+    directory: Union[str, os.PathLike], wandb_metrics: Optional[WandbMetrics] = None
+) -> list[Experiment]:
     """Collect experiments from a directory and return a list of Experiments in from that directory."""
 
     directory = Path(directory).resolve()
     dirs = [
         d for d in sorted(directory.rglob("*")) if d.is_dir() and not d.is_symlink()
     ]
-    experiments = [Experiment(d) for d in dirs]
+    experiments = [Experiment(d, wandb_metrics) for d in dirs]
     return [e for e in experiments if e.valid]
 
 
@@ -1091,30 +1156,42 @@ def print_experiments(
 
     logger.debug("Building table...")
     table = Table(title=title)
-    table.add_column("Generated directory", justify="left", header_style="bold")
-    table.add_column("Model directory", justify="left", header_style="bold")
+    table.add_column(
+        "Generated directory",
+        justify="left",
+        header_style="bold",
+        no_wrap=False,
+        overflow="fold",
+    )
+    table.add_column(
+        "Model directory",
+        justify="left",
+        header_style="bold",
+        no_wrap=False,
+        overflow="fold",
+    )
     for m in available_metrics:
         table.add_column(m, justify="right", header_style="bold", min_width=len(m))
 
     logger.debug("Adding rows...")
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        MofNCompleteColumn(),
-        TaskProgressColumn(),
-        TimeRemainingColumn(elapsed_when_finished=True),
-        refresh_per_second=5,
-    ) as progress:
-        task = progress.add_task(
-            "Collecting metrics...",
-            total=len(experiments),
-        )
+    # with Progress(
+    #     SpinnerColumn(),
+    #     TextColumn("[progress.description]{task.description}"),
+    #     BarColumn(),
+    #     MofNCompleteColumn(),
+    #     TaskProgressColumn(),
+    #     TimeRemainingColumn(elapsed_when_finished=True),
+    #     refresh_per_second=5,
+    # ) as progress:
+    #     task = progress.add_task(
+    #         "Collecting metrics...",
+    #         total=len(experiments),
+    #     )
 
-        for e in experiments:
-            row = _build_row_from_experiment(e, available_metrics)
-            table.add_row(*row)
-            progress.advance(task)
+    for e in experiments:
+        row = _build_row_from_experiment(e, available_metrics)
+        table.add_row(*row)
+        # progress.advance(task)
 
     logger.debug("Printing table...")
     console = Console()
@@ -1213,6 +1290,12 @@ def main() -> None:
         help="file path to save the metrics to, default: '%(default)s'.",
     )
     parser.add_argument(
+        "-w",
+        "--wandb",
+        action="store_true",
+        help="if specified, collect wandb metrics.",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         dest="log_level",
@@ -1254,8 +1337,14 @@ def main() -> None:
         text=lambda secs: f"Metrics collected in {format_timespan(secs)}",
         logger=logger.info,
     ):
+        if args.wandb:
+            logger.info("Collecting wandb metrics...")
+            wandb_metrics = WandbMetrics()
+        else:
+            wandb_metrics = None
+
         logger.info(f"Collecting metrics from {directory_path}...")
-        experiments = collect_experiments(directory_path)
+        experiments = collect_experiments(directory_path, wandb_metrics)
         if len(experiments) == 0:
             logger.warning("No experiments found")
             return
