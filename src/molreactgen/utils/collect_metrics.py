@@ -18,13 +18,13 @@ from pathlib import Path
 from typing import Any, Final, Iterable, Optional, Union
 
 import pandas as pd  # type: ignore
+import wandb  # type: ignore
 from codetiming import Timer
 from humanfriendly import format_timespan  # type: ignore
 from loguru import logger
 from rich.console import Console
 from rich.table import Table
 
-import wandb  # type: ignore
 from molreactgen.helpers import configure_logging, determine_log_level
 from molreactgen.tokenizer import (
     REGEX_PATTERN_ATOM,
@@ -1282,60 +1282,60 @@ def main() -> None:
         help="the directory to collect metrics from.",
     )
     parser.add_argument(
-        "-o",
         "--output",
+        "-o",
         type=Path,
         required=False,
         default=DEFAULT_OUTPUT_FILE_NAME,
         help="file path to save the metrics to, default: '%(default)s'.",
     )
     parser.add_argument(
-        "-a",
         "--all",
+        "-a",
         action="store_true",
         help="if specified, collect all metrics.",
     )
     parser.add_argument(
-        "-e",
         "--evaluate",
+        "-e",
         action="store_true",
         help="if specified, collect evaluation metrics.",
     )
     parser.add_argument(
-        "-k",
         "--tokenizer",
+        "-k",
         action="store_true",
         help="if specified, collect tokenizer metrics.",
     )
     parser.add_argument(
-        "-m",
         "--model",
+        "-m",
         action="store_true",
         help="if specified, collect model metrics.",
     )
     parser.add_argument(
-        "-t",
         "--train",
+        "-t",
         action="store_true",
         help="if specified, collect train metrics.",
     )
     parser.add_argument(
-        "-w",
         "--wandb",
+        "-w",
         action="store_true",
         help="if specified, collect wandb metrics.",
     )
     parser.add_argument(
-        "-v",
         "--verbose",
+        "-v",
         dest="log_level",
         action="append_const",
         const=-1,
         help="increase verbosity from default.",
     )
     parser.add_argument(
-        "-q",
         "--quiet",
+        "-q",
         dest="log_level",
         action="append_const",
         const=1,

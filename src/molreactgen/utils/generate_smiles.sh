@@ -10,6 +10,7 @@ KNOWN_FILE="../../data/prep/guacamol/csv/guacamol_v1_train.csv"
 OPTIM_FILE="scheduler.pt"
 NUM_MOLS=10000
 NUM_BEAMS=1
+TEMPERATURE=1.2
 BREAK_TIME=15
 
 if [ -z "$1" ]; then
@@ -41,7 +42,8 @@ for dir in $(find "$1" -mindepth 0 -maxdepth 1 -type d); do
     --model "$dir" \
     --known "$KNOWN_FILE" \
     --num "$NUM_MOLS" \
-    --num_beams "$NUM_BEAMS"
+    --num_beams "$NUM_BEAMS" \
+    --temperature "$TEMPERATURE"
     date +"---- Finished generation at %T"
     echo -e "\nPausing for $BREAK_TIME second(s)...\n"
     sleep "$BREAK_TIME"
