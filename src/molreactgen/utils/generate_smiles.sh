@@ -10,7 +10,7 @@ KNOWN_FILE="../../data/prep/guacamol/csv/guacamol_v1_train.csv"
 OPTIM_FILE="scheduler.pt"
 NUM_MOLS=10000
 NUM_BEAMS=1
-TEMPERATURE=1.2
+TEMPERATURE=1.0
 BREAK_TIME=15
 
 if [ -z "$1" ]; then
