@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Final, Optional, Union
 
 import pandas as pd  # type: ignore
-import torch
+
+# import torch
 from loguru import logger
 from rdchiral.main import (  # type: ignore
     rdchiralReactants,
@@ -918,8 +919,8 @@ def main() -> None:
     if temperature <= 0:
         raise ValueError(f"Temperature must be greater than 0, not {temperature}")
 
-    # TODO Do this properly
-    torch.manual_seed(42)
+    # TODO Do this properly (à là train.py)
+    # torch.manual_seed(42)
 
     # Create text generation pipeline
     logger.info("Setting up generation configuration...")
