@@ -49,11 +49,17 @@ def read_molecules_from_file(
     file: Path, num_molecules: Optional[int] = None, valid_only: bool = False
 ) -> list[str]:
     # Cope with different column names
+    # Note: we read the "smiles" column and ignore the "canonical_smiles" column
+    # That does not matter since we canonicalize the molecules anyway during evaluation
     molecules_df: pd.DataFrame
     try:
         molecules_df = pd.read_csv(file, usecols=["smiles", "valid"])
+        # TODO make this a configurable option: if we want novel molecules only
+        # molecules_df = pd.read_csv(file, usecols=["smiles", "valid", "novel"])
         if valid_only:
             molecules_df = molecules_df[molecules_df["valid"]]["smiles"]
+            # The 2nd required code line for the option mentioned above
+            # molecules_df = molecules_df[molecules_df["valid"] & molecules_df["novel"]]["smiles"]
         else:
             molecules_df = molecules_df["smiles"]
 
