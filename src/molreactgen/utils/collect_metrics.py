@@ -106,6 +106,9 @@ LR_KEY: Final[str] = "learning_rate:"
 # Wandb related
 WANDB_OUTPUT_DIR: Final[str] = "output_dir"
 
+# Formatter strings
+DEFAULT_FORMATTER_FLOAT: Final[str] = ".4f"
+
 
 @dataclass
 class Metric:
@@ -308,7 +311,7 @@ class Experiment:
                 scope="training",
                 dtype=float,
                 value=None,
-                formatter=".4f",
+                formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "wandb_run_id": Metric(
                 column_name="wandb_run_id",
@@ -327,98 +330,98 @@ class Experiment:
                 scope="training",
                 dtype=float,
                 value=None,
-                formatter=".3f",
+                formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "val_loss": Metric(
                 column_name="validation_loss",
                 scope="training",
                 dtype=float,
                 value=None,
-                formatter=".3f",
+                formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "val_acc": Metric(
                 column_name="validation_accuracy",
                 scope="training",
                 dtype=float,
                 value=None,
-                formatter=".3f",
+                formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "test_loss": Metric(
                 column_name="test_loss",
                 scope="training",
                 dtype=float,
                 value=None,
-                formatter=".3f",
+                formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "test_acc": Metric(
                 column_name="test_accuracy",
                 scope="training",
                 dtype=float,
                 value=None,
-                formatter=".3f",
+                formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "test_ppl": Metric(
                 column_name="test_perplexity",
                 scope="training",
                 dtype=float,
                 value=None,
-                formatter=".3f",
+                formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "validity_mols": Metric(
                 column_name="validity",
                 scope="evaluation_mols",
                 dtype=float,
                 value=None,
-                formatter=".3f",
+                formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "uniqueness_mols": Metric(
                 column_name="uniqueness",
                 scope="evaluation_mols",
                 dtype=float,
                 value=None,
-                formatter=".3f",
+                formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "novelty_mols": Metric(
                 column_name="novelty",
                 scope="evaluation_mols",
                 dtype=float,
                 value=None,
-                formatter=".3f",
+                formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "fcd_mols": Metric(
                 column_name="fcd",
                 scope="evaluation_mols",
                 dtype=float,
                 value=None,
-                formatter=".3f",
+                formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "fcd_g_mols": Metric(
                 column_name="fcd_guacamol",
                 scope="evaluation_mols",
                 dtype=float,
                 value=None,
-                formatter=".3f",
+                formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "validity_rts": Metric(
                 column_name="validity",
                 scope="evaluation_rts",
                 dtype=float,
                 value=None,
-                formatter=".3f",
+                formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "uniqueness_rts": Metric(
                 column_name="uniqueness",
                 scope="evaluation_rts",
                 dtype=float,
                 value=None,
-                formatter=".3f",
+                formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "feasibility_rts": Metric(
                 column_name="feasibility",
                 scope="evaluation_rts",
                 dtype=float,
                 value=None,
-                formatter=".3f",
+                formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "known_either_rts": Metric(
                 column_name="known_from_validation_or_test",
