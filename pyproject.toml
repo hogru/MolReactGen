@@ -39,6 +39,8 @@ types-tqdm = "^4.64.7.11"
 interrogate = "^1.5.0"
 pre-commit = "^3.2.0"
 evaluate = "^0.4.0"
+plotly = "^5.14.1"
+kaleido = "0.2.1"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
