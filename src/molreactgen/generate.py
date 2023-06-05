@@ -25,6 +25,8 @@ from pathlib import Path
 from typing import Final, Optional, Union
 
 import pandas as pd  # type: ignore
+
+# import torch
 from loguru import logger
 from rdchiral.main import (  # type: ignore
     rdchiralReactants,
@@ -432,39 +434,42 @@ def create_and_save_generation_config(
     early_stopping = num_beams > 1
     do_sample = True
 
-    # If there is a generation config file, load it and overwrite the default values
-    if (model_file_path / DEFAULT_GENERATION_CONFIG_FILE_NAME).is_file():
-        generation_config, unused_kwargs = GenerationConfig.from_pretrained(
-            model_file_path,
-            do_sample=do_sample,
-            num_return_sequences=num_to_generate_in_pipeline,
-            min_new_tokens=min_length,
-            max_new_tokens=max_length,
-            pad_token_id=tokenizer.pad_token_id,
-            # eos_token_id=stopping_criteria,  # This is already set in the config file, can't overwrite it
-            num_beams=num_beams,
-            early_stopping=early_stopping,
-            temperature=temperature,
-            length_penalty=0.0,  # does neither promote nor penalize long sequences
-            return_unused_kwargs=True,
-        )
-        if unused_kwargs:
-            logger.warning(f"Unused kwargs for GenerationConfig: {list(unused_kwargs)}")
+    # TODO Include again once I resolve the following issue:
+    # The pre-trained GPT-2 model has an eos_token_id of 50256, but the fine-tuned model
+    # needs different stopping criteria. The problem is, that HF does not like overwriting it
+    # Therefore I always create a new GenerationConfig (instead of reading and changing it)
 
-    # Otherwise, create a new generation config
-    else:
-        generation_config = GenerationConfig(
-            do_sample=do_sample,
-            num_return_sequences=num_to_generate_in_pipeline,
-            min_new_tokens=min_length,
-            max_new_tokens=max_length,
-            pad_token_id=tokenizer.pad_token_id,
-            eos_token_id=stopping_criteria,
-            num_beams=num_beams,
-            early_stopping=early_stopping,
-            temperature=temperature,
-            length_penalty=0.0,  # does neither promote nor penalize long sequences
-        )
+    # if (model_file_path / DEFAULT_GENERATION_CONFIG_FILE_NAME).is_file():
+    #     generation_config, unused_kwargs = GenerationConfig.from_pretrained(
+    #         model_file_path,
+    #         do_sample=do_sample,
+    #         num_return_sequences=num_to_generate_in_pipeline,
+    #         min_new_tokens=min_length,
+    #         max_new_tokens=max_length,
+    #         pad_token_id=tokenizer.pad_token_id,
+    #         # eos_token_id=stopping_criteria,
+    #         num_beams=num_beams,
+    #         early_stopping=early_stopping,
+    #         temperature=temperature,
+    #         length_penalty=0.0,  # does neither promote nor penalize long sequences
+    #         return_unused_kwargs=True,
+    #     )
+    #     if len(unused_kwargs) > 0:
+    #         logger.warning(f"Unused kwargs for GenerationConfig: {list(unused_kwargs)}")
+    #
+    # else:
+    generation_config = GenerationConfig(
+        do_sample=do_sample,
+        num_return_sequences=num_to_generate_in_pipeline,
+        min_new_tokens=min_length,
+        max_new_tokens=max_length,
+        pad_token_id=tokenizer.pad_token_id,
+        eos_token_id=stopping_criteria,
+        num_beams=num_beams,
+        early_stopping=early_stopping,
+        temperature=temperature,
+        length_penalty=0.0,  # does neither promote nor penalize long sequences
+    )
 
     if overwrite_pretrained_config:
         generation_config.save_pretrained(model_file_path)
@@ -1099,6 +1104,9 @@ def main() -> None:
     if temperature <= 0:
         raise ValueError(f"Temperature must be greater than 0, not {temperature}")
 
+    # TODO Do this properly (à là train.py)
+    # torch.manual_seed(42)
+
     # Create text generation pipeline
     logger.info("Setting up generation configuration...")
     generation_config = create_and_save_generation_config(
@@ -1107,6 +1115,7 @@ def main() -> None:
         max_length=max_length,
         num_beams=num_beams,
         temperature=temperature,
+        overwrite_pretrained_config=True,
     )
 
     logger.info("Loading model (with updated generation config)...")

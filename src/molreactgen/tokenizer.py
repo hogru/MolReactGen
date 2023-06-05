@@ -96,6 +96,7 @@ REGEX_INPUT: Final[dict[str, str]] = {
 }
 
 # replace() is just a safety net against double "|" in the RegEx
+REGEX_PATTERN_CHAR: Final[str] = ""
 REGEX_PATTERN_SMARTS: Final[str] = "|".join(REGEX_INPUT.values()).replace("||", "|")
 REGEX_PATTERN_ATOM: Final[str] = REGEX_PATTERN_SMARTS.replace(r"\[[^\]]+]", r"\[|\]")
 MIN_VOCAB_SIZE_UNIGRAM: Final[
@@ -210,7 +211,7 @@ def get_tokenizer(
     # Determine regex pattern for pre-tokenizer
     if regex_pattern is None:
         if pre_tokenizer == "CHAR":
-            regex_pattern = ""
+            regex_pattern = REGEX_PATTERN_CHAR
         elif pre_tokenizer == "ATOM":
             regex_pattern = REGEX_PATTERN_ATOM
         elif pre_tokenizer == "SMARTS":
@@ -438,11 +439,12 @@ def get_modified_vocab(
     if start_idx < 0:
         raise ValueError("start_idx must be a positive number")
 
-    end_idx = len(vocab_original) - 2 if end_idx is None else int(end_idx)
+    end_idx = len(vocab_original) if end_idx is None else int(end_idx)
 
-    if not 0 < end_idx < len(vocab_original):
+    if not start_idx + len(modified_freq) < end_idx < len(vocab_original):
         raise ValueError(
-            f"end_idx must be a positive number and smaller than "
+            f"end_idx must be a positive number, be larger than start_idx plus the length "
+            f"of the new vocabulary and smaller than "
             f"{len(vocab_original)}, the length of tokenizer_original"
         )
 

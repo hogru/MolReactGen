@@ -1,0 +1,15 @@
+--dataset_dir data/prep/debug/csv
+--pre_tokenizer char
+--algorithm bpe
+--vocab_size 88
+--map_tokenizers true
+--model_name_or_path gpt2
+--model_type gpt2
+--random_seed false
+--fp16 true
+--per_device_train_batch_size 32
+--per_device_eval_batch_size 64
+--learning_rate 0.0025
+--num_train_epochs 2
+--log_level debug
+--logging_steps 10

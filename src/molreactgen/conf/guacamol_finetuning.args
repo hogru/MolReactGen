@@ -1,0 +1,12 @@
+--pre_tokenizer char
+--algorithm bpe
+--vocab_size 88
+--map_tokenizers true
+--model_name_or_path gpt2
+--model_type gpt2
+--random_seed false
+--fp16 true
+--per_device_train_batch_size 32
+--per_device_eval_batch_size 32
+--learning_rate 0.0005
+--num_train_epochs 10

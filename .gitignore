@@ -13,6 +13,8 @@
 /src/molreactgen/models/*
 /src/molreactgen/playground/*
 /src/molreactgen/tokenizers/*
+/src/molreactgen/utils/*.csv
+/src/molreactgen/utils/*.md
 /src/molreactgen/utils/wandb/*
 /src/molreactgen/wandb/*
 /tests/htmlcov/*
@@ -23,6 +25,7 @@
 *.ignore
 *.json
 *.numbers
+*.png
 *.pyc
 *.svg
 *.zip

@@ -1,3 +1,4 @@
 --dataset_dir data/prep/zinc/csv
 --validation_split_percentage 10
 --test_split_percentage 10
+--config_overrides n_positions=128,n_embd=144,n_layer=12,n_head=12
