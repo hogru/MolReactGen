@@ -2,4 +2,5 @@
 
 include data/prep/debug/csv/*.csv
 include data/prep/debug/fcd_stats/*.pkl
-include src/molreactgen/conf/*.toml
+include src/molreactgen/conf/*.args
+include src/molreactgen/conf/*.yaml
