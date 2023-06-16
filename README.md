@@ -109,6 +109,10 @@ python generate.py smarts \
 --num 10000
 ```
 
+### Hugging Face Models
+
+Pre-trained models are available on [Hugging Face](https://huggingface.co), both for [molecules](https://huggingface.co/hogru/MolReactGen-GuacaMol-Molecules) (SMILES) and [reaction templates](https://huggingface.co/hogru/MolReactGen-USPTO50K-Reaction-Templates) (SMARTS).
+
 ## Known issues and limitations
 
 - Ran only on a local GPU, not configured/tested for distributed training
