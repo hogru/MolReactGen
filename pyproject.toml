@@ -1,11 +1,11 @@
 [tool.poetry]
 name = "MolReactGen"
-version = "0.1a1"
+version = "1.0.0"
 description = "Auto-regressive transformer decoder based on Hugging Face GPT-2 to generate molecules (SMILES) and reaction templates (SMARTS)"
 authors = ["Stephan Holzgruber <stephan.holzgruber@gmail.com>"]
 readme = "README.md"
-license = "Apache-2.0"
-repository = "https://github.com/hogru/MolReactGen"
+license = "MIT"
+repository = "https://github.com/hogru/molreactgen"
 keywords = ["transformer", "auto-regressive model", "molecules", "reactions", "SMILES", "SMARTS", "GPT-2"]
 
 [tool.poetry.dependencies]
