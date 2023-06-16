@@ -79,7 +79,7 @@ python generate.py smiles \
 
 # Calculate the stats of GuacaMol training set (needed for FCD calculation)
 # This is computationally expensive and can be reused for model comparison
-python compute_fcd_stats.py \
+python utils/compute_fcd_stats.py \
 "../../data/prep/guacamol/csv/guacamol_v1_train.csv" \
 --output "../../data/prep/guacamol/fcd_stats/guacamol_train.pkl"
 
