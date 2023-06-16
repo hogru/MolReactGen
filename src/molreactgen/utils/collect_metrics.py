@@ -34,7 +34,7 @@ from molreactgen.tokenizer import (
 from molreactgen.train import WANDB_PROJECT_NAME
 
 # Global variables, defaults
-DEFAULT_OUTPUT_FILE_NAME: Final[str] = "./metrics"
+# DEFAULT_OUTPUT_FILE_NAME: Final[str] = "./metrics"
 SCOPE_TOKENIZER: Final[str] = "tokenizer"
 SCOPE_TRAINING: Final[str] = "training"
 SCOPE_MODEL: Final[str] = "model"
@@ -1218,6 +1218,7 @@ def save_experiments(
         raise TypeError("experiments must be an (Iterable of type) Experiment")
 
     file_path = Path(file_path).resolve()
+    logger.debug(f"Saving to {file_path}...")
 
     if file_format not in {"ALL", "CSV", "JSON", "MD"}:
         raise ValueError("file_format must be one of 'ALL', 'CSV', 'MD', 'JSON'")
@@ -1273,7 +1274,7 @@ def save_experiments(
 
 @logger.catch
 def main() -> None:
-    """Collect metrics from a number of files and save them to a single file."""
+    """Collect metrics from a number of experiments and save them to a single file."""
 
     # Prepare argument parser
     parser = argparse.ArgumentParser(
@@ -1289,8 +1290,9 @@ def main() -> None:
         "-o",
         type=Path,
         required=False,
-        default=DEFAULT_OUTPUT_FILE_NAME,
-        help="file path to save the metrics to, default: '%(default)s'.",
+        # default=DEFAULT_OUTPUT_FILE_NAME,
+        # help="file path to save the metrics to, default: '%(default)s'.",
+        help="file path to save the metrics to, default: files with the directory name in local directory.",
     )
     parser.add_argument(
         "--all",
@@ -1355,7 +1357,10 @@ def main() -> None:
 
     # Prepare and check (global) variables
     directory_path = Path(args.directory).resolve()
-    output_file_path = Path(args.output).resolve()
+    if args.output is None:
+        output_file_path = directory_path / directory_path.stem
+    else:
+        output_file_path = Path(args.output).resolve()
 
     if not directory_path.is_dir():
         raise ValueError(f"Directory '{directory_path}' does not exist")
