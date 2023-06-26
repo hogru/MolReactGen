@@ -1,8 +1,24 @@
 # MolReactGen
 
-An auto-regressive causal language model for molecule (SMILES) and reaction template (SMARTS) generation. Based on the [Hugging Face implementation](https://huggingface.co/docs/transformers/main/en/model_doc/gpt2#openai-gpt2) of [OpenAI’s GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) [transformer decoder](https://arxiv.org/abs/1706.03762v5) model.
+> An auto-regressive causal language model for molecule (SMILES) and reaction template (SMARTS) generation. Based on the [Hugging Face implementation](https://huggingface.co/docs/transformers/main/en/model_doc/gpt2#openai-gpt2) of [OpenAI’s GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) [transformer decoder](https://arxiv.org/abs/1706.03762v5) model.
 
-## Research questions:
+## Table of Contents
+
+- [Abstract](#Abstract)
+- [Research questions](#Research-questions)
+- [Installation](#Installation)
+- [Main files](#Main-files)
+- [Usage example](#Usage-example)
+- [Release History](#Release-History)
+- [Known Issues](#Known-Issues)
+- [Meta](#Meta)
+
+## Abstract
+
+This work focuses on the world of chemistry, with the goal of supporting the discovery of drugs to cure diseases or sustainable materials for cleaner energy. The research explores the potential of a transformer decoder model in generating chemically feasible molecules and reaction templates. We begin with contrasting the performance of [GuacaMol](https://pubs.acs.org/doi/10.1021/acs.jcim.8b00839) for molecule generation with a transformer decoder architecture, assessing the influence of various tokenizers on performance. The study also involves fine-tuning a pre-trained language model and comparing its outcomes with a model trained from scratch. It utilizes multiple metrics, including the [Fréchet ChemNet Distance](https://pubmed.ncbi.nlm.nih.gov/30118593/), to evaluate the model's ability to generate new, valid molecules similar to the training data. The research indicates that the transformer decoder model outperforms the GuacaMol model in terms of this metric, and is also successful in generating known reaction templates.
+
+
+## Research questions
 
 - How well does this model perform for molecule generation, using the [GuacaMol paper](https://pubs.acs.org/doi/10.1021/acs.jcim.8b00839) as a benchmark?
 - What is the effect of different tokenization approaches (different RegEx expressions as pre-tokenizers, tokenization algorithms such as BPE, WordPiece)?
@@ -49,7 +65,7 @@ python -m pip install -e .
 - the (default) directory `prepare_data.py` prepares the datasets in
 - a sub-directory is created for each dataset, containing the prepared data files
 
-## Example Usage
+## Usage example
 
 ### Pre-conditions
 
@@ -113,8 +129,21 @@ python generate.py smarts \
 
 Pre-trained models are available on [Hugging Face](https://huggingface.co), both for [molecules](https://huggingface.co/hogru/MolReactGen-GuacaMol-Molecules) (SMILES) and [reaction templates](https://huggingface.co/hogru/MolReactGen-USPTO50K-Reaction-Templates) (SMARTS).
 
-## Known issues and limitations
+## Release History
+
+- None yet - Work in progress
+
+## Known issues
 
 - Ran only on a local GPU, not configured/tested for distributed training
 - Not tested with pytorch ≥ v2.0
 - Starting with transformers v5 (not out as of this writing), the optimizer must be instantiated manually
+
+## Meta
+
+Stephan Holzgruber - stephan.holzgruber@gmail.com
+
+Distributed under the MIT license. See `LICENSE` for more information.
+
+[https://github.com/hogru/MolReactGen](https://github.com/hogru/MolReactGen
+)
