@@ -1,7 +1,7 @@
 ![Python Version](https://img.shields.io/badge/python-3.9-blue?color=3975A5&logo=python&link=https%3A%2F%2Fwww.python.org)
 ![Poetry Version](https://img.shields.io/badge/poetry-1.5-blue?color=1E293B&logo=poetry&link=https%3A%2F%2Fpython-poetry.org)
 ![Pytorch Version](https://img.shields.io/badge/pytorch-1.13-blue?color=EE4C2C&logo=pytorch&link=https%3A%2F%2Fpytorch.org)
-![Transformers Version](https://img.shields.io/badge/hf%20transformers-4.30-blue?color=FFD21E&link=https%3A%2F%2Fhuggingface.co%2Fdocs%2Ftransformers%2Findex)
+![Transformers Version](https://img.shields.io/badge/hf%20transformers-4.26-blue?color=FFD21E&link=https%3A%2F%2Fhuggingface.co%2Fdocs%2Ftransformers%2Findex)
 
 ![Code Style](https://img.shields.io/badge/code%20style-black-black?link=https%3A%2F%2Fpypi.org%2Fproject%2Fblack%2F)
 ![Imports](https://img.shields.io/badge/imports-isort-blue?color=EF8336&link=https%3A%2F%2Fpypi.org%2Fproject%2Fisort%2F)
