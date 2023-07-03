@@ -1,6 +1,7 @@
 # MANIFEST.in
 
-include data/prep/debug/csv/*.csv
-include data/prep/debug/fcd_stats/*.pkl
-include src/molreactgen/conf/*.args
-include src/molreactgen/conf/*.yaml
+include data/prep/guacamol/*
+include data/prep/uspto50k/*
+include src/molreactgen/conf/train.args
+include src/molreactgen/conf/guacamol*.*
+include src/molreactgen/conf/uspto50k*.*
