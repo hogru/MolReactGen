@@ -4,4 +4,5 @@
 --log_level debug
 --logging_steps 10
 --random_seed false
---fp16 true
+--fp16 false
+--use_mps_device true

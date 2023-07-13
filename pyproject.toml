@@ -51,6 +51,8 @@ pre-commit = "^3.2.0"
 evaluate = "^0.4.0"
 plotly = "^5.14.1"
 kaleido = "0.2.1"
+psutil = "^5.9.5"
+accelerate = "^0.20.3"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
