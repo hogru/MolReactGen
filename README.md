@@ -80,14 +80,36 @@ python -m pip install -e .
 ### Pre-conditions
 
 - Local repository installation (see above)
-- Python 3.9 - it should work with 3.10 as well, but I haven't tested it
+- Python 3.9 - it should work with ≥ 3.10 as well, but I haven't tested it
 - `poetry` installed (see [here](https://python-poetry.org/docs/#installation))
 - `poetry shell` to activate the virtual environment
 - Optional: `wandb` account and API key (see [here](https://docs.wandb.ai/quickstart)); should work with an anonymous account, but I haven't tested it
 
-cd into the `molreactgen/src/molreactgen` directory and run the following commands:
+> Note: the Hugging Face `trainer` uses its own [`accelerate`](https://huggingface.co/docs/accelerate/index) library under the hood. This library is supposed to support a number of distributed training backends. It should work with its default values for a simple setup, but you might want /need to change the `accelerate` parameters. You can do this by issuing the `accelerate config` command. This is my current setup:
+>
+> ```yaml
+> compute_environment: LOCAL_MACHINE
+> distributed_type: 'NO'
+> downcast_bf16: 'no'
+> machine_rank: 0
+> main_training_function: main
+> mixed_precision: fp16
+> num_machines: 1
+> num_processes: 1
+> rdzv_backend: static
+> same_network: true
+> tpu_env: []
+> tpu_use_cluster: false
+> tpu_use_sudo: false
+> use_cpu: false
+> ```
 
-### Molecules (SMILES)
+
+### Pipeline
+
+- `cd` into the `molreactgen/src/molreactgen` directory and run the following commands:
+
+#### Molecules (SMILES)
 
 ```bash
 # Download and prepare dataset
@@ -117,7 +139,7 @@ python assess.py stats \
 --num_molecules 10000
 ```
 
-### Reaction Templates (SMARTS)
+#### Reaction Templates (SMARTS)
 
 ```bash
 # Download and prepare dataset
@@ -147,13 +169,10 @@ Pre-trained models are available on [Hugging Face](https://huggingface.co), both
 
 - Ran only on a local GPU, not configured/tested for distributed training
 - Not tested with pytorch ≥ v2.0
-- Starting with transformers v5 (not out as of this writing), the optimizer must be instantiated manually
+- Starting with transformers v5 (not out as of this writing), the optimizer must be instantiated manually; this requires a code change in `train.py`
 
 ## Meta
 
-Stephan Holzgruber - stephan.holzgruber@gmail.com
-
-Distributed under the MIT license. See `LICENSE` for more information.
-
-[https://github.com/hogru/MolReactGen](https://github.com/hogru/MolReactGen
-)
+- Stephan Holzgruber - stephan.holzgruber@gmail.com
+- Distributed under the MIT license. See `LICENSE` for more information.
+- [https://github.com/hogru/MolReactGen](https://github.com/hogru/MolReactGen)
