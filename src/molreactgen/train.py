@@ -89,6 +89,7 @@ PROJECT_ROOT_DIR: Final[Path] = guess_project_root_dir()
 DEFAULT_CONFIG_DIR: Final[Path] = PROJECT_ROOT_DIR / "src/molreactgen/conf"
 FILE_LINK_TO_LATEST_CHECKPOINT: Final[str] = "latest_checkpoint"
 WANDB_PROJECT_NAME: Final[str] = "MolReactGen"
+WANDB_LOG_DIR: Final[Path] = PROJECT_ROOT_DIR / "logs"
 
 
 ###############################################################################
@@ -107,6 +108,11 @@ require_version("evaluate>=0.3.0", hint)
 # Based on
 # https://discuss.huggingface.co/t/get-using-the-call-method-is-faster-warning-with-datacollatorwithpadding/23924
 os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"
+
+# Without this, this script will fail on macOS with Apple Silicon
+# see also: https://huggingface.co/docs/transformers/main/en/main_classes/trainer#using-trainer-for-accelerated-pytorch-training-on-mac
+# This might be fixed with PyTorch 2.0 -> give it a try once updated to PyTorch ≥ 2.0
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
 # Configure logging to wandb
 # os.environ["WANDB_DISABLED"] = "false"
@@ -619,6 +625,9 @@ def main() -> None:
     # transformers.utils.logging.enable_explicit_format()
 
     # Log a small summary on each process
+    logger.heading("#################################")  # type: ignore
+    logger.heading("#    Starting new experiment    #")  # type: ignore
+    logger.heading("#################################")  # type: ignore
     logger.heading("Configuring training...")  # type: ignore
     logger.info(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu} "
@@ -1060,7 +1069,7 @@ def main() -> None:
         return metric.compute(predictions=preds, references=labels)  # type: ignore
 
     # -----------------------------------------------------------------------------
-    # Do final configuration steps and initialize trainer
+    # Do final configuration steps and write misc training information
     # -----------------------------------------------------------------------------
 
     callbacks: list[TrainerCallback] = []
@@ -1090,8 +1099,11 @@ def main() -> None:
         os.environ["WANDB_LOG_MODEL"] = "end"
         os.environ["WANDB_WATCH"] = "gradients"
 
+        # Initialize wandb run
+        WANDB_LOG_DIR.mkdir(parents=True, exist_ok=True)
         _ = wandb.init(
             project=WANDB_PROJECT_NAME,
+            dir=WANDB_LOG_DIR,
             job_type="train",
             anonymous="allow",
         )
@@ -1116,6 +1128,10 @@ def main() -> None:
     else:
         os.environ["WANDB_DISABLED"] = "true"
 
+    # -----------------------------------------------------------------------------
+    # Train / Fine-tune the model
+    # -----------------------------------------------------------------------------
+
     # TODO configure optimizer manually
     #  With Transformer V5, HF will deprecate the support for configuring the optimizer via arguments
 
@@ -1135,10 +1151,6 @@ def main() -> None:
         else None,
         callbacks=callbacks,
     )
-
-    # -----------------------------------------------------------------------------
-    # Train / Fine-tune the model
-    # -----------------------------------------------------------------------------
 
     # Training (train/validation set)
     if training_args.do_train:
@@ -1170,6 +1182,8 @@ def main() -> None:
         metrics["train_samples"] = min(max_train_samples, len(train_dataset))
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
         trainer.save_state()
 
     # Evaluation (test set)
@@ -1188,9 +1202,34 @@ def main() -> None:
             perplexity = math.exp(metrics["test_loss"])
         except OverflowError:
             perplexity = float("inf")
-        metrics["perplexity"] = perplexity  # TODO "tag" with test
+        metrics["test_perplexity"] = perplexity
         trainer.log_metrics("test", metrics)
         trainer.save_metrics("test", metrics)
+
+    # Helper function to write misc training information to file
+    # Useful for later evaluation, complements default information written by hugging face
+    def write_misc_training_information():
+        """Write misc training information to file."""
+
+        train_info: dict[str, Any] = {}
+        train_info_file = (
+            Path(training_args.output_dir) / "misc_training_information.json"
+        )
+
+        if wandb.run is not None:
+            train_info["wandb_run_name"] = wandb.run.name
+            train_info["wandb_run_id"] = wandb.run.id
+        else:
+            train_info["wandb_run_name"] = None
+            train_info["wandb_run_id"] = None
+
+        # TODO once datasets from hugging face are implemented, amend this to include this information
+        train_info["dataset_dir"] = data_args.dataset_dir
+
+        with open(train_info_file, "w") as f:
+            json.dump(train_info, f, indent=4)
+
+    write_misc_training_information()
 
     if wandb.run is not None:
         wandb.finish()
