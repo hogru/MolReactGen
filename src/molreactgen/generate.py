@@ -22,11 +22,11 @@ import argparse
 import contextlib
 from datetime import datetime
 from pathlib import Path
+from random import randint
 from typing import Final, Optional, Union
 
 import pandas as pd  # type: ignore
-
-# import torch
+import torch
 from loguru import logger
 from rdchiral.main import (  # type: ignore
     rdchiralReactants,
@@ -97,6 +97,7 @@ VALID_GENERATION_MODES_HELP_STR: Final[str] = (
 DEFAULT_NUM_TO_GENERATE: Final[int] = 10_000
 MIN_NUM_TO_GENERATE: Final[int] = 20
 DEFAULT_NUM_BEAMS: Final[int] = 1
+DEFAULT_SEED: Final[int] = 42
 DEFAULT_TEMPERATURE: Final[float] = 1.0
 
 
@@ -534,8 +535,8 @@ def generate_smiles(
 
     # Generate molecules
     logger.info(
-        f"Starting generation... ({config.num_return_sequences} molecules at a time, "
-        f"with a maximum sequence length of {config.max_new_tokens})"
+        f"Starting generation... ({config.num_return_sequences:,} molecules at a time, "
+        f"with a maximum sequence length of {config.max_new_tokens:,})"
     )
     num_tries = 0
     with Progress(
@@ -775,8 +776,8 @@ def generate_smarts(
 
     # Generate reaction templates
     logger.info(
-        f"Starting generation... ({config.num_return_sequences} reaction templates at a time, "
-        f"with a maximum sequence length of {config.max_new_tokens})"
+        f"Starting generation... ({config.num_return_sequences:,} reaction templates at a time, "
+        f"with a maximum sequence length of {config.max_new_tokens:,})"
     )
     num_tries = 0
     with Progress(
@@ -999,6 +1000,20 @@ def main() -> None:
         f"'{GENERATED_DATA_DIR}/generated_{VALID_GENERATION_MODES_HELP_STR}.csv'.",
     )
     parser.add_argument(
+        "-r",
+        "--random_seed",
+        action="store_true",
+        default=False,
+        help="whether a random seed should be configured; overwrites a fixed seed value, default: '%(default)s'.",
+    )
+    parser.add_argument(
+        "-s",
+        "--seed",
+        type=int,
+        default=DEFAULT_SEED,
+        help="the value used as to seed the the random number generator, default: '%(default)s'.",
+    )
+    parser.add_argument(
         "-t",
         "--temperature",
         type=float,
@@ -1086,12 +1101,12 @@ def main() -> None:
     max_length = args.length
     if max_length is None:
         logger.info(
-            f"Generate ≥ {num_to_generate} {items_name}; "
+            f"Generate ≥ {num_to_generate:,} {items_name}; "
             f"the maximum length will be determined by the model's sequence length"
         )
     else:
         logger.info(
-            f"Generate ≥ {num_to_generate} {items_name} with a maximum length ≤ {max_length}"
+            f"Generate ≥ {num_to_generate:,} {items_name} with a maximum length ≤ {max_length:,}"
         )
 
     num_beams = args.num_beams
@@ -1104,8 +1119,11 @@ def main() -> None:
     if temperature <= 0:
         raise ValueError(f"Temperature must be greater than 0, not {temperature}")
 
-    # TODO Do this properly (à là train.py)
-    # torch.manual_seed(42)
+    # Set seed in torch
+    if args.random_seed:
+        args.seed = randint(0, 2**32 - 1)
+    logger.debug(f"Using random seed {args.seed}")
+    torch.manual_seed(args.seed)
 
     # Create text generation pipeline
     logger.info("Setting up generation configuration...")
@@ -1157,7 +1175,7 @@ def main() -> None:
 
     # Display and save statistics
     logger.info("Generation statistics")
-    logger.info(f"Absolute numbers:   {counter.get_count()}")
+    logger.info(f"Absolute numbers:   {counter.get_count():,}")
     logger.info(
         f"Absolute fractions: {counter.get_absolute_fraction(format_specifier='.4f')}"
     )
