@@ -292,18 +292,19 @@ def _determine_stopping_criteria(
         the stopping criteria for the generation pipeline.
     """
 
-    # TODO Change once the HF bug is fixed
-    # This would be correct but does not work due to a bug in transformers, see:
+    # This is the "correct" code as long as this HF bug is not fixed
     # https://github.com/huggingface/transformers/pull/21461
-    # stopping_criteria: Union[int, list[int]]
-    # if fine_tuned:
-    #   stopping_criteria = [
-    #         tokenizer.convert_tokens_to_ids(EOS_TOKEN),
-    #       tokenizer.eos_token_id,
-    #   ]
 
+    # return (  # type: ignore
+    #     tokenizer.convert_tokens_to_ids(EOS_TOKEN)
+    #     if fine_tuned
+    #     else tokenizer.eos_token_id
+    # )
+
+    # Let's hope this works now
+    # TODO if it does work, remove the above code and the comments hinting at the bug
     return (  # type: ignore
-        tokenizer.convert_tokens_to_ids(EOS_TOKEN)
+        [tokenizer.convert_tokens_to_ids(EOS_TOKEN), tokenizer.eos_token_id]
         if fine_tuned
         else tokenizer.eos_token_id
     )
@@ -530,6 +531,8 @@ def generate_smiles(
     # Load existing molecules
     logger.info("Loading known molecules...")
     existing_molecules: list[Molecule] = _load_existing_molecules(existing_file_path)
+    # Building the set is painfully slow (about 10min), but I don't know how to speed it up
+    # The bulk of the time is spent in calculating the hashes (Molecule.__hash__)
     smiles["all_existing"] = set(existing_molecules)
     assert all(bool(s.canonical_smiles) for s in smiles["all_existing"])
 
