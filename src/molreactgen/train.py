@@ -329,6 +329,8 @@ class DataArguments:
                     f"with unsupported extension {file.suffix}"
                 )
 
+        # TODO Fine-tuning does not work without `map_tokenizers == true` (because of missing `pad_token`)
+        #   Skip for now, just have to provide a correct configuration
         if self.map_tokenizers:
             if (
                 self.pre_tokenizer is None
@@ -521,7 +523,9 @@ def _get_training_config() -> tuple[argparse.Namespace, ...]:
 ###############################################################################
 
 
-# TODO might implement this function (but not needed for now)
+# TODO might implement this function
+#   Skip for now since we do not load datasets from the HF hub
+#   Once we want to load a dataset from the HF hub we need to implement this
 # noinspection PyMissingOrEmptyDocstring
 def _load_raw_dataset_from_hub(  # noqa  # Remove once implemented
     dataset_name: str,  # noqa
@@ -613,9 +617,8 @@ def main() -> None:
     log_level = (
         training_args.get_process_log_level()
     )  # This returns a log level depending on main process yes/no etc.
-    # TODO Remove papertrail logging
     # noinspection SpellCheckingInspection
-    configure_logging(log_level, address=("logs3.papertrailapp.com", 32501))
+    configure_logging(log_level)
     configure_hf_logging(log_level)
     # datasets.utils.logging.set_verbosity(log_level)
     # datasets.utils.logging.disable_progress_bar()
@@ -1133,7 +1136,8 @@ def main() -> None:
     # -----------------------------------------------------------------------------
 
     # TODO configure optimizer manually
-    #  With Transformer V5, HF will deprecate the support for configuring the optimizer via arguments
+    #   With Transformer V5, HF will deprecate the support for configuring the optimizer via arguments
+    #   Skip for now, will stay with Transformer V4.x
 
     # Initialize the Trainer
     trainer = Trainer(
@@ -1223,8 +1227,11 @@ def main() -> None:
             train_info["wandb_run_name"] = None
             train_info["wandb_run_id"] = None
 
-        # TODO once datasets from hugging face are implemented, amend this to include this information
+        # TODO once datasets from hugging face are implemented, include this information
+        #   Must be done after implementing the function "_load_raw_dataset_from_hub()"
         train_info["dataset_dir"] = data_args.dataset_dir
+
+        train_info["model_size"] = f"{n_params/2**20:.2f}M"
 
         with open(train_info_file, "w") as f:
             json.dump(train_info, f, indent=4)
