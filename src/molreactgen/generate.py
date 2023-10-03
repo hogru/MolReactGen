@@ -641,7 +641,7 @@ def generate_smiles(
         s.novel = s not in smiles["all_existing"]
 
     # Generate the "simple" output
-    # TODO Might delete this later since it is not really used later on
+    # This is a smaller, filtered file for convenience; not necessary
     column_smiles = [s.canonical_smiles for s in smiles["all_novel"]]
     df_small = pd.DataFrame(
         {
@@ -932,7 +932,7 @@ def generate_smarts(
         s.unique = all_smarts.count(s) == 1
 
     # Generate the "simple" output
-    # TODO Might delete this later since it is not really used later on
+    # This is a smaller, filtered file for convenience; not necessary
     column_smarts = [s.reaction_smarts for s in smarts["all_feasible"]]
     df_small = pd.DataFrame(
         {
