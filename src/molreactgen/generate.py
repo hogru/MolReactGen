@@ -17,7 +17,6 @@ Functions:
         Entry point for the generate command line interface.
 """
 
-
 import argparse
 import contextlib
 from datetime import datetime
@@ -69,16 +68,23 @@ PROJECT_ROOT_DIR: Final[Path] = guess_project_root_dir()
 GENERATED_DATA_DIR: Final[Path] = (
     PROJECT_ROOT_DIR / "data" / "generated" / f"{datetime.now():%Y-%m-%d_%H-%M}"
 )
-ARGUMENTS_FILE_PATH: Final[Path] = GENERATED_DATA_DIR / "generate_cl_args.json"
+ARGUMENTS_FILE_PATH: Final[Path] = GENERATED_DATA_DIR / "generate_args.json"
 DEFAULT_SMILES_OUTPUT_FILE_PATH: Final[Path] = (
     GENERATED_DATA_DIR / "generated_smiles.csv"
+)
+DEFAULT_SMILES_OUTPUT_FILE_PATH_NOVEL: Final[Path] = (
+    GENERATED_DATA_DIR / "generated_smiles_novel_only.csv"
 )
 DEFAULT_SMARTS_OUTPUT_FILE_PATH: Final[Path] = (
     GENERATED_DATA_DIR / "generated_smarts.csv"
 )
+DEFAULT_SMARTS_OUTPUT_FILE_PATH_FEASIBLE: Final[Path] = (
+    GENERATED_DATA_DIR / "generated_smarts_feasible_only.csv"
+)
+
 DEFAULT_GENERATION_CONFIG_FILE_NAME: Final[str] = "generation_config.json"
-CSV_STATS_FILE_NAME: Final[Path] = GENERATED_DATA_DIR / "generation_stats.csv"
-JSON_STATS_FILE_NAME: Final[Path] = GENERATED_DATA_DIR / "generation_stats.json"
+# CSV_STATS_FILE_NAME: Final[Path] = GENERATED_DATA_DIR / "generate_stats.csv"  # not used
+JSON_STATS_FILE_NAME: Final[Path] = GENERATED_DATA_DIR / "generate_stats.json"
 MODEL_LINK_DIR_NAME: Final[Path] = GENERATED_DATA_DIR / "link_to_model"
 KNOWN_LINK_FILE_NAME: Final[Path] = GENERATED_DATA_DIR / "link_to_known.csv"
 LATEST_LINK_FILE_NAME: Final[Path] = (
@@ -97,6 +103,7 @@ VALID_GENERATION_MODES_HELP_STR: Final[str] = (
 DEFAULT_NUM_TO_GENERATE: Final[int] = 10_000
 MIN_NUM_TO_GENERATE: Final[int] = 20
 DEFAULT_NUM_BEAMS: Final[int] = 1
+DEFAULT_REPETITION_PENALTY: Final[float] = 1.2
 DEFAULT_SEED: Final[int] = 42
 DEFAULT_TEMPERATURE: Final[float] = 1.0
 
@@ -394,6 +401,7 @@ def create_and_save_generation_config(
     split_into_chunks: bool = True,
     max_length: Optional[int] = None,
     num_beams: int = 1,
+    repetition_penalty: float = 1.0,
     temperature: float = 1.0,
     overwrite_pretrained_config: bool = False,
 ) -> GenerationConfig:
@@ -405,6 +413,7 @@ def create_and_save_generation_config(
         split_into_chunks: whether to split the number of items to generate into chunks/batches. Defaults to True.
         max_length:the maximum length of the generated items. Defaults to None, i.e. the model's maximum length.
         num_beams: the number of beams to use for beam search. Defaults to 1, i.e. multinomial search.
+        repetition_penalty: the repetition penalty during generation.
         temperature: the value used to modulate the next token probabilities (change logits before softmax).
             Defaults to 1.0, i.e. no modulation.
         overwrite_pretrained_config: whether to overwrite the generation config if it already exists. Defaults to False.
@@ -470,6 +479,7 @@ def create_and_save_generation_config(
         num_beams=num_beams,
         early_stopping=early_stopping,
         temperature=temperature,
+        repetition_penalty=repetition_penalty,
         length_penalty=0.0,  # does neither promote nor penalize long sequences
     )
 
@@ -631,7 +641,7 @@ def generate_smiles(
         s.novel = s not in smiles["all_existing"]
 
     # Generate the "simple" output
-    # TODO Might delete this later since it is not really needed
+    # TODO Might delete this later since it is not really used later on
     column_smiles = [s.canonical_smiles for s in smiles["all_novel"]]
     df_small = pd.DataFrame(
         {
@@ -747,6 +757,7 @@ def generate_smarts(
     assert max_num_tries > 0
 
     # Setup variables
+    all_smarts: list[Reaction] = []  # need a list instead of a set for master list
     smarts: dict[str, set[Reaction]] = {
         "all_existing": set(),
         "all_valid": set(),
@@ -815,9 +826,10 @@ def generate_smarts(
                 for s in generated
             }
             smarts["pl_generated"] = {Reaction(s) for s in generated}
+            all_smarts.extend(smarts["pl_generated"])
             smarts["pl_valid"] = {s for s in smarts["pl_generated"] if s.valid}
 
-            # Check if we have to abort because we cannot generate valid molecules
+            # Check if we have to abort because we cannot generate valid reaction templates
             if len(smarts["pl_valid"]) == 0:
                 num_tries += 1
                 if num_tries >= max_num_tries:
@@ -915,21 +927,63 @@ def generate_smarts(
 
     # Generate output
     logger.debug("Generating output...")
+    # That is a bit redundant but came later and I did not want to change the generation code too much
+    for s in all_smarts:
+        s.unique = all_smarts.count(s) == 1
+
+    # Generate the "simple" output
+    # TODO Might delete this later since it is not really used later on
     column_smarts = [s.reaction_smarts for s in smarts["all_feasible"]]
-    column_known = [(s.in_val_set or s.in_test_set) for s in smarts["all_feasible"]]
-    column_valid_set = [s.in_val_set for s in smarts["all_feasible"]]
-    column_test_set = [s.in_test_set for s in smarts["all_feasible"]]
-    column_num_works_with = [s.num_works_with for s in smarts["all_feasible"]]
+    df_small = pd.DataFrame(
+        {
+            "reaction_smarts": column_smarts,
+        }
+    )
+
+    # column_smarts = [s.reaction_smarts for s in smarts["all_feasible"]]
+    # column_known = [(s.in_val_set or s.in_test_set) for s in smarts["all_feasible"]]
+    # column_valid_set = [s.in_val_set for s in smarts["all_feasible"]]
+    # column_test_set = [s.in_test_set for s in smarts["all_feasible"]]
+    # column_num_works_with = [s.num_works_with for s in smarts["all_feasible"]]
+    # column_example = [
+    #     s.works_with.split(CSV_ID_SPLITTER, maxsplit=1)[0]
+    #     if s.works_with is not None
+    #     else "ERROR!"
+    #     for s in smarts["all_feasible"]
+    # ]
+
+    # df_full = pd.DataFrame(
+    #     {
+    #         "feasible_reaction_smarts": column_smarts,
+    #         "not_trained_on_but_known": column_known,
+    #         "known_from_valid_set": column_valid_set,
+    #         "known_from_test_set": column_test_set,
+    #         "num_products_works_with": column_num_works_with,
+    #         "example_works_with_reaction_id": column_example,
+    #     }
+    # )
+
+    column_smarts = [s.reaction_smarts for s in all_smarts]
+    column_valid = [s.valid for s in all_smarts]
+    column_unique = [s.unique for s in all_smarts]
+    column_feasible = [s in smarts["all_feasible"] for s in all_smarts]
+    column_known = [(s.in_val_set or s.in_test_set) for s in all_smarts]
+    column_valid_set = [s.in_val_set for s in all_smarts]
+    column_test_set = [s.in_test_set for s in all_smarts]
+    column_num_works_with = [s.num_works_with for s in all_smarts]
     column_example = [
         s.works_with.split(CSV_ID_SPLITTER, maxsplit=1)[0]
         if s.works_with is not None
-        else "ERROR!"
-        for s in smarts["all_feasible"]
+        else None
+        for s in all_smarts
     ]
 
-    df = pd.DataFrame(
+    df_full = pd.DataFrame(
         {
-            "feasible_reaction_smarts": column_smarts,
+            "reaction_smarts": column_smarts,
+            "valid": column_valid,
+            "unique": column_unique,
+            "feasible": column_feasible,
             "not_trained_on_but_known": column_known,
             "known_from_valid_set": column_valid_set,
             "known_from_test_set": column_test_set,
@@ -938,8 +992,7 @@ def generate_smarts(
         }
     )
 
-    # At the moment the two outputs are identical, we might change that later
-    return counter, df, df
+    return counter, df_small, df_full
 
 
 @logger.catch
@@ -1001,6 +1054,13 @@ def main() -> None:
         default=None,
         help=f"file path for the generated molecules or reaction templates, default: "
         f"'{GENERATED_DATA_DIR}/generated_{VALID_GENERATION_MODES_HELP_STR}.csv'.",
+    )
+    parser.add_argument(
+        "-p",
+        "--repetition-penalty",
+        type=float,
+        default=DEFAULT_REPETITION_PENALTY,
+        help="the repetition penalty, default: '%(default)s'.",
     )
     parser.add_argument(
         "-r",
@@ -1071,17 +1131,11 @@ def main() -> None:
 
     if args.output is None:
         if args.mode == "smiles":
-            output_file_path_short = (
-                GENERATED_DATA_DIR / "generated_smiles_novel_only.csv"
-            )
-            output_file_path_full = GENERATED_DATA_DIR / "generated_smiles.csv"
+            output_file_path_short = DEFAULT_SMILES_OUTPUT_FILE_PATH_NOVEL
+            output_file_path_full = DEFAULT_SMILES_OUTPUT_FILE_PATH
         else:
-            output_file_path_short = (
-                GENERATED_DATA_DIR / "generated_reaction_templates_redundant.csv"
-            )
-            output_file_path_full = (
-                GENERATED_DATA_DIR / "generated_reaction_templates.csv"
-            )
+            output_file_path_short = DEFAULT_SMARTS_OUTPUT_FILE_PATH_FEASIBLE
+            output_file_path_full = DEFAULT_SMARTS_OUTPUT_FILE_PATH
     else:
         output_file_path_full = Path(args.output).resolve()
         if args.mode == "smiles":
@@ -1090,7 +1144,7 @@ def main() -> None:
             )
         else:
             output_file_path_short = output_file_path_full.with_stem(
-                output_file_path_full.stem + "_redundant"
+                output_file_path_full.stem + "_feasible_only"
             )
 
     logger.debug(f"Output file path: {output_file_path_full}")
@@ -1117,6 +1171,13 @@ def main() -> None:
     if num_beams < 1:
         raise ValueError(f"Number of beams must be greater than 0, not {num_beams}")
 
+    repetition_penalty = args.repetition_penalty
+    logger.debug(f"Repetition penalty: {repetition_penalty}")
+    if repetition_penalty <= 0:
+        raise ValueError(
+            f"Repetition penalty must be greater than 0, not {repetition_penalty}"
+        )
+
     temperature = args.temperature
     logger.debug(f"Temperature: {temperature}")
     if temperature <= 0:
@@ -1135,6 +1196,7 @@ def main() -> None:
         num_to_generate=num_to_generate,
         max_length=max_length,
         num_beams=num_beams,
+        repetition_penalty=repetition_penalty,
         temperature=temperature,
         overwrite_pretrained_config=True,
     )
@@ -1178,22 +1240,20 @@ def main() -> None:
 
     # Display and save statistics
     logger.info("Generation statistics")
-    logger.info(f"Absolute numbers:   {counter.get_count():,}")
+    logger.info(f"Absolute numbers:   {counter.get_count(format_specifier=',')}")
     logger.info(
-        f"Absolute fractions: {counter.get_absolute_fraction(format_specifier='.4f')}"
+        f"Absolute fractions: {counter.get_absolute_fraction(format_specifier='.3f')}"
     )
     logger.info(
-        f"Relative fractions: {counter.get_relative_fraction(format_specifier='.4f')}"
+        f"Relative fractions: {counter.get_relative_fraction(format_specifier='.3f')}"
     )
 
     counter.save_to_file(JSON_STATS_FILE_NAME, format_="json")
 
     # Save generated items
-    logger.info(
-        f"Saving generated {items_name} to {output_file_path_short} "
-        f"and {output_file_path_full}..."
-    )
+    logger.info(f"Saving generated {items_name} to {output_file_path_short}...")
     df_short.to_csv(output_file_path_short, index=False)
+    logger.info(f"Saving generated {items_name} to {output_file_path_full}...")
     df_full.to_csv(output_file_path_full, index=False)
 
     # Create symlinks for better traceability and convenience

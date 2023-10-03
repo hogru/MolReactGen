@@ -307,6 +307,7 @@ class Reaction:
         split: Split the reaction template originates from.
         id: The reaction template ID.
         product: The product of the reaction template.
+        unique: Whether the reaction template is unique.
         feasible: Whether the reaction template is feasible.
 
     Methods:
@@ -340,6 +341,7 @@ class Reaction:
         self.split = str(split).lower() if split is not None else None
         self.id = id_
         self.product = product
+        self.unique: bool = False
         self.feasible = feasible
         self.works_with: Optional[str] = None
         self.num_works_with: int = 0
@@ -537,6 +539,7 @@ class Molecule:
         self_smiles = self.canonical_smiles if self.valid else self.smiles
         other_smiles = other.canonical_smiles if other.valid else other.smiles
         return self_smiles == other_smiles
+        # return self.__hash__() == other.__hash__()
 
     def __hash__(self) -> int:
         return hash(self.canonical_smiles if self.valid else self.smiles)
