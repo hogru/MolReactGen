@@ -52,9 +52,12 @@ T = TypeVar("T", bound=npt.NBitBase)
 
 # Global variables, defaults
 PROJECT_ROOT_DIR: Final[Path] = guess_project_root_dir()
-DEFAULT_OUTPUT_FILE_NAME: Final[str] = "evaluation.json"
-ARGUMENTS_FILE_NAME: Final[str] = "evaluate_cl_args.json"
-
+DEFAULT_OUTPUT_FILE_NAME: Final[str] = "assess_stats.json"
+ARGUMENTS_FILE_NAME: Final[str] = "assess_args.json"
+VALID_TARGET_MODES: Final[tuple[str, ...]] = (
+    "smiles",
+    "smarts",
+)
 VALID_EVALUATION_MODES: Final[tuple[str, ...]] = (
     "reference",
     "stats",
@@ -402,10 +405,10 @@ def main() -> None:
         "and a reference set."
     )
     parser.add_argument(
-        "mode",
+        "target",
         type=str.lower,
-        choices=VALID_EVALUATION_MODES,
-        help="the evaluation mode.",
+        choices=VALID_TARGET_MODES,
+        help="the target format to assess.",
     )
     parser.add_argument(
         "-g",
@@ -414,6 +417,14 @@ def main() -> None:
         required=True,
         help="file path to the generated molecules.",
     )
+    parser.add_argument(
+        "-m",
+        "--mode",
+        type=str.lower,
+        choices=VALID_EVALUATION_MODES,
+        help="the evaluation mode.",
+    )
+
     parser.add_argument(
         "-n",
         "--num_molecules",
@@ -473,42 +484,22 @@ def main() -> None:
         args, Path(args.generated).parent / ARGUMENTS_FILE_NAME, ("log_level",)
     )
 
-    logger.heading("Evaluating molecules...")  # type: ignore
+    if args.target == "smiles":
+        logger.heading("Evaluating molecules...")  # type: ignore
 
-    # Prepare and check (global) variables
-    generated_file_path = Path(args.generated).resolve()
-    logger.debug(f"Generated molecules file path: {generated_file_path}")
-    if not generated_file_path.is_file():
-        raise FileNotFoundError(
-            f"Generated molecules file '{generated_file_path}' not found"
-        )
-
-    reference_file_path: Optional[Path]
-    stats_file_path: Optional[Path]
-
-    if args.mode == "reference" and args.reference is not None:
-        stats_file_path = None
-        reference_file_path = Path(args.reference).resolve()
-        logger.debug(f"Reference molecules file path: {reference_file_path}")
-        if not reference_file_path.is_file():
+        # Prepare and check (global) variables
+        generated_file_path = Path(args.generated).resolve()
+        logger.debug(f"Generated molecules file path: {generated_file_path}")
+        if not generated_file_path.is_file():
             raise FileNotFoundError(
-                f"Reference molecules file '{reference_file_path}' not found"
+                f"Generated molecules file '{generated_file_path}' not found"
             )
 
-    elif args.mode == "stats":
-        if args.stats is None:
-            raise ValueError(
-                "Reference statistics file path must be provided in 'stats' mode"
-            )
-        stats_file_path = Path(args.stats).resolve()
-        logger.debug(f"Reference statistics file path: {stats_file_path}")
+        reference_file_path: Optional[Path]
+        stats_file_path: Optional[Path]
 
-        if not stats_file_path.is_file():
-            raise FileNotFoundError(
-                f"Reference statistics file '{stats_file_path}' not found"
-            )
-
-        if args.reference is not None:
+        if args.mode == "reference" and args.reference is not None:
+            stats_file_path = None
             reference_file_path = Path(args.reference).resolve()
             logger.debug(f"Reference molecules file path: {reference_file_path}")
             if not reference_file_path.is_file():
@@ -516,51 +507,80 @@ def main() -> None:
                     f"Reference molecules file '{reference_file_path}' not found"
                 )
 
+        elif args.mode == "stats":
+            if args.stats is None:
+                raise ValueError(
+                    "Reference statistics file path must be provided in 'stats' mode"
+                )
+            stats_file_path = Path(args.stats).resolve()
+            logger.debug(f"Reference statistics file path: {stats_file_path}")
+
+            if not stats_file_path.is_file():
+                raise FileNotFoundError(
+                    f"Reference statistics file '{stats_file_path}' not found"
+                )
+
+            if args.reference is not None:
+                reference_file_path = Path(args.reference).resolve()
+                logger.debug(f"Reference molecules file path: {reference_file_path}")
+                if not reference_file_path.is_file():
+                    raise FileNotFoundError(
+                        f"Reference molecules file '{reference_file_path}' not found"
+                    )
+
+            else:
+                reference_file_path = None
+
         else:
-            reference_file_path = None
+            raise ValueError(
+                "Reference molecules file path must be provided in 'reference' mode"
+            )
+
+        if args.num_molecules is not None and args.num_molecules <= 0:
+            raise ValueError(
+                f"Number of molecules to evaluate must be greater than 0, "
+                f"got {args.num_molecules}"
+            )
+
+        if args.output is None:
+            output_file_path = generated_file_path.parent / DEFAULT_OUTPUT_FILE_NAME
+        else:
+            output_file_path = Path(args.output).resolve()
+            output_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        logger.debug(f"Output file path: '{output_file_path}'")
+
+        # Start timer
+        with Timer(
+            name="evaluate_molecules",
+            text=lambda secs: f"Molecules evaluated in {format_timespan(secs)}",
+            logger=logger.info,
+        ):
+            # Evaluate molecules
+            stats = evaluate_molecules(
+                args.mode,
+                generated_file_path=generated_file_path,
+                reference_file_path=reference_file_path,
+                stats_file_path=stats_file_path,
+                num_molecules=args.num_molecules,
+            )
+
+            # Display and save evaluation stats to file
+            logger.info("Evaluation statistics:")
+            for k, v in stats.items():
+                logger.info(f"{k}: {v:.4f}")
+
+            logger.info(f"Saving evaluation statistics to {output_file_path}")
+            with open(output_file_path, "w") as f:
+                json.dump(stats, f, indent=4)
+
+    elif args.target == "smarts":
+        logger.warning(
+            "Post generation assessment of SMARTS not implemented yet, is done during generation"
+        )
 
     else:
-        raise ValueError(
-            "Reference molecules file path must be provided in 'reference' mode"
-        )
-
-    if args.num_molecules is not None and args.num_molecules <= 0:
-        raise ValueError(
-            f"Number of molecules to evaluate must be greater than 0, "
-            f"got {args.num_molecules}"
-        )
-
-    if args.output is None:
-        output_file_path = generated_file_path.parent / DEFAULT_OUTPUT_FILE_NAME
-    else:
-        output_file_path = Path(args.output).resolve()
-        output_file_path.parent.mkdir(parents=True, exist_ok=True)
-
-    logger.debug(f"Output file path: '{output_file_path}'")
-
-    # Start timer
-    with Timer(
-        name="evaluate_molecules",
-        text=lambda secs: f"Molecules evaluated in {format_timespan(secs)}",
-        logger=logger.info,
-    ):
-        # Evaluate molecules
-        stats = evaluate_molecules(
-            args.mode,
-            generated_file_path=generated_file_path,
-            reference_file_path=reference_file_path,
-            stats_file_path=stats_file_path,
-            num_molecules=args.num_molecules,
-        )
-
-        # Display and save evaluation stats to file
-        logger.info("Evaluation statistics:")
-        for k, v in stats.items():
-            logger.info(f"{k}: {v:.4f}")
-
-        logger.info(f"Saving evaluation statistics to {output_file_path}")
-        with open(output_file_path, "w") as f:
-            json.dump(stats, f, indent=4)
+        raise ValueError(f"Invalid generation target: {args.target}")
 
 
 if __name__ == "__main__":
