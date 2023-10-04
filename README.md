@@ -10,11 +10,8 @@
 
 # MolReactGen
 
-> An auto-regressive causal language model for molecule (SMILES) and reaction template (SMARTS) generation. Based on
-> the [Hugging Face implementation](https://huggingface.co/docs/transformers/main/en/model_doc/gpt2#openai-gpt2)
->
-of [OpenAI’s GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) [transformer decoder](https://arxiv.org/abs/1706.03762v5)
-> model.
+> An auto-regressive causal language model for molecule (SMILES) and reaction template (SMARTS) generation. Based on the [Hugging Face implementation](https://huggingface.co/docs/transformers/main/en/model_doc/gpt2#openai-gpt2)
+of [OpenAI’s GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) [transformer decoder](https://arxiv.org/abs/1706.03762v5) model.
 
 ## Table of Contents
 
