@@ -18,13 +18,13 @@ from pathlib import Path
 from typing import Any, Final, Iterable, Optional, Union
 
 import pandas as pd  # type: ignore
-import wandb  # type: ignore
 from codetiming import Timer
 from humanfriendly import format_timespan  # type: ignore
 from loguru import logger
 from rich.console import Console
 from rich.table import Table
 
+import wandb  # type: ignore
 from molreactgen.helpers import configure_logging, determine_log_level
 from molreactgen.tokenizer import (
     REGEX_PATTERN_ATOM,
@@ -46,18 +46,18 @@ SCOPE_RTS_EVAL: Final[str] = "evaluation_rts"
 TOKENIZER_FILE: Final[str] = "tokenizer.json"
 CONFIG_FILE: Final[str] = "config.json"
 CHECKPOINT_FILE: Final[str] = "checkpoint-"
+MISC_TRAIN_FILE: Final[str] = "misc_training_information.json"
 SCHEDULER_FILE: Final[str] = "scheduler.pt"
 MODEL_FILE: Final[str] = "pytorch_model.bin"
 TRAINER_STATE_FILE: Final[str] = "trainer_state.json"
 ALL_RESULTS_FILE: Final[str] = "all_results.json"
 README_FILE: Final[str] = "README.md"
 MODEL_LINK_TO_FILE: Final[str] = "link_to_model"
+GENERATION_ARGS_FILE: Final[str] = "generate_args.json"
 GENERATED_SMILES_FILE: Final[str] = "generated_smiles.csv"
-GENERATED_SMARTS_FILE: Final[
-    str
-] = "generated_reaction_templates.csv"  # inconsistent naming, but kept for backwards compatibility
-GENERATION_STATS_FILE: Final[str] = "generation_stats.json"
-EVALUATED_FILE: Final[str] = "evaluation.json"
+GENERATED_SMARTS_FILE: Final[str] = "generated_smarts.csv"
+GENERATION_STATS_FILE: Final[str] = "generate_stats.json"
+EVALUATED_FILE: Final[str] = "assess_stats.json"
 
 # Keys and Values in JSON files
 PRE_TOKENIZER_KEY: Final[str] = "pre_tokenizer"
@@ -77,14 +77,22 @@ TOKENIZER_ADDED_TOKENS_KEY: Final[str] = "added_tokens"
 MODEL_LAYER_KEY: Final[str] = "n_layer"
 MODEL_HEAD_KEY: Final[str] = "n_head"
 MODEL_HIDDEN_DIM_KEY: Final[str] = "n_embd"
+MODEL_SIZE_KEY: Final[str] = "model_size"
+DATASET_DIR_KEY: Final[str] = "dataset_dir"
+WANDB_RUN_ID_KEY: Final[str] = "wandb_run_id"
+WANDB_RUN_NAME_KEY: Final[str] = "wandb_run_name"
 EPOCH_KEY: Final[str] = "epoch"
+TRAIN_RUNTIME_KEY: Final[str] = "train_runtime"
 TRAIN_LOSS_KEY: Final[str] = "train_loss"
 VAL_LOSS_KEY: Final[str] = "best_metric"
 EVAL_ACC_KEY: Final[str] = "eval_accuracy"
 TEST_LOSS_KEY: Final[str] = "test_loss"
 TEST_ACC_KEY: Final[str] = "test_accuracy"
-TEST_PPL_KEY: Final[str] = "perplexity"  # TODO change key to test_perplexity
+TEST_PPL_KEY: Final[str] = "test_perplexity"
 LOG_HISTORY_KEY: Final[str] = "log_history"
+GENERATION_NUM_BEAMS_KEY: Final[str] = "num_beams"
+GENERATION_NUM_TEMPERATURE_KEY: Final[str] = "temperature"
+GENERATION_NUM_REPETITION_PENALTY_KEY: Final[str] = "repetition_penalty"
 MOLS_VALIDITY_KEY: Final[str] = "Validity"
 MOLS_UNIQUENESS_KEY: Final[str] = "Uniqueness"
 MOLS_NOVELTY_KEY: Final[str] = "Novelty"
@@ -112,10 +120,10 @@ DEFAULT_FORMATTER_FLOAT: Final[str] = ".4f"
 
 @dataclass
 class Metric:
-    column_name: str
-    scope: str  # might change to Enum
+    column_name: str  # Not used during output
+    scope: tuple[str, ...]  # might change to Enum
     dtype: type
-    value: Any
+    value: Any  # Any (default) value when instantiating the metric is not used later when evaluating it
     formatter: str = ""
     ref: str = ""
     idx: int = 0
@@ -214,17 +222,23 @@ class Experiment:
         "layers": "_get_layers",
         "heads": "_get_heads",
         "hidden_dim": "_get_hidden_dim",
+        "model_size": "_get_model_size",
+        "dataset_dir": "_get_dataset_dir",
         "num_epochs": "_get_num_epochs",
         "batch_size": "_get_batch_size",
         "lr": "_get_lr",
         "wandb_run_id": "_get_wandb_run_id",
         "wandb_run_name": "_get_wandb_run_name",
+        "train_runtime": "_get_train_runtime",
         "train_loss": "_get_train_loss",
         "val_loss": "_get_val_loss",
         "val_acc": "_get_val_acc",
         "test_loss": "_get_test_loss",
         "test_acc": "_get_test_acc",
         "test_ppl": "_get_test_perplexity",
+        "num_beams": "_get_num_beams",
+        "temperature": "_get_temperature",
+        "repetition_penalty": "_get_repetition_penalty",
         "validity_mols": "_get_validity_mols",
         "uniqueness_mols": "_get_uniqueness_mols",
         "novelty_mols": "_get_novelty_mols",
@@ -260,184 +274,222 @@ class Experiment:
         self._metrics: dict[str, Metric] = {
             "pre_tokenizer": Metric(
                 column_name="pre_tokenizer",
-                scope="tokenizer",
+                scope=("tokenizer",),
                 dtype=str,
                 value=None,
             ),
             "algorithm": Metric(
                 column_name="tokenization_algorithm",
-                scope="tokenizer",
+                scope=("tokenizer",),
                 dtype=str,
                 value=None,
             ),
             "vocab_size": Metric(
                 column_name="vocab_size",
-                scope="tokenizer",
+                scope=("tokenizer",),
                 dtype=int,
                 value=None,
             ),
             "layers": Metric(
                 column_name="num_layers",
-                scope="model",
+                scope=("model",),
                 dtype=int,
                 value=None,
             ),
             "heads": Metric(
                 column_name="num_heads",
-                scope="model",
+                scope=("model",),
                 dtype=int,
                 value=None,
             ),
             "hidden_dim": Metric(
                 column_name="hidden_dim",
-                scope="model",
+                scope=("model",),
                 dtype=int,
+                value=None,
+            ),
+            "model_size": Metric(
+                column_name="model_size",
+                scope=("model",),
+                dtype=str,
+                value=None,
+            ),
+            "dataset_dir": Metric(
+                column_name="dataset_dir",
+                scope=("tokenizer", "training"),
+                dtype=str,
                 value=None,
             ),
             "num_epochs": Metric(
                 column_name="number_of_epochs",
-                scope="training",
+                scope=("training",),
                 dtype=int,
                 value=None,
             ),
             "batch_size": Metric(
                 column_name="batch_size",
-                scope="training",
+                scope=("training",),
                 dtype=int,
                 value=None,
             ),
             "lr": Metric(
                 column_name="learning_rate",
-                scope="training",
+                scope=("training",),
                 dtype=float,
                 value=None,
                 formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "wandb_run_id": Metric(
                 column_name="wandb_run_id",
-                scope="wandb",
+                scope=("wandb",),
                 dtype=str,
                 value=None,
             ),
             "wandb_run_name": Metric(
                 column_name="wandb_run_name",
-                scope="wandb",
+                scope=("wandb",),
+                dtype=str,
+                value=None,
+            ),
+            "train_runtime": Metric(
+                column_name="training_runtime",
+                scope=("training",),
                 dtype=str,
                 value=None,
             ),
             "train_loss": Metric(
                 column_name="training_loss",
-                scope="training",
+                scope=("training",),
                 dtype=float,
                 value=None,
                 formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "val_loss": Metric(
                 column_name="validation_loss",
-                scope="training",
+                scope=("training",),
                 dtype=float,
                 value=None,
                 formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "val_acc": Metric(
                 column_name="validation_accuracy",
-                scope="training",
+                scope=("training",),
                 dtype=float,
                 value=None,
                 formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "test_loss": Metric(
                 column_name="test_loss",
-                scope="training",
+                scope=("training",),
                 dtype=float,
                 value=None,
                 formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "test_acc": Metric(
                 column_name="test_accuracy",
-                scope="training",
+                scope=("training",),
                 dtype=float,
                 value=None,
                 formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "test_ppl": Metric(
                 column_name="test_perplexity",
-                scope="training",
+                scope=("training",),
                 dtype=float,
                 value=None,
                 formatter=DEFAULT_FORMATTER_FLOAT,
             ),
+            "num_beams": Metric(
+                column_name="num_beams",
+                scope=("evaluation_mols", "evaluation_rts"),
+                dtype=int,
+                value=None,
+            ),
+            "temperature": Metric(
+                column_name="temperature",
+                scope=("evaluation_mols", "evaluation_rts"),
+                dtype=float,
+                value=None,
+                formatter=".2f",
+            ),
+            "repetition_penalty": Metric(
+                column_name="repetition_penalty",
+                scope=("evaluation_mols", "evaluation_rts"),
+                dtype=float,
+                value=None,
+                formatter=".2f",
+            ),
             "validity_mols": Metric(
                 column_name="validity",
-                scope="evaluation_mols",
+                scope=("evaluation_mols",),
                 dtype=float,
                 value=None,
                 formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "uniqueness_mols": Metric(
                 column_name="uniqueness",
-                scope="evaluation_mols",
+                scope=("evaluation_mols",),
                 dtype=float,
                 value=None,
                 formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "novelty_mols": Metric(
                 column_name="novelty",
-                scope="evaluation_mols",
+                scope=("evaluation_mols",),
                 dtype=float,
                 value=None,
                 formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "fcd_mols": Metric(
                 column_name="fcd",
-                scope="evaluation_mols",
+                scope=("evaluation_mols",),
                 dtype=float,
                 value=None,
                 formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "fcd_g_mols": Metric(
                 column_name="fcd_guacamol",
-                scope="evaluation_mols",
+                scope=("evaluation_mols",),
                 dtype=float,
                 value=None,
                 formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "validity_rts": Metric(
                 column_name="validity",
-                scope="evaluation_rts",
+                scope=("evaluation_rts",),
                 dtype=float,
                 value=None,
                 formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "uniqueness_rts": Metric(
                 column_name="uniqueness",
-                scope="evaluation_rts",
+                scope=("evaluation_rts",),
                 dtype=float,
                 value=None,
                 formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "feasibility_rts": Metric(
                 column_name="feasibility",
-                scope="evaluation_rts",
+                scope=("evaluation_rts",),
                 dtype=float,
                 value=None,
                 formatter=DEFAULT_FORMATTER_FLOAT,
             ),
             "known_either_rts": Metric(
                 column_name="known_from_validation_or_test",
-                scope="evaluation_rts",
+                scope=("evaluation_rts",),
                 dtype=int,
                 value=None,
             ),
             "known_val_rts": Metric(
                 column_name="known_from_validation",
-                scope="evaluation_rts",
+                scope=("evaluation_rts",),
                 dtype=int,
                 value=None,
             ),
             "known_test_rts": Metric(
                 column_name="known_from_test",
-                scope="evaluation_rts",
+                scope=("evaluation_rts",),
                 dtype=int,
                 value=None,
             ),
@@ -638,6 +690,26 @@ class Experiment:
         except (FileNotFoundError, TypeError, KeyError):
             return None
 
+    def _get_model_size(self) -> Optional[str]:
+        """Get the model's size (trainable params in millions)."""
+
+        try:
+            with open(self.model_directory / MISC_TRAIN_FILE) as f:  # type: ignore
+                return json.load(f)[MODEL_SIZE_KEY]
+
+        except (FileNotFoundError, TypeError, KeyError):
+            return None
+
+    def _get_dataset_dir(self) -> Optional[str]:
+        """Get the directory path to the training/validation/test data."""
+
+        try:
+            with open(self.model_directory / MISC_TRAIN_FILE) as f:  # type: ignore
+                return json.load(f)[DATASET_DIR_KEY]
+
+        except (FileNotFoundError, TypeError, KeyError):
+            return None
+
     def _get_num_epochs(self) -> Optional[int]:
         """Get the number of epochs."""
 
@@ -681,7 +753,25 @@ class Experiment:
         if self._wandb_scope is None or self.model_directory is None:
             return None
 
-        return self._wandb_scope.get_run_id(self.model_directory)
+        # return self._wandb_scope.get_run_id(self.model_directory)
+        remote_wandb_run_id = self._wandb_scope.get_run_id(self.model_directory)
+
+        if remote_wandb_run_id is not None:
+            try:
+                with open(self.model_directory / MISC_TRAIN_FILE) as f:  # type: ignore
+                    local_wandb_run_id = json.load(f)[WANDB_RUN_ID_KEY]
+
+            except (FileNotFoundError, TypeError, KeyError):
+                local_wandb_run_id = None
+
+            if local_wandb_run_id is not None:
+                if remote_wandb_run_id != local_wandb_run_id:
+                    logger.warning(
+                        f"Remote wandb run id {remote_wandb_run_id} differs from "
+                        f"local wandb run id {local_wandb_run_id}"
+                    )
+
+        return remote_wandb_run_id
 
     def _get_wandb_run_name(self) -> Optional[str]:
         """Get the wandb run name."""
@@ -689,7 +779,36 @@ class Experiment:
         if self._wandb_scope is None or self.model_directory is None:
             return None
 
-        return self._wandb_scope.get_run_name(self.model_directory)
+        # return self._wandb_scope.get_run_name(self.model_directory)
+        remote_wandb_run_name = self._wandb_scope.get_run_name(self.model_directory)
+
+        if remote_wandb_run_name is not None:
+            try:
+                with open(self.model_directory / MISC_TRAIN_FILE) as f:  # type: ignore
+                    local_wandb_run_name = json.load(f)[WANDB_RUN_NAME_KEY]
+
+            except (FileNotFoundError, TypeError, KeyError):
+                local_wandb_run_name = None
+
+            if local_wandb_run_name is not None:
+                if remote_wandb_run_name != local_wandb_run_name:
+                    logger.warning(
+                        f"Remote wandb run name {remote_wandb_run_name} differs from "
+                        f"local wandb run name {local_wandb_run_name}"
+                    )
+
+        return remote_wandb_run_name
+
+    def _get_train_runtime(self) -> Optional[str]:
+        """Get the training runtime (duration)"""
+
+        try:
+            with open(self.model_directory / ALL_RESULTS_FILE) as f:  # type: ignore
+                train_runtime_in_seconds = int(json.load(f)[TRAIN_RUNTIME_KEY])
+                # not sure if timedelta always works but good enough for the purpose of this script
+                return str(datetime.timedelta(seconds=train_runtime_in_seconds))
+        except (FileNotFoundError, TypeError, KeyError):
+            return None
 
     def _get_train_loss(self) -> Optional[float]:
         """Get the last training loss."""
@@ -752,6 +871,47 @@ class Experiment:
         except (FileNotFoundError, TypeError, KeyError):
             return None
 
+    def _read_generation_args_file(self) -> Optional[dict[str, Any]]:
+        """Read the generation arguments file."""
+
+        try:
+            with open(
+                self.generated_directory / GENERATION_ARGS_FILE  # type: ignore
+            ) as f:
+                return json.load(f)
+        except (FileNotFoundError, TypeError):
+            return None
+
+    def _get_num_beams(self) -> Optional[int]:
+        """Get the number of beams during generation."""
+
+        generation_args = self._read_generation_args_file()
+
+        try:
+            return generation_args[GENERATION_NUM_BEAMS_KEY]  # type: ignore
+        except (KeyError, TypeError):
+            return None
+
+    def _get_temperature(self) -> Optional[float]:
+        """Get the generation temperature."""
+
+        generation_args = self._read_generation_args_file()
+
+        try:
+            return generation_args[GENERATION_NUM_TEMPERATURE_KEY]  # type: ignore
+        except (KeyError, TypeError):
+            return None
+
+    def _get_repetition_penalty(self) -> Optional[float]:
+        """Get the repetition penalty during generation."""
+
+        generation_args = self._read_generation_args_file()
+
+        try:
+            return generation_args[GENERATION_NUM_REPETITION_PENALTY_KEY]  # type: ignore
+        except (KeyError, TypeError):
+            return None
+
     def _get_validity_mols(self) -> Optional[float]:
         """Get the validity of the generated molecules."""
 
@@ -797,7 +957,7 @@ class Experiment:
         except (FileNotFoundError, TypeError, KeyError):
             return None
 
-    def _read_generation_file(self) -> Optional[dict[str, Any]]:
+    def _read_generation_stats_file(self) -> Optional[dict[str, Any]]:
         """Read the generation file."""
 
         try:
@@ -811,7 +971,7 @@ class Experiment:
     def _get_validity_rts(self) -> Optional[float]:
         """Get the validity of the generated reaction templates."""
 
-        generation_stats = self._read_generation_file()
+        generation_stats = self._read_generation_stats_file()
 
         try:
             return generation_stats[RTS_FRAC_KEY][RTS_VALIDITY_KEY]  # type: ignore
@@ -821,7 +981,7 @@ class Experiment:
     def _get_uniqueness_rts(self) -> Optional[float]:
         """Get the uniqueness of the generated reaction_templates."""
 
-        generation_stats = self._read_generation_file()
+        generation_stats = self._read_generation_stats_file()
 
         try:
             return generation_stats[RTS_FRAC_KEY][RTS_UNIQUENESS_KEY]  # type: ignore
@@ -831,7 +991,7 @@ class Experiment:
     def _get_feasibility(self) -> Optional[float]:
         """Get the feasibility of the generated reaction templates."""
 
-        generation_stats = self._read_generation_file()
+        generation_stats = self._read_generation_stats_file()
 
         try:
             return generation_stats[RTS_FRAC_KEY][RTS_FEASIBILITY_KEY]  # type: ignore
@@ -841,7 +1001,7 @@ class Experiment:
     def _get_known_either(self) -> Optional[int]:
         """Get the reaction templates known from either validation or test set."""
 
-        generation_stats = self._read_generation_file()
+        generation_stats = self._read_generation_stats_file()
 
         try:
             return generation_stats[RTS_COUNT_KEY][RTS_KNOWN_EITHER_KEY]  # type: ignore
@@ -851,7 +1011,7 @@ class Experiment:
     def _get_known_val(self) -> Optional[int]:
         """Get the reaction templates known from the validation set."""
 
-        generation_stats = self._read_generation_file()
+        generation_stats = self._read_generation_stats_file()
 
         try:
             return generation_stats[RTS_COUNT_KEY][RTS_KNOWN_VAL_KEY]  # type: ignore
@@ -861,7 +1021,7 @@ class Experiment:
     def _get_known_test(self) -> Optional[int]:
         """Get the reaction templates known from the test set."""
 
-        generation_stats = self._read_generation_file()
+        generation_stats = self._read_generation_stats_file()
 
         try:
             return generation_stats[RTS_COUNT_KEY][RTS_KNOWN_TEST_KEY]  # type: ignore
@@ -872,37 +1032,37 @@ class Experiment:
     def tokenizer_metrics(self) -> dict[str, Any]:
         """Get the tokenizer metrics."""
 
-        return {k: v for k, v in self._metrics.items() if v.scope == SCOPE_TOKENIZER}
+        return {k: v for k, v in self._metrics.items() if SCOPE_TOKENIZER in v.scope}
 
     @property
     def model_metrics(self) -> dict[str, Any]:
         """Get the model metrics."""
 
-        return {k: v for k, v in self._metrics.items() if v.scope == SCOPE_MODEL}
+        return {k: v for k, v in self._metrics.items() if SCOPE_MODEL in v.scope}
 
     @property
     def training_metrics(self) -> dict[str, Any]:
         """Get the training metrics."""
 
-        return {k: v for k, v in self._metrics.items() if v.scope == SCOPE_TRAINING}
+        return {k: v for k, v in self._metrics.items() if SCOPE_TRAINING in v.scope}
 
     @property
     def wandb_metrics(self) -> dict[str, Any]:
         """Get the model metrics."""
 
-        return {k: v for k, v in self._metrics.items() if v.scope == SCOPE_WANDB}
+        return {k: v for k, v in self._metrics.items() if SCOPE_WANDB in v.scope}
 
     @property
     def evaluation_mols_metrics(self) -> dict[str, Any]:
         """Get the evaluation molecules metrics."""
 
-        return {k: v for k, v in self._metrics.items() if v.scope == SCOPE_MOLS_EVAL}
+        return {k: v for k, v in self._metrics.items() if SCOPE_MOLS_EVAL in v.scope}
 
     @property
     def evaluation_rts_metrics(self) -> dict[str, Any]:
         """Get the evaluation reaction templates metrics."""
 
-        return {k: v for k, v in self._metrics.items() if v.scope == SCOPE_RTS_EVAL}
+        return {k: v for k, v in self._metrics.items() if SCOPE_RTS_EVAL in v.scope}
 
     @property
     def valid(self) -> bool:
@@ -1071,9 +1231,10 @@ def collect_experiments(
     """Collect experiments from a directory and return a list of Experiments in from that directory."""
 
     directory = Path(directory).resolve()
-    dirs = [
-        d for d in sorted(directory.rglob("*")) if d.is_dir() and not d.is_symlink()
-    ]
+    dirs = [directory]
+    dirs.extend(
+        [d for d in sorted(directory.rglob("*")) if d.is_dir() and not d.is_symlink()]
+    )
     experiments = [
         Experiment(
             d, args.tokenizer, args.model, args.train, args.evaluate, wandb_metrics
@@ -1358,7 +1519,7 @@ def main() -> None:
     # Prepare and check (global) variables
     directory_path = Path(args.directory).resolve()
     if args.output is None:
-        output_file_path = directory_path / directory_path.stem
+        output_file_path = directory_path / "metrics"  # directory_path.stem
     else:
         output_file_path = Path(args.output).resolve()
 
