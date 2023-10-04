@@ -92,13 +92,11 @@ LATEST_LINK_FILE_NAME: Final[Path] = (
 )
 CSV_ID_SPLITTER: Final[str] = " | "
 
-VALID_GENERATION_MODES: Final[tuple[str, ...]] = (
+VALID_TARGET_MODES: Final[tuple[str, ...]] = (
     "smiles",
     "smarts",
 )
-VALID_GENERATION_MODES_HELP_STR: Final[str] = (
-    "{" + "|".join(VALID_GENERATION_MODES) + "}"
-)
+VALID_TARGET_MODES_HELP_STR: Final[str] = "{" + "|".join(VALID_TARGET_MODES) + "}"
 
 DEFAULT_NUM_TO_GENERATE: Final[int] = 10_000
 MIN_NUM_TO_GENERATE: Final[int] = 20
@@ -936,7 +934,7 @@ def generate_smarts(
     column_smarts = [s.reaction_smarts for s in smarts["all_feasible"]]
     df_small = pd.DataFrame(
         {
-            "reaction_smarts": column_smarts,
+            "smarts": column_smarts,
         }
     )
 
@@ -980,7 +978,7 @@ def generate_smarts(
 
     df_full = pd.DataFrame(
         {
-            "reaction_smarts": column_smarts,
+            "smarts": column_smarts,
             "valid": column_valid,
             "unique": column_unique,
             "feasible": column_feasible,
@@ -1008,10 +1006,10 @@ def main() -> None:
         description="Generate SMILES molecules or SMARTS reaction templates."
     )
     parser.add_argument(
-        "mode",
+        "target",
         type=str.lower,
-        choices=VALID_GENERATION_MODES,
-        help="the generation mode.",
+        choices=VALID_TARGET_MODES,
+        help="the target format to generate.",
     )
     parser.add_argument(
         "-b",
@@ -1053,7 +1051,7 @@ def main() -> None:
         type=Path,
         default=None,
         help=f"file path for the generated molecules or reaction templates, default: "
-        f"'{GENERATED_DATA_DIR}/generated_{VALID_GENERATION_MODES_HELP_STR}.csv'.",
+        f"'{GENERATED_DATA_DIR}/generated_{VALID_TARGET_MODES_HELP_STR}.csv'.",
     )
     parser.add_argument(
         "-p",
@@ -1108,14 +1106,14 @@ def main() -> None:
     save_commandline_arguments(args, ARGUMENTS_FILE_PATH, ("log_level",))
 
     # Prepare and check (global) variables
-    if args.mode == "smiles":
+    if args.target == "smiles":
         items_name = "molecules"
         logger.heading("Generating SMILES molecules...")  # type: ignore
-    elif args.mode == "smarts":
+    elif args.target == "smarts":
         items_name = "reaction templates"
         logger.heading("Generating SMARTS reaction templates...")  # type: ignore
     else:
-        raise ValueError(f"Invalid generation mode: {args.mode}")
+        raise ValueError(f"Invalid generation target: {args.target}")
 
     model_file_path = Path(args.model).resolve()
     logger.debug(f"Model file path: {model_file_path}")
@@ -1130,7 +1128,7 @@ def main() -> None:
         )
 
     if args.output is None:
-        if args.mode == "smiles":
+        if args.target == "smiles":
             output_file_path_short = DEFAULT_SMILES_OUTPUT_FILE_PATH_NOVEL
             output_file_path_full = DEFAULT_SMILES_OUTPUT_FILE_PATH
         else:
@@ -1138,7 +1136,7 @@ def main() -> None:
             output_file_path_full = DEFAULT_SMARTS_OUTPUT_FILE_PATH
     else:
         output_file_path_full = Path(args.output).resolve()
-        if args.mode == "smiles":
+        if args.target == "smiles":
             output_file_path_short = output_file_path_full.with_stem(
                 output_file_path_full.stem + "_novel_only"
             )
@@ -1215,7 +1213,7 @@ def main() -> None:
     max_num_tries = _determine_max_num_tries(num_to_generate)
 
     # Start generation
-    if args.mode == "smiles":
+    if args.target == "smiles":
         counter, df_short, df_full = generate_smiles(
             config=generation_config,
             pipe=pipe,
@@ -1225,7 +1223,7 @@ def main() -> None:
             max_num_tries=max_num_tries,
         )
 
-    elif args.mode == "smarts":
+    elif args.target == "smarts":
         counter, df_short, df_full = generate_smarts(
             config=generation_config,
             pipe=pipe,
@@ -1236,7 +1234,7 @@ def main() -> None:
         )
 
     else:
-        raise ValueError(f"Invalid generation mode: {args.mode}")
+        raise ValueError(f"Invalid generation target: {args.target}")
 
     # Display and save statistics
     logger.info("Generation statistics")
