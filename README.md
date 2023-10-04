@@ -154,7 +154,8 @@ python utils/compute_fcd_stats.py \
 --output "../../data/prep/guacamol/fcd_stats/guacamol_train.pkl"
 
 # Evaluate the generated molecules
-python assess.py stats \
+python assess.py smiles \
+--mode stats \
 --generated "../../data/generated/<generation directory>/generated_smiles.csv" \
 --reference "../../data/prep/guacamol/csv/guacamol_v1_train.csv" \
 --stats "../../data/prep/guacamol/fcd_stats/guacamol_train.pkl" \
@@ -169,7 +170,7 @@ python prepare_data.py uspto50k
 
 # Train the model
 # add --fp16 false if your GPU does not support fp16 or you run it on a CPU (not recommended)
-python train.py --args conf/uspto50k.args  # this also reads the default train.args file
+python train.py --config_file conf/uspto50k.args  # this also reads the default train.args file
 
 # Generate ≥ 10000 reaction templates
 # In this case the evaluation is done during generation
@@ -177,6 +178,9 @@ python generate.py smarts \
 --model "../../checkpoints/<your_model>" \
 --known "../../data/prep/uspto50k/csv/USPTO_50k_known.csv"
 --num 10000
+
+# Evaluate the generated reaction templates
+# At the moment, the assessment is fully done during the generation already
 ```
 
 ### Hugging Face Models
