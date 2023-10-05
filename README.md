@@ -196,6 +196,12 @@ and [reaction templates](https://huggingface.co/hogru/MolReactGen-USPTO50K-React
 - Not tested with pytorch ≥ v2.0
 - Starting with transformers v5 (not out as of this writing), the optimizer must be instantiated manually; this requires
   a code change in `train.py`
+- The current `pyproject.toml` does not update to the following versions due to required testing and, in some cases, their potential breaking changes:
+  - python ≥ 3.10 (should work up to 3.11 when also upgrading to pytorch ≥ 2.0)
+  - pytorch ≥ 2.0 (not tested, major version)
+  - transformers ≥ 4.33 (should work, tokenizer breaking changes with ≥ 4.34)
+  - tokenizers ≥ 0.14 (breaking changes)
+  - pandas ≥ 2.0 (not tested, major version)
 
 ## Meta
 
