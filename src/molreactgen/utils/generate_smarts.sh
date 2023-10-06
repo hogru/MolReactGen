@@ -1,7 +1,7 @@
 #!/bin/bash
-# Helper script to generate molecules from a set of models
+# Helper script to generate reaction templates from a set of models
 # Directory with sub-directories of models expected
-# Generates molecules based on variables defined below
+# Generates reaction templates based on variables defined below
 # Current directory should contain the python scripts
 
 GENERATE_FILE="generate.py"
