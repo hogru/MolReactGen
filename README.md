@@ -1,7 +1,7 @@
 ![Python Version](https://img.shields.io/badge/python-3.9-blue?color=3975A5&logo=python&link=https%3A%2F%2Fwww.python.org)
-![Poetry Version](https://img.shields.io/badge/poetry-1.5-blue?color=1E293B&logo=poetry&link=https%3A%2F%2Fpython-poetry.org)
+![Poetry Version](https://img.shields.io/badge/poetry-1.6-blue?color=1E293B&logo=poetry&link=https%3A%2F%2Fpython-poetry.org)
 ![Pytorch Version](https://img.shields.io/badge/pytorch-1.13-blue?color=EE4C2C&logo=pytorch&link=https%3A%2F%2Fpytorch.org)
-![Transformers Version](https://img.shields.io/badge/hf%20transformers-4.30-blue?color=FFD21E&link=https%3A%2F%2Fhuggingface.co%2Fdocs%2Ftransformers%2Findex)
+![Transformers Version](https://img.shields.io/badge/hf%20transformers-4.33-blue?color=FFD21E&link=https%3A%2F%2Fhuggingface.co%2Fdocs%2Ftransformers%2Findex)
 
 ![Code Style](https://img.shields.io/badge/code%20style-black-black?link=https%3A%2F%2Fpypi.org%2Fproject%2Fblack%2F)
 ![Imports](https://img.shields.io/badge/imports-isort-blue?color=EF8336&link=https%3A%2F%2Fpypi.org%2Fproject%2Fisort%2F)
@@ -196,6 +196,7 @@ and [reaction templates](https://huggingface.co/hogru/MolReactGen-USPTO50K-React
 - Not tested with pytorch ≥ v2.0
 - Starting with transformers v5 (not out as of this writing), the optimizer must be instantiated manually; this requires
   a code change in `train.py`
+- Does not detect Apple devices automatically; you can use command line argument `--use_mps_device true` to take advantage of Apple Silicon (assuming `pytorch` is configured correctly)
 - The current `pyproject.toml` does not update to the following versions due to required testing and, in some cases, their potential breaking changes:
   - python ≥ 3.10 (should work up to 3.11 when also upgrading to pytorch ≥ 2.0)
   - pytorch ≥ 2.0 (not tested, major version)
