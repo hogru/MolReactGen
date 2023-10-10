@@ -2,6 +2,8 @@
 ![Poetry Version](https://img.shields.io/badge/poetry-1.6-blue?color=1E293B&logo=poetry&link=https%3A%2F%2Fpython-poetry.org)
 ![Pytorch Version](https://img.shields.io/badge/pytorch-1.13-blue?color=EE4C2C&logo=pytorch&link=https%3A%2F%2Fpytorch.org)
 ![Transformers Version](https://img.shields.io/badge/hf%20transformers-4.33-blue?color=FFD21E&link=https%3A%2F%2Fhuggingface.co%2Fdocs%2Ftransformers%2Findex)
+[![Powered by RDKit](https://img.shields.io/badge/Powered%20by-RDKit-3838ff.svg?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAAFVBMVEXc3NwUFP8UPP9kZP+MjP+0tP////9ZXZotAAAAAXRSTlMAQObYZgAAAAFiS0dEBmFmuH0AAAAHdElNRQfmAwsPGi+MyC9RAAAAQElEQVQI12NgQABGQUEBMENISUkRLKBsbGwEEhIyBgJFsICLC0iIUdnExcUZwnANQWfApKCK4doRBsKtQFgKAQC5Ww1JEHSEkAAAACV0RVh0ZGF0ZTpjcmVhdGUAMjAyMi0wMy0xMVQxNToyNjo0NyswMDowMDzr2J4AAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjItMDMtMTFUMTU6MjY6NDcrMDA6MDBNtmAiAAAAAElFTkSuQmCC)](https://www.rdkit.org/)
+
 
 ![Code Style](https://img.shields.io/badge/code%20style-black-black?link=https%3A%2F%2Fpypi.org%2Fproject%2Fblack%2F)
 ![Imports](https://img.shields.io/badge/imports-isort-blue?color=EF8336&link=https%3A%2F%2Fpypi.org%2Fproject%2Fisort%2F)
