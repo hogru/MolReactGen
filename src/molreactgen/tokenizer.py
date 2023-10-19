@@ -125,6 +125,9 @@ def _filter_invalid_tokenizer_combos(
         ValueError: If the given combination is invalid.
     """
 
+    # This is a safety check for a Hugging Face issue described here:
+    # https://github.com/huggingface/tokenizers/issues/1369
+    # Once this is resolved we can use the Split pre-tokenizer with all tokenization algorithms
     if pre_tokenizer in {"ATOM", "SMARTS"} and algorithm != "WORDLEVEL":
         raise ValueError(
             f"Pre-tokenizer {pre_tokenizer} must be used with WORDLEVEL algorithm"
@@ -261,6 +264,13 @@ def get_tokenizer(
     elif algorithm == "BPE":
         # noinspection PyArgumentList
         tokenizer = Tokenizer(BPE(unk_token=unk_token))
+        # The BPE algorithm seemingly does not work properly with the Split pre-tokenizer
+        # see Hugging Face issue https://github.com/huggingface/tokenizers/issues/1369
+        # Therefore, we do not use not a pre-tokenizer
+        # noinspection PyPropertyAccess
+        # tokenizer.pre_tokenizer = Split(
+        #     pattern=regex_pattern, behavior="isolated", invert=False
+        # )
         # noinspection PyArgumentList
         trainer = BpeTrainer(
             vocab_size=vocab_size,
@@ -273,6 +283,13 @@ def get_tokenizer(
     elif algorithm == "WORDPIECE":
         # noinspection PyArgumentList
         tokenizer = Tokenizer(WordPiece(unk_token=unk_token))
+        # The WordPiece algorithm seemingly does not work properly with the Split pre-tokenizer
+        # see Hugging Face issue https://github.com/huggingface/tokenizers/issues/1369
+        # Therefore, we do not use not a pre-tokenizer
+        # noinspection PyPropertyAccess
+        # tokenizer.pre_tokenizer = Split(
+        #     pattern=regex_pattern, behavior="isolated", invert=False
+        # )
         # noinspection PyArgumentList
         trainer = WordPieceTrainer(
             vocab_size=vocab_size,
@@ -294,6 +311,13 @@ def get_tokenizer(
             )
         # noinspection PyArgumentList
         tokenizer = Tokenizer(Unigram())
+        # The Unigram algorithm seemingly does not work properly with the Split pre-tokenizer
+        # see Hugging Face issue https://github.com/huggingface/tokenizers/issues/1369
+        # Therefore, we do not use not a pre-tokenizer
+        # noinspection PyPropertyAccess
+        # tokenizer.pre_tokenizer = Split(
+        #     pattern=regex_pattern, behavior="isolated", invert=False
+        # )
         # noinspection PyArgumentList
         trainer = UnigramTrainer(
             vocab_size=vocab_size,
