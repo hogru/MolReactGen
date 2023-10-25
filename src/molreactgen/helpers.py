@@ -709,7 +709,7 @@ def save_commandline_arguments(
 def create_file_link(
     from_file_path: Union[PathLike, str],
     to_file_path: Union[PathLike, str],
-    hard_link: bool = False,
+    hard_link: bool = True,
 ) -> None:
     """Create a link from a file to another file.
 
@@ -726,10 +726,18 @@ def create_file_link(
     from_file_path.unlink(missing_ok=True)
 
     if hard_link:
-        # deprecated in 3.10, use from_file_path.hardlink_to(to_file_path) instead
-        to_file_path.link_to(from_file_path)
-    else:  # symlink
-        from_file_path.symlink_to(to_file_path)
+        # The link_to() method is deprecated in python v3.12
+        # Use the hardlink_to() method instead (see below)
+        # You can use the hardlink_to() method starting with python v3.10
+        try:
+            to_file_path.link_to(from_file_path)
+            # from_file_path.hardlink_to(to_file_path)  # yes, this is the correct order
+            return
+        except PermissionError:
+            # TODO investigate why this happens
+            logger.warning("Failed to create a hard link, use symbolic link instead.")
+
+    from_file_path.symlink_to(to_file_path)  # symlink
 
 
 ###############################################################################
