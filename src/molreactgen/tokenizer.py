@@ -26,7 +26,6 @@ from typing import Any, Final, Optional, Sequence, Union
 
 # Most of Hugging Face has poor type hints, trying to avoid mypy errors
 import transformers  # type: ignore
-from tokenizers import Regex, Tokenizer, decoders  # type: ignore
 from tokenizers.models import BPE, Unigram, WordLevel, WordPiece  # type: ignore
 from tokenizers.pre_tokenizers import Split  # type: ignore
 from tokenizers.processors import TemplateProcessing  # type: ignore
@@ -37,6 +36,8 @@ from tokenizers.trainers import (  # type: ignore
     WordPieceTrainer,
 )
 from transformers import BatchEncoding, PreTrainedTokenizerFast
+
+from tokenizers import Regex, Tokenizer, decoders  # type: ignore
 
 # Tokenizer related
 DATASET_COLUMN_NAME: Final[str] = "items"
@@ -135,6 +136,12 @@ def _filter_invalid_tokenizer_combos(
 
     if algorithm == "WORDLEVEL" and vocab_size != 0:
         raise ValueError(f"Algorithm {algorithm} must be used with a vocab size of 0")
+
+    if algorithm in {"BPE", "WORDPIECE", "UNIGRAM"} and vocab_size == 0:
+        raise ValueError(
+            f"Algorithm {algorithm} should be used with a vocab size larger than 0."
+            f"Use WORDLEVEL algorithm for a vocab size of 0."
+        )
 
 
 def _token_in_regex(token: str, regex: str) -> bool:
