@@ -87,7 +87,8 @@ from molreactgen.tokenizer import (
 CONFIG_OVERWRITE_ARGS_FLAG: Final[str] = "--config_file"
 PROJECT_ROOT_DIR: Final[Path] = guess_project_root_dir()
 DEFAULT_CONFIG_DIR: Final[Path] = PROJECT_ROOT_DIR / "src/molreactgen/conf"
-FILE_LINK_TO_LATEST_CHECKPOINT: Final[str] = "latest_checkpoint"
+FILE_LINK_TO_DATASET_DIR: Final[str] = "link_to_dataset_dir"
+FILE_LINK_TO_LATEST_CHECKPOINT: Final[str] = "link_to_latest_checkpoint"
 WANDB_PROJECT_NAME: Final[str] = "MolReactGen"
 WANDB_LOG_DIR: Final[Path] = PROJECT_ROOT_DIR / "logs"
 
@@ -1249,6 +1250,11 @@ def main() -> None:
     create_file_link(
         Path(training_args.output_dir).parent / FILE_LINK_TO_LATEST_CHECKPOINT,
         training_args.output_dir,
+    )
+    # Create file link to dataset directory
+    create_file_link(
+        Path(training_args.output_dir) / FILE_LINK_TO_DATASET_DIR,
+        data_args.dataset_dir,
     )
 
     # Create default generation config
