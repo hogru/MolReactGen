@@ -478,7 +478,8 @@ def create_and_save_generation_config(
         early_stopping=early_stopping,
         temperature=temperature,
         repetition_penalty=repetition_penalty,
-        length_penalty=0.0,  # does neither promote nor penalize long sequences
+        # length_penalty only allowed for num_beams > 1
+        # length_penalty=0.0,  # does neither promote nor penalize long sequences
     )
 
     if overwrite_pretrained_config:
