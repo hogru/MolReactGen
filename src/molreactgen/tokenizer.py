@@ -50,6 +50,7 @@ ADD_TOKEN: Final[
     str
 ] = "°"  # Not sure if needed at all; might be used to map special model tokens to like CLS, SEP etc.
 MODEL_MAX_LENGTH: Final[int] = 1024
+WORDPIECE_MAX_INPUT_CHARS_PER_WORD: Final[int] = MODEL_MAX_LENGTH
 
 # noinspection SpellCheckingInspection
 REGEX_INPUT: Final[dict[str, str]] = {
@@ -289,7 +290,12 @@ def get_tokenizer(
 
     elif algorithm == "WORDPIECE":
         # noinspection PyArgumentList
-        tokenizer = Tokenizer(WordPiece(unk_token=unk_token))
+        tokenizer = Tokenizer(
+            WordPiece(
+                unk_token=unk_token,
+                max_input_chars_per_word=WORDPIECE_MAX_INPUT_CHARS_PER_WORD,
+            )
+        )
         # The WordPiece algorithm seemingly does not work properly with the Split pre-tokenizer
         # see Hugging Face issue https://github.com/huggingface/tokenizers/issues/1369
         # Therefore, we do not use not a pre-tokenizer
