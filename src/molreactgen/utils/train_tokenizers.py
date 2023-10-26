@@ -4,6 +4,7 @@
 
 import argparse
 from pathlib import Path
+from random import randint
 from typing import Final
 
 import pandas as pd
@@ -19,8 +20,7 @@ PRE_TOKENIZERS: Final[tuple[str, ...]] = ("char", "atom", "smarts")
 ALGORITHMS: Final[tuple[str, ...]] = ("wordlevel", "bpe", "wordpiece", "unigram")
 MIN_FREQUENCY: int = 1
 VOCAB_SIZES: Final[tuple[int, ...]] = (0, 44, 88, 176)
-TEST_TOKENIZER: Final[bool] = True
-ITEM_TO_TEST: Final[str] = "C(C)(C)Clc1Br[NH3+](CC(=O)Nc3c3F)Br[C@@H]"
+# TEST_TOKENIZER: Final[bool] = True
 
 
 def train_tokenizers(dataset_file_path: Path, tokenizers_dir: Path) -> None:
@@ -69,31 +69,36 @@ def train_tokenizers(dataset_file_path: Path, tokenizers_dir: Path) -> None:
                     f"Vocab size (without / with special tokens): "
                     f"{resulting_vocab_size} / {tokenizer.vocab_size}"
                 )
-                tokenizer.save_pretrained(
-                    f"{tokenizers_dir}/{dataset_name}/{pre_tokenizer.lower()}_{algorithm.lower()}_{resulting_vocab_size}.json"
-                )
 
                 # Test tokenizer
-                if TEST_TOKENIZER:
-                    encoded = tokenizer(
-                        ITEM_TO_TEST,
-                        add_special_tokens=True,
-                        padding=True,
-                        return_attention_mask=True,
-                        return_overflowing_tokens=False,
-                        return_tensors="pt",
+                # if TEST_TOKENIZER:
+                item = train_source[randint(0, len(train_source) - 1)]
+                encoded = tokenizer(
+                    item,
+                    add_special_tokens=True,
+                    padding=True,
+                    return_attention_mask=True,
+                    return_overflowing_tokens=False,
+                    return_tensors="pt",
+                )
+                input_ids = encoded.input_ids[0]
+                decoded = tokenizer.decode(input_ids, skip_special_tokens=True).replace(
+                    " ", ""
+                )
+                if decoded != item:
+                    logger.error(
+                        f"Decoded item does not match original item:\n"
+                        f"Original item: {item}\n"
+                        f"Decoded item: {decoded}\n"
+                        f"Do NOT save tokenizer: {pre_tokenizer.lower()}_"
+                        f"{algorithm.lower()}_{resulting_vocab_size}"
                     )
-                    input_ids = encoded.input_ids[0]
-                    decoded = tokenizer.decode(
-                        input_ids, skip_special_tokens=True
-                    ).replace(" ", "")
-                    if decoded != ITEM_TO_TEST:
-                        logger.error(
-                            f"Decoded item does not match original item:\n"
-                            f"Original item: {ITEM_TO_TEST}\n"
-                            f"Decoded item: {decoded}"
-                        )
-                        raise ValueError
+                    # raise RunTimeError("Decoded item does not match original item.")
+                else:
+                    tokenizer.save_pretrained(
+                        f"{tokenizers_dir}/{dataset_name}/{pre_tokenizer.lower()}_"
+                        f"{algorithm.lower()}_{resulting_vocab_size}.json"
+                    )
 
 
 @logger.catch
