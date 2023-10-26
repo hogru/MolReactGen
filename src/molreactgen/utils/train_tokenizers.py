@@ -97,7 +97,7 @@ def train_tokenizers(dataset_file_path: Path, tokenizers_dir: Path) -> None:
                 else:
                     tokenizer.save_pretrained(
                         f"{tokenizers_dir}/{dataset_name}/{pre_tokenizer.lower()}_"
-                        f"{algorithm.lower()}_{resulting_vocab_size}.json"
+                        f"{algorithm.lower()}_{resulting_vocab_size}"
                     )
 
 
