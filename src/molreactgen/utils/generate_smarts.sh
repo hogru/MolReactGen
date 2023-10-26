@@ -10,6 +10,7 @@ KNOWN_FILE="../../data/prep/uspto50k/csv/USPTO_50k_known.csv"
 OPTIM_FILE="scheduler.pt"
 NUM_RTS=10000
 NUM_BEAMS=1
+REPETITION_PENALTY=1.0
 BREAK_TIME=15
 
 if [ -z "$1" ]; then
@@ -39,7 +40,8 @@ for dir in $(find "$1" -mindepth 0 -maxdepth 1 -type d); do
     --model "$dir" \
     --known "$KNOWN_FILE" \
     --num "$NUM_RTS" \
-    --num_beams "$NUM_BEAMS"
+    --num_beams "$NUM_BEAMS" \
+    --repetition_penalty "$REPETITION_PENALTY"
     date +"---- Finished generation at %T"
     echo -e "\nPausing for $BREAK_TIME second(s)...\n"
     sleep "$BREAK_TIME"
