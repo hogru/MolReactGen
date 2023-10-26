@@ -41,7 +41,8 @@ for dir in $(find "$1" -mindepth 0 -maxdepth 2 -type d); do
   file="$dir/$GENERATED_FILE"
   if [ -f "$file" ]; then
     echo "---- Starting evaluation at $(date +%T) with molecules in $file..."
-    python assess.py stats \
+    python assess.py smiles \
+    --mode stats \
     --generated "$file" \
     --reference "$REFERENCE_MOLECULES" \
     --stats "$REFERENCE_STATS" \
