@@ -1,0 +1,171 @@
+{
+  "version": "1.0",
+  "truncation": null,
+  "padding": {
+    "strategy": "BatchLongest",
+    "direction": "Right",
+    "pad_to_multiple_of": null,
+    "pad_id": 2,
+    "pad_type_id": 0,
+    "pad_token": " "
+  },
+  "added_tokens": [
+    {
+      "id": 0,
+      "content": "^",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 1,
+      "content": "_",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 2,
+      "content": " ",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 3,
+      "content": "§",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 4,
+      "content": "°",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    }
+  ],
+  "normalizer": null,
+  "pre_tokenizer": {
+    "type": "Split",
+    "pattern": {
+      "Regex": "\\[|\\]|A[cglmrstu]?|B[aeihkr]?|C[adeflmorsu]?|D[bsy]?|E[rsu]?|F[emr]?|G[ade]?|H[efgos]?|I[nr]?|K[r]?|L[aru]?|M[dgnot]?|N[abdeiop]?|Os?|P[abdmortu]?|R[aefghnu]?|S[bcdegimnr]?|T[abcehilm]?|U|V|W|Xe|Yb?|Z[nr]?|as|b|c|n|o|p|se?|\\(|\\)|@@?|\\+\\d+|\\++|-\\d+|-+|\\.|-|=|#\\d{1}|\\$\\(?|:[0-9]*|~|@|\\/\\??|\\\\\\??|\\%[0-9]{2}|[0-9]|\\*|>>?|D\\d{1}|H\\d{1}|h\\d{1}|R\\d{1}|r\\d{1}|v\\d{1}|X\\d{1}|x\\d{1}|#\\d{1}|!|&|,|;"
+    },
+    "behavior": "Isolated",
+    "invert": false
+  },
+  "post_processor": {
+    "type": "TemplateProcessing",
+    "single": [
+      {
+        "SpecialToken": {
+          "id": "^",
+          "type_id": 0
+        }
+      },
+      {
+        "Sequence": {
+          "id": "A",
+          "type_id": 0
+        }
+      },
+      {
+        "SpecialToken": {
+          "id": "_",
+          "type_id": 0
+        }
+      }
+    ],
+    "pair": [
+      {
+        "Sequence": {
+          "id": "A",
+          "type_id": 0
+        }
+      },
+      {
+        "Sequence": {
+          "id": "B",
+          "type_id": 1
+        }
+      }
+    ],
+    "special_tokens": {
+      "^": {
+        "id": "^",
+        "ids": [
+          0
+        ],
+        "tokens": [
+          "^"
+        ]
+      },
+      "_": {
+        "id": "_",
+        "ids": [
+          1
+        ],
+        "tokens": [
+          "_"
+        ]
+      }
+    }
+  },
+  "decoder": null,
+  "model": {
+    "type": "WordLevel",
+    "vocab": {
+      "^": 0,
+      "_": 1,
+      " ": 2,
+      "§": 3,
+      "°": 4,
+      "c": 5,
+      "C": 6,
+      "(": 7,
+      ")": 8,
+      "1": 9,
+      "O": 10,
+      "2": 11,
+      "N": 12,
+      "=": 13,
+      "[": 14,
+      "]": 15,
+      "n": 16,
+      "H": 17,
+      "3": 18,
+      "@": 19,
+      "@@": 20,
+      "F": 21,
+      "+": 22,
+      "-": 23,
+      "S": 24,
+      "Cl": 25,
+      "s": 26,
+      "/": 27,
+      "o": 28,
+      "4": 29,
+      "#": 30,
+      "Br": 31,
+      "Sc": 32,
+      "\\": 33,
+      "5": 34,
+      "-3": 35,
+      "6": 36,
+      "7": 37,
+      "I": 38
+    },
+    "unk_token": "§"
+  }
+}

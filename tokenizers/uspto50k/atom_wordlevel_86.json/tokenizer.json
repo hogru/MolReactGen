@@ -1,0 +1,223 @@
+{
+  "version": "1.0",
+  "truncation": null,
+  "padding": {
+    "strategy": "BatchLongest",
+    "direction": "Right",
+    "pad_to_multiple_of": null,
+    "pad_id": 2,
+    "pad_type_id": 0,
+    "pad_token": " "
+  },
+  "added_tokens": [
+    {
+      "id": 0,
+      "content": "^",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 1,
+      "content": "_",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 2,
+      "content": " ",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 3,
+      "content": "§",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 4,
+      "content": "°",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    }
+  ],
+  "normalizer": null,
+  "pre_tokenizer": {
+    "type": "Split",
+    "pattern": {
+      "Regex": "\\[|\\]|A[cglmrstu]?|B[aeihkr]?|C[adeflmorsu]?|D[bsy]?|E[rsu]?|F[emr]?|G[ade]?|H[efgos]?|I[nr]?|K[r]?|L[aru]?|M[dgnot]?|N[abdeiop]?|Os?|P[abdmortu]?|R[aefghnu]?|S[bcdegimnr]?|T[abcehilm]?|U|V|W|Xe|Yb?|Z[nr]?|as|b|c|n|o|p|se?|\\(|\\)|@@?|\\+\\d+|\\++|-\\d+|-+|\\.|-|=|#\\d{1}|\\$\\(?|:[0-9]*|~|@|\\/\\??|\\\\\\??|\\%[0-9]{2}|[0-9]|\\*|>>?|D\\d{1}|H\\d{1}|h\\d{1}|R\\d{1}|r\\d{1}|v\\d{1}|X\\d{1}|x\\d{1}|#\\d{1}|!|&|,|;"
+    },
+    "behavior": "Isolated",
+    "invert": false
+  },
+  "post_processor": {
+    "type": "TemplateProcessing",
+    "single": [
+      {
+        "SpecialToken": {
+          "id": "^",
+          "type_id": 0
+        }
+      },
+      {
+        "Sequence": {
+          "id": "A",
+          "type_id": 0
+        }
+      },
+      {
+        "SpecialToken": {
+          "id": "_",
+          "type_id": 0
+        }
+      }
+    ],
+    "pair": [
+      {
+        "Sequence": {
+          "id": "A",
+          "type_id": 0
+        }
+      },
+      {
+        "Sequence": {
+          "id": "B",
+          "type_id": 1
+        }
+      }
+    ],
+    "special_tokens": {
+      "^": {
+        "id": "^",
+        "ids": [
+          0
+        ],
+        "tokens": [
+          "^"
+        ]
+      },
+      "_": {
+        "id": "_",
+        "ids": [
+          1
+        ],
+        "tokens": [
+          "_"
+        ]
+      }
+    }
+  },
+  "decoder": null,
+  "model": {
+    "type": "WordLevel",
+    "vocab": {
+      "^": 0,
+      "_": 1,
+      " ": 2,
+      "§": 3,
+      "°": 4,
+      ";": 5,
+      "[": 6,
+      "]": 7,
+      "-": 8,
+      "H": 9,
+      "D": 10,
+      "C": 11,
+      ":": 12,
+      "c": 13,
+      "+0": 14,
+      "0": 15,
+      "1": 16,
+      "(": 17,
+      ")": 18,
+      "3": 19,
+      "2": 20,
+      ":1": 21,
+      "O": 22,
+      "a": 23,
+      "#7": 24,
+      ":2": 25,
+      ":3": 26,
+      ":4": 27,
+      "=": 28,
+      ":5": 29,
+      ":6": 30,
+      ":7": 31,
+      "N": 32,
+      ">>": 33,
+      ":8": 34,
+      ".": 35,
+      ":9": 36,
+      "#8": 37,
+      ":10": 38,
+      "#1": 39,
+      "Cl": 40,
+      "6": 41,
+      "Br": 42,
+      "n": 43,
+      ":11": 44,
+      "S": 45,
+      "F": 46,
+      "/": 47,
+      "-1": 48,
+      "4": 49,
+      "#": 50,
+      ":12": 51,
+      "B": 52,
+      "I": 53,
+      "+": 54,
+      ":13": 55,
+      "@@": 56,
+      "@": 57,
+      "Sn": 58,
+      "\\": 59,
+      ":14": 60,
+      "P": 61,
+      "Mg": 62,
+      ":15": 63,
+      "s": 64,
+      ":16": 65,
+      "Si": 66,
+      "Zn": 67,
+      ":17": 68,
+      "-2": 69,
+      "o": 70,
+      ":18": 71,
+      "5": 72,
+      "Cu": 73,
+      "#5": 74,
+      ":19": 75,
+      "#3": 76,
+      ":20": 77,
+      ":21": 78,
+      ":22": 79,
+      ":23": 80,
+      ":24": 81,
+      "-3": 82,
+      ":25": 83,
+      ":26": 84,
+      ":27": 85,
+      "-4": 86,
+      ":28": 87,
+      ":29": 88,
+      ":30": 89,
+      ":31": 90
+    },
+    "unk_token": "§"
+  }
+}
