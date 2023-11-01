@@ -2,6 +2,7 @@
 
 include data/prep/guacamol/*
 include data/prep/uspto50k/*
+include tokenizers/*
 include src/molreactgen/conf/train.args
 include src/molreactgen/conf/guacamol*.*
 include src/molreactgen/conf/uspto50k*.*
