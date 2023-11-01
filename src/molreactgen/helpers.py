@@ -735,7 +735,7 @@ def create_file_link(
             return
         except PermissionError:
             # TODO investigate why this happens
-            logger.warning("Failed to create a hard link, use symbolic link instead.")
+            logger.warning("Failed to create a hard link, use symbolic link instead")
 
     from_file_path.symlink_to(to_file_path)  # symlink
 
