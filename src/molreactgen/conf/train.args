@@ -1,9 +1,4 @@
---dataset_dir data/prep/guacamol/csv
 --preprocessing_num_workers 4
---pre_tokenizer char
---algorithm wordlevel
---vocab_min_frequency 1
---vocab_size 0
 --model_type gpt2
 --use_auth_token true
 --output_dir checkpoints

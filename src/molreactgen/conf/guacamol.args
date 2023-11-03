@@ -1,1 +1,6 @@
+--dataset_dir data/prep/guacamol/csv
+--pre_tokenizer char
+--algorithm wordpiece
+--vocab_min_frequency 1
+--vocab_size 176
 --config_overrides n_positions=128,n_embd=144,n_layer=12,n_head=12
