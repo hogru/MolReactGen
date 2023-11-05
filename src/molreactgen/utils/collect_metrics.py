@@ -1265,7 +1265,10 @@ def _get_available_metrics(
 
 
 def _build_row_from_experiment(
-    experiment: Experiment, metrics: Iterable[str], report_dir_stem: bool = True
+    experiment: Experiment,
+    metrics: Iterable[str],
+    report_dir_stem: bool = True,
+    use_metric_formatter: bool = True,
 ) -> tuple[Any, ...]:
     """Build a row from an experiment for printing / saving it."""
 
@@ -1298,9 +1301,13 @@ def _build_row_from_experiment(
     row = [gen_dir, model_dir]
     for m in metrics:
         metric = experiment.get_metric(m, raise_error_if_not_available=False)
-        row.append(None) if metric is None or metric.value is None or not isinstance(
-            metric.formatter, str
-        ) else row.append(format(metric.value, metric.formatter))
+        if metric is None or metric.value is None:
+            row.append(None)
+        elif use_metric_formatter and isinstance(metric.formatter, str):
+            row.append(format(metric.value, metric.formatter))
+        else:
+            row.append(format(metric.value, ""))
+
     return tuple(row)
 
 
@@ -1404,7 +1411,9 @@ def save_experiments(
     #     )
 
     for e in experiments:
-        row = _build_row_from_experiment(e, available_metrics, report_dir_stem=False)
+        row = _build_row_from_experiment(
+            e, available_metrics, report_dir_stem=False, use_metric_formatter=False
+        )
         rows.append(row)
         # progress.advance(task)
 

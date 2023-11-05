@@ -10,7 +10,7 @@ keywords = ["transformer decoder", "GPT-2", "generation", "auto-regressive", "mo
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
-    "Environment :: GPU :: NVIDIA CUDA :: 11.7",
+    "Environment :: GPU :: NVIDIA CUDA :: 11.4",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Operating System :: MacOS",
@@ -23,25 +23,31 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-codetiming = "^1.4.0"
+codetiming = "^1.4"
 humanfriendly = "^10.0"
 jupyter = "^1.0.0"
-loguru = "^0.6.0"
-notebook = "^6.4.11"
+loguru = "^0.7.0"
+notebook = "^7.0.0"
 numpy = "^1.22.3"
 packaging = "^23.0"
-pandas = "^1.4.3"
+pandas = "^1.5"
 python = ">=3.9,<3.10"
 PyTDC = "^0.3.6"
 rdkit-pypi = "^2022.3.2"
 rich = "^13.3.0"
 scipy = "^1.10.0"
 subset = "^0.1.2"
-torch = "^1.13.1"
-torchmetrics = "^0.11.0"
+# torch = "^1.13"
+# pytorch 2.0.1 and pytorch 2.1 do not work with poetry 1.6.1, see https://github.com/pytorch/pytorch/issues/100974
+# torch = "^2.1"
+torch = [
+  { version = ">=2.0.0, !=2.0.1, !=2.1.0", platform = "linux" },
+  { version = "^2.1", platform = "darwin" }
+]
 tqdm = "^4.64.0"
-wandb = "^0.14.0"
-transformers = "^4.26.0"
+wandb = "^0.15.0"
+transformers = ">=4.26.0, <5.0"
+tokenizers = "^0.14"
 datasets = "^2.9.0"
 tensorboard = "^2.11.0"
 rdchiral = "^1.1.0"
@@ -52,7 +58,7 @@ evaluate = "^0.4.0"
 plotly = "^5.14.1"
 kaleido = "0.2.1"
 psutil = "^5.9.5"
-accelerate = "^0.20.3"
+accelerate = "^0.24"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"

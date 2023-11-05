@@ -1,0 +1,193 @@
+{
+  "version": "1.0",
+  "truncation": null,
+  "padding": {
+    "strategy": "BatchLongest",
+    "direction": "Right",
+    "pad_to_multiple_of": null,
+    "pad_id": 2,
+    "pad_type_id": 0,
+    "pad_token": " "
+  },
+  "added_tokens": [
+    {
+      "id": 0,
+      "content": "^",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 1,
+      "content": "_",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 2,
+      "content": " ",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 3,
+      "content": "§",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 4,
+      "content": "°",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    }
+  ],
+  "normalizer": null,
+  "pre_tokenizer": null,
+  "post_processor": {
+    "type": "TemplateProcessing",
+    "single": [
+      {
+        "SpecialToken": {
+          "id": "^",
+          "type_id": 0
+        }
+      },
+      {
+        "Sequence": {
+          "id": "A",
+          "type_id": 0
+        }
+      },
+      {
+        "SpecialToken": {
+          "id": "_",
+          "type_id": 0
+        }
+      }
+    ],
+    "pair": [
+      {
+        "Sequence": {
+          "id": "A",
+          "type_id": 0
+        }
+      },
+      {
+        "Sequence": {
+          "id": "B",
+          "type_id": 1
+        }
+      }
+    ],
+    "special_tokens": {
+      "^": {
+        "id": "^",
+        "ids": [
+          0
+        ],
+        "tokens": [
+          "^"
+        ]
+      },
+      "_": {
+        "id": "_",
+        "ids": [
+          1
+        ],
+        "tokens": [
+          "_"
+        ]
+      }
+    }
+  },
+  "decoder": null,
+  "model": {
+    "type": "BPE",
+    "dropout": null,
+    "unk_token": "§",
+    "continuing_subword_prefix": null,
+    "end_of_word_suffix": null,
+    "fuse_unk": false,
+    "byte_fallback": false,
+    "vocab": {
+      "^": 0,
+      "_": 1,
+      " ": 2,
+      "§": 3,
+      "°": 4,
+      "#": 5,
+      "(": 6,
+      ")": 7,
+      "+": 8,
+      "-": 9,
+      "/": 10,
+      "1": 11,
+      "2": 12,
+      "3": 13,
+      "4": 14,
+      "5": 15,
+      "6": 16,
+      "7": 17,
+      "=": 18,
+      "@": 19,
+      "B": 20,
+      "C": 21,
+      "F": 22,
+      "H": 23,
+      "I": 24,
+      "N": 25,
+      "O": 26,
+      "S": 27,
+      "[": 28,
+      "\\": 29,
+      "]": 30,
+      "c": 31,
+      "l": 32,
+      "n": 33,
+      "o": 34,
+      "r": 35,
+      "s": 36,
+      "cc": 37,
+      "CC": 38,
+      "c1": 39,
+      "(C": 40,
+      "O)": 41,
+      "=O)": 42,
+      "(=O)": 43,
+      "c2": 44,
+      "H]": 45,
+      "C@": 46,
+      "[C@": 47,
+      "c1cc": 48
+    },
+    "merges": [
+      "c c",
+      "C C",
+      "c 1",
+      "( C",
+      "O )",
+      "= O)",
+      "( =O)",
+      "c 2",
+      "H ]",
+      "C @",
+      "[ C@",
+      "c1 cc"
+    ]
+  }
+}

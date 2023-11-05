@@ -12,7 +12,6 @@
 /src/molreactgen/logs/*
 /src/molreactgen/models/*
 /src/molreactgen/playground/*
-/src/molreactgen/tokenizers/*
 /src/molreactgen/utils/*.csv
 /src/molreactgen/utils/*.md
 /src/molreactgen/utils/wandb/*
@@ -23,7 +22,6 @@
 .mypy_cache
 .pytest_cache
 *.ignore
-*.json
 *.numbers
 *.png
 *.pyc

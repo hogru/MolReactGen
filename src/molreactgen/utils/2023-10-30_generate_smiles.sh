@@ -11,7 +11,8 @@ OPTIM_FILE="scheduler.pt"
 NUM_MOLS=10000
 NUM_BEAMS=1
 TEMPERATURE=1.0
-BREAK_TIME=15
+REPETITION_PENALTY=1.0
+BREAK_TIME=10
 
 if [ -z "$1" ]; then
   echo "No directory supplied, exit."
@@ -43,7 +44,8 @@ for dir in $(find "$1" -mindepth 0 -maxdepth 1 -type d); do
     --known "$KNOWN_FILE" \
     --num "$NUM_MOLS" \
     --num_beams "$NUM_BEAMS" \
-    --temperature "$TEMPERATURE"
+    --temperature "$TEMPERATURE" \
+    --repetition_penalty "$REPETITION_PENALTY"
     date +"---- Finished generation at %T"
     echo -e "\nPausing for $BREAK_TIME second(s)...\n"
     sleep "$BREAK_TIME"

@@ -26,7 +26,6 @@ from typing import Any, Final, Optional, Sequence, Union
 
 # Most of Hugging Face has poor type hints, trying to avoid mypy errors
 import transformers  # type: ignore
-from tokenizers import Regex, Tokenizer, decoders  # type: ignore
 from tokenizers.models import BPE, Unigram, WordLevel, WordPiece  # type: ignore
 from tokenizers.pre_tokenizers import Split  # type: ignore
 from tokenizers.processors import TemplateProcessing  # type: ignore
@@ -37,6 +36,8 @@ from tokenizers.trainers import (  # type: ignore
     WordPieceTrainer,
 )
 from transformers import BatchEncoding, PreTrainedTokenizerFast
+
+from tokenizers import Regex, Tokenizer, decoders  # type: ignore
 
 # Tokenizer related
 DATASET_COLUMN_NAME: Final[str] = "items"
@@ -49,6 +50,7 @@ ADD_TOKEN: Final[
     str
 ] = "°"  # Not sure if needed at all; might be used to map special model tokens to like CLS, SEP etc.
 MODEL_MAX_LENGTH: Final[int] = 1024
+WORDPIECE_MAX_INPUT_CHARS_PER_WORD: Final[int] = MODEL_MAX_LENGTH
 
 # noinspection SpellCheckingInspection
 REGEX_INPUT: Final[dict[str, str]] = {
@@ -125,6 +127,9 @@ def _filter_invalid_tokenizer_combos(
         ValueError: If the given combination is invalid.
     """
 
+    # This is a safety check for a Hugging Face issue described here:
+    # https://github.com/huggingface/tokenizers/issues/1369
+    # Once this is resolved we can use the Split pre-tokenizer with all tokenization algorithms
     if pre_tokenizer in {"ATOM", "SMARTS"} and algorithm != "WORDLEVEL":
         raise ValueError(
             f"Pre-tokenizer {pre_tokenizer} must be used with WORDLEVEL algorithm"
@@ -132,6 +137,12 @@ def _filter_invalid_tokenizer_combos(
 
     if algorithm == "WORDLEVEL" and vocab_size != 0:
         raise ValueError(f"Algorithm {algorithm} must be used with a vocab size of 0")
+
+    if algorithm in {"BPE", "WORDPIECE", "UNIGRAM"} and vocab_size == 0:
+        raise ValueError(
+            f"Algorithm {algorithm} should be used with a vocab size larger than 0."
+            f"Use WORDLEVEL algorithm for a vocab size of 0."
+        )
 
 
 def _token_in_regex(token: str, regex: str) -> bool:
@@ -261,6 +272,13 @@ def get_tokenizer(
     elif algorithm == "BPE":
         # noinspection PyArgumentList
         tokenizer = Tokenizer(BPE(unk_token=unk_token))
+        # The BPE algorithm seemingly does not work properly with the Split pre-tokenizer
+        # see Hugging Face issue https://github.com/huggingface/tokenizers/issues/1369
+        # Therefore, we do not use not a pre-tokenizer
+        # noinspection PyPropertyAccess
+        # tokenizer.pre_tokenizer = Split(
+        #     pattern=regex_pattern, behavior="isolated", invert=False
+        # )
         # noinspection PyArgumentList
         trainer = BpeTrainer(
             vocab_size=vocab_size,
@@ -272,7 +290,19 @@ def get_tokenizer(
 
     elif algorithm == "WORDPIECE":
         # noinspection PyArgumentList
-        tokenizer = Tokenizer(WordPiece(unk_token=unk_token))
+        tokenizer = Tokenizer(
+            WordPiece(
+                unk_token=unk_token,
+                max_input_chars_per_word=WORDPIECE_MAX_INPUT_CHARS_PER_WORD,
+            )
+        )
+        # The WordPiece algorithm seemingly does not work properly with the Split pre-tokenizer
+        # see Hugging Face issue https://github.com/huggingface/tokenizers/issues/1369
+        # Therefore, we do not use not a pre-tokenizer
+        # noinspection PyPropertyAccess
+        # tokenizer.pre_tokenizer = Split(
+        #     pattern=regex_pattern, behavior="isolated", invert=False
+        # )
         # noinspection PyArgumentList
         trainer = WordPieceTrainer(
             vocab_size=vocab_size,
@@ -294,6 +324,13 @@ def get_tokenizer(
             )
         # noinspection PyArgumentList
         tokenizer = Tokenizer(Unigram())
+        # The Unigram algorithm seemingly does not work properly with the Split pre-tokenizer
+        # see Hugging Face issue https://github.com/huggingface/tokenizers/issues/1369
+        # Therefore, we do not use not a pre-tokenizer
+        # noinspection PyPropertyAccess
+        # tokenizer.pre_tokenizer = Split(
+        #     pattern=regex_pattern, behavior="isolated", invert=False
+        # )
         # noinspection PyArgumentList
         trainer = UnigramTrainer(
             vocab_size=vocab_size,

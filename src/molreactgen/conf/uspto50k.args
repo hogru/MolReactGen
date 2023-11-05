@@ -1,5 +1,5 @@
 --dataset_dir data/prep/uspto50k/csv
---pre_tokenizer char
+--pre_tokenizer smarts
 --algorithm wordlevel
 --vocab_size 0
 --per_device_train_batch_size 8

@@ -1,7 +1,9 @@
 ![Python Version](https://img.shields.io/badge/python-3.9-blue?color=3975A5&logo=python&link=https%3A%2F%2Fwww.python.org)
-![Poetry Version](https://img.shields.io/badge/poetry-1.5-blue?color=1E293B&logo=poetry&link=https%3A%2F%2Fpython-poetry.org)
+![Poetry Version](https://img.shields.io/badge/poetry-1.6-blue?color=1E293B&logo=poetry&link=https%3A%2F%2Fpython-poetry.org)
 ![Pytorch Version](https://img.shields.io/badge/pytorch-1.13-blue?color=EE4C2C&logo=pytorch&link=https%3A%2F%2Fpytorch.org)
-![Transformers Version](https://img.shields.io/badge/hf%20transformers-4.30-blue?color=FFD21E&link=https%3A%2F%2Fhuggingface.co%2Fdocs%2Ftransformers%2Findex)
+![Transformers Version](https://img.shields.io/badge/hf%20transformers-4.33-blue?color=FFD21E&link=https%3A%2F%2Fhuggingface.co%2Fdocs%2Ftransformers%2Findex)
+[![Powered by RDKit](https://img.shields.io/badge/Powered%20by-RDKit-3838ff.svg?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAAFVBMVEXc3NwUFP8UPP9kZP+MjP+0tP////9ZXZotAAAAAXRSTlMAQObYZgAAAAFiS0dEBmFmuH0AAAAHdElNRQfmAwsPGi+MyC9RAAAAQElEQVQI12NgQABGQUEBMENISUkRLKBsbGwEEhIyBgJFsICLC0iIUdnExcUZwnANQWfApKCK4doRBsKtQFgKAQC5Ww1JEHSEkAAAACV0RVh0ZGF0ZTpjcmVhdGUAMjAyMi0wMy0xMVQxNToyNjo0NyswMDowMDzr2J4AAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjItMDMtMTFUMTU6MjY6NDcrMDA6MDBNtmAiAAAAAElFTkSuQmCC)](https://www.rdkit.org/)
+
 
 ![Code Style](https://img.shields.io/badge/code%20style-black-black?link=https%3A%2F%2Fpypi.org%2Fproject%2Fblack%2F)
 ![Imports](https://img.shields.io/badge/imports-isort-blue?color=EF8336&link=https%3A%2F%2Fpypi.org%2Fproject%2Fisort%2F)
@@ -196,6 +198,13 @@ and [reaction templates](https://huggingface.co/hogru/MolReactGen-USPTO50K-React
 - Not tested with pytorch ≥ v2.0
 - Starting with transformers v5 (not out as of this writing), the optimizer must be instantiated manually; this requires
   a code change in `train.py`
+- Does not detect Apple devices automatically; you can use command line argument `--use_mps_device true` to take advantage of Apple Silicon (assuming `pytorch` is configured correctly)
+- The current `pyproject.toml` does not update to the following versions due to required testing and, in some cases, their potential breaking changes:
+  - python ≥ 3.10 (should work up to 3.11 when also upgrading to pytorch ≥ 2.0)
+  - pytorch ≥ 2.0 (not tested, major version)
+  - transformers ≥ 4.33 (not tested, tokenizer breaking changes with ≥ 4.34)
+  - tokenizers ≥ 0.14 (breaking changes)
+  - pandas ≥ 2.0 (not tested, major version)
 
 ## Meta
 

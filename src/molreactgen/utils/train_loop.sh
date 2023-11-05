@@ -22,12 +22,14 @@ do
   echo "-- Start training run $run/$1"
 #  python train.py \
 #    --config_file conf/guacamol.args \
-#    --tokenizer_name ../../tokenizers/char_unigram_88 \
+#    --tokenizer_name ../../tokenizers/char_unigram_176 \
 #    --learning_rate 0.0025 \
 #    --per_device_train_batch_size 64 \
 #    --random_seed true
   python train.py \
     --config_file conf/uspto50k.args \
+    --pre_tokenizer smarts \
+    --algorithm wordlevel \
     --random_seed true
   sleep "$BREAK_TIME"
 done

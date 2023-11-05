@@ -101,7 +101,7 @@ VALID_TARGET_MODES_HELP_STR: Final[str] = "{" + "|".join(VALID_TARGET_MODES) + "
 DEFAULT_NUM_TO_GENERATE: Final[int] = 10_000
 MIN_NUM_TO_GENERATE: Final[int] = 20
 DEFAULT_NUM_BEAMS: Final[int] = 1
-DEFAULT_REPETITION_PENALTY: Final[float] = 1.2
+DEFAULT_REPETITION_PENALTY: Final[float] = 1.0
 DEFAULT_SEED: Final[int] = 42
 DEFAULT_TEMPERATURE: Final[float] = 1.0
 
@@ -478,7 +478,8 @@ def create_and_save_generation_config(
         early_stopping=early_stopping,
         temperature=temperature,
         repetition_penalty=repetition_penalty,
-        length_penalty=0.0,  # does neither promote nor penalize long sequences
+        # length_penalty only allowed for num_beams > 1
+        # length_penalty=0.0,  # does neither promote nor penalize long sequences
     )
 
     if overwrite_pretrained_config:
@@ -540,7 +541,9 @@ def generate_smiles(
     logger.info("Loading known molecules...")
     existing_molecules: list[Molecule] = _load_existing_molecules(existing_file_path)
     # Building the set is painfully slow (about 10min), but I don't know how to speed it up
+    # Parallelizing it did/does not help
     # The bulk of the time is spent in calculating the hashes (Molecule.__hash__)
+    logger.info("Building set of known molecules (this takes some minutes)...")
     smiles["all_existing"] = set(existing_molecules)
     assert all(bool(s.canonical_smiles) for s in smiles["all_existing"])
 
@@ -1055,7 +1058,7 @@ def main() -> None:
     )
     parser.add_argument(
         "-p",
-        "--repetition-penalty",
+        "--repetition_penalty",
         type=float,
         default=DEFAULT_REPETITION_PENALTY,
         help="the repetition penalty, default: '%(default)s'.",
