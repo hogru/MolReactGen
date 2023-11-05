@@ -1,5 +1,7 @@
 # coding=utf-8
 # src/molreactgen/train.py
+# Parts of this file are based on the following huggingface example:
+# https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_clm.py
 """Train the model.
 
 Classes:
@@ -22,9 +24,6 @@ Functions:
 """
 
 import argparse
-
-# Parts of this file are based on the following huggingface example:
-# https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_clm.py
 import json
 import math
 import os
