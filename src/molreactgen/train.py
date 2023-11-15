@@ -41,6 +41,7 @@ from typing import Any, Final, Optional, Sequence, Union
 # Most of Hugging Face has poor type hints, trying to avoid mypy errors
 import evaluate  # type: ignore
 import torch
+import wandb
 from datasets import Dataset, DatasetDict, Features, Value, load_dataset  # type: ignore
 from loguru import logger
 from transformers import (  # type: ignore
@@ -66,7 +67,6 @@ from transformers.trainer_utils import get_last_checkpoint  # type: ignore
 from transformers.utils import check_min_version  # type: ignore
 from transformers.utils.versions import require_version  # type: ignore
 
-import wandb
 from molreactgen.generate import create_and_save_generation_config
 from molreactgen.helpers import (
     configure_hf_logging,
@@ -814,7 +814,7 @@ def main() -> None:
             - 2  # BOS and EOS as part of the data (non-special tokens)
         )
         end_idx = int(
-            round(end_idx * 0.99, 0)
+            round(end_idx * 0.9, 0)
         )  # Leave some room for close to 0 frequency tokens
 
         # Add BOS and EOS frequencies
