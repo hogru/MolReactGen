@@ -50,7 +50,7 @@ outperforms the GuacaMol model in terms of this metric, and is also successful i
 ## Installation
 
 A local (editable package) installation requires `python` ≥
-3.9, [`poetry`](https://python-poetry.org)  ≥ 1.0.8 and `pip` ≥ 22.3. Experiment results are logged
+3.9, [`poetry`](https://python-poetry.org)  ≥ 1.0.0 and `pip` ≥ 22.3. Experiment results are logged
 to [`weights and biases`](https://wandb.ai).
 
 ```

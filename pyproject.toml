@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "MolReactGen"
-version = "1.0.0b0"
+version = "1.0.0"
 description = "Auto-regressive transformer decoder based on the Hugging Face implementation of Open AI's GPT-2 to generate molecules (SMILES) and reaction templates (SMARTS)"
 authors = ["Stephan Holzgruber <stephan.holzgruber@gmail.com>"]
 readme = "README.md"
@@ -95,7 +95,7 @@ line_length = 88
 filter_files = true
 
 [tool.bumpver]
-current_version = "1.0.0b0"
+current_version = "1.0.0"
 version_pattern = "MAJOR.MINOR.PATCH[PYTAGNUM]"
 commit_message = "Bump version {old_version} -> {new_version}"
 commit = true
