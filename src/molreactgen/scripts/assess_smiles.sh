@@ -1,15 +1,16 @@
 #!/bin/bash
-# Helper script to evaluate molecules from a set of generated molecules
+# Sample script to evaluate molecules from a set of generated molecules
 # Directory with sub-directories of generated molecules expected
 # Evaluates molecules based on variables defined below
 # Current directory should contain the python scripts
+# i.e. src/molreactgen/
 
 ASSESS_FILE="assess.py"
 REFERENCE_MOLECULES="../../data/prep/guacamol/csv/guacamol_v1_train.csv"
 REFERENCE_STATS="../../data/prep/guacamol/fcd_stats/guacamol_train.pkl"
 GENERATED_FILE="generated_smiles.csv"
 NUM_MOLS=10000
-BREAK_TIME=5
+BREAK_TIME=15
 
 if [ -z "$1" ]; then
   echo "No directory supplied, exit."

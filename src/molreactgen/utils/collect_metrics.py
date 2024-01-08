@@ -18,13 +18,13 @@ from pathlib import Path
 from typing import Any, Final, Iterable, Optional, Union
 
 import pandas as pd  # type: ignore
+import wandb  # type: ignore
 from codetiming import Timer
 from humanfriendly import format_timespan  # type: ignore
 from loguru import logger
 from rich.console import Console
 from rich.table import Table
 
-import wandb  # type: ignore
 from molreactgen.helpers import configure_logging, determine_log_level
 from molreactgen.tokenizer import (
     REGEX_PATTERN_ATOM,
@@ -316,7 +316,7 @@ class Experiment:
             ),
             "dataset_dir": Metric(
                 column_name="dataset_dir",
-                scope=("tokenizer", "training"),
+                scope=("training",),
                 dtype=str,
                 value=None,
             ),

@@ -1,8 +1,8 @@
 #!/bin/bash
-# Helper script to generate reaction templates from a set of models
-# Directory with sub-directories of models expected
-# Generates reaction templates based on variables defined below
+# Sample script to generate SMARTS from models in given directory
+# Generates SMARTS based on variables defined below
 # Current directory should contain the python scripts
+# i.e. src/molreactgen/
 
 GENERATE_FILE="generate.py"
 MODEL_FILE="pytorch_model.bin"

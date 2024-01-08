@@ -1,0 +1,6 @@
+--dataset_dir data/prep/guacamol/csv
+--tokenizer_name ../../tokenizers/guacamol/char_bpe_176
+--config_overrides n_positions=128,n_embd=768,n_layer=12,n_head=12
+--per_device_train_batch_size 32
+--per_device_eval_batch_size 32
+--learning_rate 0.0005

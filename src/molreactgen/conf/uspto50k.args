@@ -1,9 +1,9 @@
 --dataset_dir data/prep/uspto50k/csv
 --pre_tokenizer smarts
 --algorithm wordlevel
+--vocab_min_frequency 1
 --vocab_size 0
 --per_device_train_batch_size 8
 --per_device_eval_batch_size 16
 --config_overrides n_positions=896,n_embd=144,n_layer=12,n_head=12
---random_seed false
---fp16 true
+--learning_rate 0.0005

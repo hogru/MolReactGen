@@ -2,4 +2,4 @@
 # src/molreactgen/__init__.py
 """Standard __init__.py for molreactgen package."""
 
-__version__ = "1.0.0b0"
+__version__ = "1.0.0"

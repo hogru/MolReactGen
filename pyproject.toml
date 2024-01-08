@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "MolReactGen"
-version = "1.0.0b0"
+version = "1.0.0"
 description = "Auto-regressive transformer decoder based on the Hugging Face implementation of Open AI's GPT-2 to generate molecules (SMILES) and reaction templates (SMARTS)"
 authors = ["Stephan Holzgruber <stephan.holzgruber@gmail.com>"]
 readme = "README.md"
@@ -39,11 +39,11 @@ scipy = "^1.10.0"
 subset = "^0.1.2"
 # torch = "^1.13"
 # pytorch 2.0.1 and pytorch 2.1 do not work with poetry 1.6.1, see https://github.com/pytorch/pytorch/issues/100974
-# torch = "^2.1"
-torch = [
-  { version = ">=2.0.0, !=2.0.1, !=2.1.0", platform = "linux" },
-  { version = "^2.1", platform = "darwin" }
-]
+torch = "^2.1"
+# torch = [
+#   { version = ">=2.0.0, !=2.0.1, !=2.1.0", platform = "linux" },
+#   { version = "^2.1", platform = "darwin" }
+# ]
 tqdm = "^4.64.0"
 wandb = "^0.15.0"
 transformers = ">=4.26.0, <5.0"
@@ -59,9 +59,10 @@ plotly = "^5.14.1"
 kaleido = "0.2.1"
 psutil = "^5.9.5"
 accelerate = "^0.24"
+bumpver = "^2023.1129"
 
 [tool.poetry.dev-dependencies]
-black = "^23.1.0"
+black = "^23.11.0"
 flake8 = "^6.0"
 isort = "^5.12.0"
 mypy = "^1.1.0"
@@ -94,7 +95,7 @@ line_length = 88
 filter_files = true
 
 [tool.bumpver]
-current_version = "1.0.0b0"
+current_version = "1.0.0"
 version_pattern = "MAJOR.MINOR.PATCH[PYTAGNUM]"
 commit_message = "Bump version {old_version} -> {new_version}"
 commit = true

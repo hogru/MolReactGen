@@ -1,0 +1,230 @@
+{
+  "version": "1.0",
+  "truncation": null,
+  "padding": {
+    "strategy": "BatchLongest",
+    "direction": "Right",
+    "pad_to_multiple_of": null,
+    "pad_id": 2,
+    "pad_type_id": 0,
+    "pad_token": " "
+  },
+  "added_tokens": [
+    {
+      "id": 0,
+      "content": "^",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 1,
+      "content": "_",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 2,
+      "content": " ",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 3,
+      "content": "§",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 4,
+      "content": "°",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    }
+  ],
+  "normalizer": null,
+  "pre_tokenizer": null,
+  "post_processor": {
+    "type": "TemplateProcessing",
+    "single": [
+      {
+        "SpecialToken": {
+          "id": "^",
+          "type_id": 0
+        }
+      },
+      {
+        "Sequence": {
+          "id": "A",
+          "type_id": 0
+        }
+      },
+      {
+        "SpecialToken": {
+          "id": "_",
+          "type_id": 0
+        }
+      }
+    ],
+    "pair": [
+      {
+        "Sequence": {
+          "id": "A",
+          "type_id": 0
+        }
+      },
+      {
+        "Sequence": {
+          "id": "B",
+          "type_id": 1
+        }
+      }
+    ],
+    "special_tokens": {
+      "^": {
+        "id": "^",
+        "ids": [
+          0
+        ],
+        "tokens": [
+          "^"
+        ]
+      },
+      "_": {
+        "id": "_",
+        "ids": [
+          1
+        ],
+        "tokens": [
+          "_"
+        ]
+      }
+    }
+  },
+  "decoder": {
+    "type": "WordPiece",
+    "prefix": "##",
+    "cleanup": false
+  },
+  "model": {
+    "type": "WordPiece",
+    "unk_token": "§",
+    "continuing_subword_prefix": "##",
+    "max_input_chars_per_word": 1024,
+    "vocab": {
+      "^": 0,
+      "_": 1,
+      " ": 2,
+      "§": 3,
+      "°": 4,
+      "#": 5,
+      "(": 6,
+      ")": 7,
+      "+": 8,
+      "-": 9,
+      ".": 10,
+      "/": 11,
+      "0": 12,
+      "1": 13,
+      "2": 14,
+      "3": 15,
+      "4": 16,
+      "5": 17,
+      "6": 18,
+      "7": 19,
+      "8": 20,
+      "9": 21,
+      ":": 22,
+      ";": 23,
+      "=": 24,
+      ">": 25,
+      "@": 26,
+      "B": 27,
+      "C": 28,
+      "D": 29,
+      "F": 30,
+      "H": 31,
+      "I": 32,
+      "M": 33,
+      "N": 34,
+      "O": 35,
+      "P": 36,
+      "S": 37,
+      "Z": 38,
+      "[": 39,
+      "\\": 40,
+      "]": 41,
+      "a": 42,
+      "c": 43,
+      "g": 44,
+      "i": 45,
+      "l": 46,
+      "n": 47,
+      "o": 48,
+      "r": 49,
+      "s": 50,
+      "u": 51,
+      "##C": 52,
+      "##:": 53,
+      "##2": 54,
+      "##]": 55,
+      "##-": 56,
+      "##[": 57,
+      "##;": 58,
+      "##H": 59,
+      "##0": 60,
+      "##D": 61,
+      "##3": 62,
+      "##+": 63,
+      "##1": 64,
+      "##(": 65,
+      "##=": 66,
+      "##O": 67,
+      "##)": 68,
+      "##N": 69,
+      "##7": 70,
+      "##8": 71,
+      "##9": 72,
+      "##6": 73,
+      "##5": 74,
+      "##4": 75,
+      "##>": 76,
+      "##l": 77,
+      "##.": 78,
+      "##c": 79,
+      "##n": 80,
+      "##/": 81,
+      "###": 82,
+      "##a": 83,
+      "##F": 84,
+      "##o": 85,
+      "##B": 86,
+      "##r": 87,
+      "##I": 88,
+      "##S": 89,
+      "##M": 90,
+      "##g": 91,
+      "##@": 92,
+      "##\\": 93,
+      "##Z": 94,
+      "##i": 95,
+      "##u": 96,
+      "##P": 97,
+      "##s": 98
+    }
+  }
+}

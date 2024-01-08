@@ -1,7 +1,7 @@
 ![Python Version](https://img.shields.io/badge/python-3.9-blue?color=3975A5&logo=python&link=https%3A%2F%2Fwww.python.org)
-![Poetry Version](https://img.shields.io/badge/poetry-1.6-blue?color=1E293B&logo=poetry&link=https%3A%2F%2Fpython-poetry.org)
-![Pytorch Version](https://img.shields.io/badge/pytorch-1.13-blue?color=EE4C2C&logo=pytorch&link=https%3A%2F%2Fpytorch.org)
-![Transformers Version](https://img.shields.io/badge/hf%20transformers-4.33-blue?color=FFD21E&link=https%3A%2F%2Fhuggingface.co%2Fdocs%2Ftransformers%2Findex)
+![Poetry Version](https://img.shields.io/badge/poetry-1.7-blue?color=1E293B&logo=poetry&link=https%3A%2F%2Fpython-poetry.org)
+![Pytorch Version](https://img.shields.io/badge/pytorch-2.1-blue?color=EE4C2C&logo=pytorch&link=https%3A%2F%2Fpytorch.org)
+![Transformers Version](https://img.shields.io/badge/hf%20transformers-4.35-blue?color=FFD21E&link=https%3A%2F%2Fhuggingface.co%2Fdocs%2Ftransformers%2Findex)
 [![Powered by RDKit](https://img.shields.io/badge/Powered%20by-RDKit-3838ff.svg?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAAFVBMVEXc3NwUFP8UPP9kZP+MjP+0tP////9ZXZotAAAAAXRSTlMAQObYZgAAAAFiS0dEBmFmuH0AAAAHdElNRQfmAwsPGi+MyC9RAAAAQElEQVQI12NgQABGQUEBMENISUkRLKBsbGwEEhIyBgJFsICLC0iIUdnExcUZwnANQWfApKCK4doRBsKtQFgKAQC5Ww1JEHSEkAAAACV0RVh0ZGF0ZTpjcmVhdGUAMjAyMi0wMy0xMVQxNToyNjo0NyswMDowMDzr2J4AAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjItMDMtMTFUMTU6MjY6NDcrMDA6MDBNtmAiAAAAAElFTkSuQmCC)](https://www.rdkit.org/)
 
 
@@ -49,8 +49,8 @@ outperforms the GuacaMol model in terms of this metric, and is also successful i
 
 ## Installation
 
-Disclaimer: This is currently under development. A local (editable package) installation requires `python` ≥
-3.9, [`poetry`](https://python-poetry.org)  ≥ 1.0.8 and `pip` ≥ 22.3. Experiment results are logged
+A local (editable package) installation requires `python` ≥
+3.9, [`poetry`](https://python-poetry.org)  ≥ 1.0.0 and `pip` ≥ 22.3. Experiment results are logged
 to [`weights and biases`](https://wandb.ai).
 
 ```
@@ -64,34 +64,49 @@ python -m pip install -e .
 ### `src/molreactgen` directory
 
 - `prepare_data.py` downloads and prepares the datasets
-- `train.py` trains the model on a given dataset, configured via (optionally multiple) `.args` file(s) or a
-  single `.yaml` file in the `conf` directory (see example files)
+- `train.py` trains the model on a given dataset, configured via (optionally multiple) `.args` file(s) in the `conf` directory (see example files)
 - `generate.py` generates molecules (SMILES) or reaction templates (SMARTS)
-- `assess.py` (for molecules only) calculates the Fréchet ChemNet Distance (FCD) between the generated molecules and a
-  reference set of molecules (e.g. the GuacaMol dataset) along with some basic evaluation criteria
-- `molecule.py` covers helpers for the chemical space of the task
+- `assess.py` (for molecules only) calculates the Fréchet ChemNet Distance (FCD) between the generated molecules and a reference set of molecules (e.g. the GuacaMol dataset) along with some other metrics
+- `molecule.py` covers helpers for the chemical domain of the task
 - `tokenizer.py` provides the various tokenizers
 - `helpers.py` is a set of misc helpers/utils (logging etc.)
 
 ### `src/molreactgen/utils` directory
 
-- `compute_fcd_stats.py` computes the model activations that are needed to calculate the FCD. This is a separate script
-  because it is computationally expensive and can be reused for model comparison.
-- `check_tokenizer.py` is used if a tokenizer can successfully encode and decode a dataset
-- `collect_metrics.py` collects metrics from various files and `wandb` and provides them in several formats; used during
-  experiments
+- `train_tokenizers.py` pre-trains the tokenizers on a given dataset for later use during model training
+- `check_tokenizer.py` can be used to check if a tokenizer can successfully encode and decode a dataset
+- `compute_fcd_stats.py` computes the model activations that are needed to calculate the FCD. This is a separate script because it is computationally expensive and the results can be reused for later model comparisons.
+- `collect_metrics.py` collects metrics from various files and `wandb` and provides them in several formats (`csv`, `json`, `md`); used during experiments
+- `statistical_tests.ipynb` is a Jupyter notebook that performs statistical tests on the results; used for experiment results evaluation
 - `create_plots.ipynb` is a Jupyter notebook that creates plots from the datasets; used for presentation purposes
-- `*.sh` are "quick and dirty" scripts for running experiments/sweeps for hyper parameter search
+- `merge_items.py` and `rename_files.py` are one-offs for file manipulation
+
+### `src/molreactgen/scripts` directory
+
+- `*.sh` are sample shell scripts to show potential uses of the main `.py` scripts
 
 ### `data/raw` directory
 
 - the (default) directory `prepare_data.py` downloads the datasets to
-- a sub-directory is created for each dataset, containing the raw data files
+- a subdirectory is created for each dataset, containing the raw data files
 
 ### `data/prep` directory
 
 - the (default) directory `prepare_data.py` prepares the datasets in
-- a sub-directory is created for each dataset, containing the prepared data files
+- a subdirectory is created for each dataset, containing the prepared data files
+
+### `data/generated` directory
+
+- the (default) directory `generate.py` saves the generated items into
+
+### Additional directories
+
+- `checkpoints`: the (default) directory `train.py` saves the models into
+- `logs`: the (default) directory `train.py` saves the logs into, including the `wandb` logs
+- `presentations`: presentation, poster, master thesis
+- `results`: sample results
+- `src/molreactgen/conf`: the (default) directory `train.py` reads the configuration files from
+- `tokenizers`: the pre-trained tokenizers
 
 ## Usage example
 
@@ -104,10 +119,7 @@ python -m pip install -e .
 - Optional: `wandb` account and API key (see [here](https://docs.wandb.ai/quickstart)); should work with an anonymous
   account, but I haven't tested it
 
-> Note: the Hugging Face `trainer` uses its own [`accelerate`](https://huggingface.co/docs/accelerate/index) library
-> under the hood. This library is supposed to support a number of distributed training backends. It should work with its
-> default values for a simple setup, but you might want /need to change the `accelerate` parameters. You can do this by
-> issuing the `accelerate config` command. This is my current setup:
+> Note: the Hugging Face `trainer` uses its own [`accelerate`](https://huggingface.co/docs/accelerate/index) library under the hood. This library is supposed to support a number of distributed training backends. It should work with its default values for a simple setup, but you might want /need to change the `accelerate` parameters. You can do this by issuing the `accelerate config` command. This is my current setup:
 >
 > ```yaml
 > compute_environment: LOCAL_MACHINE
@@ -182,6 +194,8 @@ python generate.py smarts \
 # At the moment, the assessment is fully done during the generation already
 ```
 
+Alternatively you can inspect and adapt the shell scripts provided in the `scripts` directory.
+
 ### Hugging Face Models
 
 Pre-trained models are available on [Hugging Face](https://huggingface.co), both
@@ -190,21 +204,20 @@ and [reaction templates](https://huggingface.co/hogru/MolReactGen-USPTO50K-React
 
 ## Release History
 
-- None yet - Work in progress
+- 1.0: First release along with the master thesis submission
 
 ## Known issues
 
 - Ran only on a local GPU, not configured/tested for distributed training
-- Not tested with pytorch ≥ v2.0
-- Starting with transformers v5 (not out as of this writing), the optimizer must be instantiated manually; this requires
-  a code change in `train.py`
+- Starting with `transformers` v5 (not out as of this writing)...
+  - the optimizer must be instantiated manually; this requires a code change in `train.py`
+  - the `oauth_token` usage in `train.py` must be replaced
 - Does not detect Apple devices automatically; you can use command line argument `--use_mps_device true` to take advantage of Apple Silicon (assuming `pytorch` is configured correctly)
 - The current `pyproject.toml` does not update to the following versions due to required testing and, in some cases, their potential breaking changes:
-  - python ≥ 3.10 (should work up to 3.11 when also upgrading to pytorch ≥ 2.0)
-  - pytorch ≥ 2.0 (not tested, major version)
-  - transformers ≥ 4.33 (not tested, tokenizer breaking changes with ≥ 4.34)
-  - tokenizers ≥ 0.14 (breaking changes)
-  - pandas ≥ 2.0 (not tested, major version)
+  - python 3.10 (not tested)
+  - pandas ≥ 2.0 (not tested)
+  - transformers 5.0 (not tested, breaking change, see above)
+- Generally, all known open issues are also tagged with `TODO` in the code
 
 ## Meta
 
