@@ -1,18 +1,17 @@
 #!/bin/bash
-# Helper script to generate molecules from a set of models
-# Directory with sub-directories of models expected
-# Generates molecules based on variables defined below
+# Sample script to generate SMARTS from models in given directory
+# Generates SMARTS based on variables defined below
 # Current directory should contain the python scripts
+# i.e. src/molreactgen/
 
 GENERATE_FILE="generate.py"
 MODEL_FILE="pytorch_model.bin"
-KNOWN_FILE="../../data/prep/guacamol/csv/guacamol_v1_train.csv"
+KNOWN_FILE="../../data/prep/uspto50k/csv/USPTO_50k_known.csv"
 OPTIM_FILE="scheduler.pt"
-NUM_MOLS=10000
+NUM_RTS=10000
 NUM_BEAMS=1
-TEMPERATURE=1.0
 REPETITION_PENALTY=1.0
-BREAK_TIME=10
+BREAK_TIME=15
 
 if [ -z "$1" ]; then
   echo "No directory supplied, exit."
@@ -30,21 +29,18 @@ if [ ! -f "$KNOWN_FILE" ]; then
 fi
 
 
-echo "== Generating $NUM_MOLS molecules for each model in $1"
+echo "== Generating $NUM_RTS reaction templates for each model in $1"
 echo "-- Reference file: $KNOWN_FILE"
 echo
 
-
-
 for dir in $(find "$1" -mindepth 0 -maxdepth 1 -type d); do
-  if [ -f "$dir"/"$MODEL_FILE" ] && [ ! -f "$dir"/"$OPTIM_FILE" ]; then
+  if [ -f "$dir/$MODEL_FILE" ] && [ ! -f "$dir/$OPTIM_FILE" ]; then
     echo "---- Starting generation at $(date +%T) with model in $dir ..."
-    python generate.py smiles \
+    python generate.py smarts \
     --model "$dir" \
     --known "$KNOWN_FILE" \
-    --num "$NUM_MOLS" \
+    --num "$NUM_RTS" \
     --num_beams "$NUM_BEAMS" \
-    --temperature "$TEMPERATURE" \
     --repetition_penalty "$REPETITION_PENALTY"
     date +"---- Finished generation at %T"
     echo -e "\nPausing for $BREAK_TIME second(s)...\n"

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Helper script to train a model n times
+# Sample training script to train a model n times
 
 TRAIN_FILE="train.py"
 BREAK_TIME=15
@@ -14,20 +14,15 @@ if [ ! -f "$TRAIN_FILE" ]; then
   exit
 fi
 
-echo "== Train model $1 times"
+echo "== Train model(s) $1 times"
 
 for (( run=1; run<=$1; run++ ))
 do
   echo
-  echo "-- Start training run $run/$1"
+  echo "-- Start training run char_wordpiece_176 $run/$1"
   python train.py \
     --config_file conf/guacamol.args \
     --tokenizer_name ../../tokenizers/guacamol/char_wordpiece_176 \
     --random_seed true
-#   python train.py \
-#     --config_file conf/uspto50k.args \
-#     --pre_tokenizer smarts \
-#     --algorithm wordlevel \
-#     --random_seed true
   sleep "$BREAK_TIME"
 done
