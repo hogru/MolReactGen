@@ -297,8 +297,9 @@ def _determine_stopping_criteria(
         the stopping criteria for the generation pipeline.
     """
 
-    # This is the "correct" code as long as this HF bug is not fixed
+    # This was a workaround for this HF bug which is now fixed
     # https://github.com/huggingface/transformers/pull/21461
+    # We keep it here for now, just in case
 
     # return (  # type: ignore
     #     tokenizer.convert_tokens_to_ids(EOS_TOKEN)
@@ -306,8 +307,6 @@ def _determine_stopping_criteria(
     #     else tokenizer.eos_token_id
     # )
 
-    # Let's hope this works now
-    # TODO if it does work, remove the above code and the comments hinting at the bug
     return (  # type: ignore
         [tokenizer.convert_tokens_to_ids(EOS_TOKEN), tokenizer.eos_token_id]
         if fine_tuned

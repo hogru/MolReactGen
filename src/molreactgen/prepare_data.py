@@ -50,7 +50,7 @@ VALID_DATASETS: Final[tuple[str, ...]] = (
     "debug",
     "guacamol",
     "uspto50k",
-    "usptofull",  # TODO: implement this dataset
+    "usptofull",  # TODO implement this dataset
     "zinc",
 )
 

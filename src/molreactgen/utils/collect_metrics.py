@@ -5,6 +5,16 @@
 The code is specific to this project. It is not intended to be used as a general
 purpose tool. By adding functionality over time it has become a bit messy.
 I live with that for now.
+
+Potential improvements:
+- Sort output by (checkpoint or generated) directory name
+- Test/Improve
+    - number of trainable params
+    - training time (representation)
+    - distinguish between planned/run epochs (early stopping)
+    - see comments in code
+    - see this idea list (_local_ link!):
+    - obsidian://advanced-uri?vault=Notizen&uid=675eb314-e8e3-4af0-8078-56146bd465fa
 """
 
 import argparse
@@ -712,7 +722,9 @@ class Experiment:
 
     def _get_num_epochs(self) -> Optional[int]:
         """Get the number of epochs."""
-
+        # TODO this is probably the number of epochs that were run, not the planned number of epochs
+        #   i.e. Early Stopping might have stopped the training earlier
+        #   Distinguish between the two
         try:
             with open(self.model_directory / ALL_RESULTS_FILE) as f:  # type: ignore
                 # Hugging Face reports the number of epochs as a float
@@ -1146,7 +1158,7 @@ class Experiment:
 
     @property
     def available_metrics(self) -> tuple[str, ...]:
-        available_metrics: dict[str, Any] = {}  # TODO replace with sorted set
+        available_metrics: dict[str, Any] = {}  # Replace with sorted set?
         if self.model_directory is not None:
             if self._tokenizer_scope:
                 available_metrics |= self.tokenizer_metrics

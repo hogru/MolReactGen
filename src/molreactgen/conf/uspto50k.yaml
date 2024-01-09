@@ -65,7 +65,7 @@ dataloader_num_workers: 4
 # run_name: MolReactGen
 disable_tqdm: false
 load_best_model_at_end: true
-# label_smoothing_factor: 0.1  # TODO might play with, not implemented yet
+# label_smoothing_factor: 0.1
 group_by_length: true
 report_to: wandb
 push_to_hub: false

@@ -440,9 +440,11 @@ class Reaction:
         return len(str(self))
 
     def __str__(self) -> str:
+        # TODO use reprlib to improve representation of long strings
         return self.reaction_smarts
 
     def __repr__(self) -> str:
+        # TODO use reprlib to improve representation of long strings
         class_name = type(self).__name__
         return (
             f"{class_name}"
@@ -548,6 +550,7 @@ class Molecule:
         return len(str(self))
 
     def __str__(self) -> str:
+        # TODO use reprlib to improve representation of long strings
         return (
             self.canonical_smiles
             if self.canonical_smiles
@@ -556,6 +559,7 @@ class Molecule:
         )
 
     def __repr__(self) -> str:
+        # TODO use reprlib to improve representation of long strings
         class_name = type(self).__name__
         return (
             f"{class_name}"
