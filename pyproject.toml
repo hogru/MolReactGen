@@ -8,7 +8,7 @@ license = "MIT"
 repository = "https://github.com/hogru/molreactgen"
 keywords = ["transformer decoder", "GPT-2", "generation", "auto-regressive", "molecule", "reaction template", "SMILES", "SMARTS"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Environment :: GPU :: NVIDIA CUDA :: 11.4",
     "Intended Audience :: Science/Research",
@@ -70,7 +70,6 @@ psutil = "^5.9.4"
 pytest = "^7.1"
 pytest-cov = "^4.0.0"
 pytest-mock = "^3.10.0"
-
 
 [build-system]
 requires = ["poetry-core>=1.0.8"]
