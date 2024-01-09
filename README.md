@@ -7,6 +7,8 @@
 
 ![Code Style](https://img.shields.io/badge/code%20style-black-black?link=https%3A%2F%2Fpypi.org%2Fproject%2Fblack%2F)
 ![Imports](https://img.shields.io/badge/imports-isort-blue?color=EF8336&link=https%3A%2F%2Fpypi.org%2Fproject%2Fisort%2F)
+![docstring style](https://img.shields.io/badge/docstring%20style-google-3666d6.svg)
+
 
 ![License](https://img.shields.io/badge/license-MIT-blue?color=7A0014&link=https%3A%2F%2Fopensource.org%2Flicense%2Fmit%2F)
 
