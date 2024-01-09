@@ -111,3 +111,8 @@ push = false
     "{pep440_version}",
 ]
 "src/molreactgen/__init__.py" = ["{version}"]
+
+[tool.mypy]
+warn_return_any = true
+warn_unused_configs = true
+plugins = "numpy.typing.mypy_plugin"
