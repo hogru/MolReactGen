@@ -1,5 +1,5 @@
 # coding=utf-8
-# src/molreactgen/evaluate_fcd.py
+# src/molreactgen/assess.py
 """Evaluate the generated molecules using different metrics.
 
 Functions:
