@@ -574,7 +574,7 @@ def configure_hf_logging(log_level: int = logging.INFO) -> None:
 
     if "datasets" in sys.modules:
         logger.debug("Configuring Hugging Face datasets logging...")
-        import datasets
+        import datasets  # type: ignore
 
         datasets.utils.logging.set_verbosity(log_level)
         datasets.utils.logging.enable_progress_bar()
@@ -582,7 +582,7 @@ def configure_hf_logging(log_level: int = logging.INFO) -> None:
 
     if "evaluate" in sys.modules:
         logger.debug("Configuring Hugging Face evaluate logging...")
-        import evaluate
+        import evaluate  # type: ignore
 
         evaluate.utils.logging.set_verbosity(log_level)
         evaluate.utils.logging.enable_progress_bar()
@@ -590,7 +590,7 @@ def configure_hf_logging(log_level: int = logging.INFO) -> None:
 
     if "transformers" in sys.modules:
         logger.debug("Configuring Hugging Face transformers logging...")
-        import transformers
+        import transformers  # type: ignore
 
         transformers.utils.logging.set_verbosity(log_level)
         transformers.utils.logging.disable_default_handler()

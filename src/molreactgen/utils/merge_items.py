@@ -8,7 +8,7 @@ from os import PathLike
 from pathlib import Path
 from typing import Any, Final, Optional, Sequence, Union
 
-import pandas as pd
+import pandas as pd  # type: ignore
 
 DEFAULT_FILE_EXTENSION: Final[str] = "*.csv"
 DEFAULT_TARGET_FILE_SUFFIX: Final[str] = "_merged.csv"
@@ -87,7 +87,7 @@ def merge_csv_files(
     column_for_duplicate_check: Optional[
         Union[int, str]
     ] = DEFAULT_COLUMN_FOR_DUPLICATE_CHECK,
-) -> (pd.DataFrame, dict[str, Any]):
+) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Merge the source files into a single pandas dataframe"""
 
     if not file_list:

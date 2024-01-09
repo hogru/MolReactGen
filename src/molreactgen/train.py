@@ -1212,7 +1212,7 @@ def main() -> None:
 
     # Helper function to write misc training information to file
     # Useful for later evaluation, complements default information written by hugging face
-    def write_misc_training_information():
+    def write_misc_training_information() -> None:
         """Write misc training information to file."""
 
         train_info: dict[str, Any] = {}

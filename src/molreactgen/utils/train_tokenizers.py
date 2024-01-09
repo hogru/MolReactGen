@@ -7,7 +7,7 @@ from pathlib import Path
 from random import randint
 from typing import Final
 
-import pandas as pd
+import pandas as pd  # type: ignore
 from loguru import logger
 
 from molreactgen.helpers import configure_logging, guess_project_root_dir
