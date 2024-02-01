@@ -16,6 +16,8 @@
 *.png
 *.pyc
 *.svg
+*.tar.gz
+*.whl
 *.zip
 .coverage
 .DS_Store
