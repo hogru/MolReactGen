@@ -60,6 +60,7 @@ kaleido = "0.2.1"
 psutil = "^5.9.5"
 accelerate = "^0.24"
 bumpver = "^2023.1129"
+fcd_torch = { path = "./src/fcd_torch", develop = true }
 
 [tool.poetry.dev-dependencies]
 black = "^23.11.0"
@@ -113,6 +114,12 @@ push = false
 "src/molreactgen/__init__.py" = ["{version}"]
 
 [tool.mypy]
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 plugins = "numpy.typing.mypy_plugin"
+modules = "fcd_torch"
+mypy_path = "$MYPY_CONFIG_FILE_DIR/src/fcd_torch/fcd_torch"
+
+[[tool.mypy.overrides]]
+module = "fcd_torch"
