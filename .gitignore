@@ -5,12 +5,14 @@
 /data/prep/*
 /data/raw/*
 !/data/raw/debug/*
+/hf_hub/*
 /logs/*
 /logs/wandb/*
 /src/molreactgen/playground/*
 .ipynb_checkpoints
 .mypy_cache
 .pytest_cache
+*alias
 *.ignore
 *.numbers
 *.png
